@@ -1,0 +1,28 @@
+# EdSys service definition starter.
+# Status: example only. Do not treat as live configuration.
+
+name: service-name
+description: Placeholder service definition.
+host: to be confirmed
+runtime: Docker Compose
+ports:
+  - host: 8080
+    container: 8080
+    protocol: tcp
+    exposure: localhost, to be confirmed
+volumes:
+  - ./data:/data
+environment:
+  file: .env
+  example: .env.example
+secrets_required:
+  - API_TOKEN
+backup:
+  required: true
+  paths:
+    - ./data
+monitoring:
+  healthcheck: to be confirmed
+restore_notes: Placeholder until tested.
+owner: Jeremy
+last_verified: to be confirmed

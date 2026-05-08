@@ -1,0 +1,45 @@
+# Secrets and private environment files
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+*.pfx
+*.token
+*tunnel*.json
+*cloudflared*
+!**/*cloudflared*.md
+!**/*cloudflared*.example*
+
+# Runtime databases and local state
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs, backups, and archives
+*.log
+*.bak
+*.zip
+operations/backups/
+operations/logs/
+backups/
+logs/
+
+# Runtime uploads and generated data
+data/uploads/
+uploads/
+
+# Node / Python local state
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
