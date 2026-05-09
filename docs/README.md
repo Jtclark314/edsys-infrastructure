@@ -10,6 +10,7 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `SERVICE_DEFINITION_STANDARD.md`
 - `DOCKER_COMPOSE_STANDARD.md`
 - `CONFIG_TEMPLATE_STANDARD.md`
+- `../docker/edsys-control-api/README.md` - read-only API and dashboard over the EdSys-Master source-of-truth YAML.
 
 ## Rule
 

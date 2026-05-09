@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EdSys Control API Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Read-only source-of-truth view</p>
+        <h1>EdSys Control API</h1>
+      </div>
+      <div class="actions">
+        <button id="refreshBtn" type="button">Refresh</button>
+        <a href="/docs">API Docs</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="status-strip" aria-label="API summary">
+        <article>
+          <span>Total Services</span>
+          <strong id="totalServices">--</strong>
+        </article>
+        <article>
+          <span>Total Devices</span>
+          <strong id="totalDevices">--</strong>
+        </article>
+        <article>
+          <span>Critical / High</span>
+          <strong id="criticalServices">--</strong>
+        </article>
+        <article>
+          <span>Backup Required</span>
+          <strong id="backupRequired">--</strong>
+        </article>
+        <article>
+          <span>Live Down</span>
+          <strong id="downServices">--</strong>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Live Health</h2>
+            <p id="healthSubtext">Waiting for first check.</p>
+          </div>
+          <span id="apiStatus" class="badge neutral">Loading</span>
+        </div>
+        <div id="criticalDown" class="notice hidden"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Services</h2>
+            <p>Filtered from EdSys-Master service-catalog.yml.</p>
+          </div>
+          <input id="serviceFilter" type="search" placeholder="Search services" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Host</th>
+                <th>Category</th>
+                <th>Criticality</th>
+                <th>Status</th>
+                <th>URL</th>
+              </tr>
+            </thead>
+            <tbody id="servicesTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Devices</h2>
+            <p>Filtered from EdSys-Master network-map.yml.</p>
+          </div>
+          <input id="deviceFilter" type="search" placeholder="Search devices" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Hostname</th>
+                <th>IP</th>
+                <th>Category</th>
+                <th>OS</th>
+                <th>Status</th>
+                <th>Management</th>
+              </tr>
+            </thead>
+            <tbody id="devicesTable"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

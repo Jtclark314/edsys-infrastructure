@@ -1,0 +1,18 @@
+services:
+  edsys-control-api:
+    image: edsys-control-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edsys-control-api
+    restart: unless-stopped
+    ports:
+      - "8099:8099"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - type: bind
+        source: ${EDSYS_MASTER_DATA_PATH}
+        target: /data
+        read_only: true
