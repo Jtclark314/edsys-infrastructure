@@ -19,6 +19,7 @@ These scripts collect non-secret operational metadata for EdSys hosts and servic
 
 - `edsys-audit-plan.md`: planned hosts, ports, and guardrails.
 - `collect-network-baseline.ps1`: Windows LAN ping and TCP port checks for known EdSys hosts.
+- `collect-live-inventory.ps1`: combined known-host inventory collector with Windows neighbor/route/DNS data, targeted ping/port checks, HTTP title probes, and optional non-interactive SSH checks.
 - `collect-windows-baseline.ps1`: local Windows host baseline metadata.
 - `collect-linux-baseline.sh`: Linux host baseline commands to run on a host through SSH or local shell.
 - `collect-docker-baseline.sh`: Docker metadata collection without environment variables or logs.
@@ -30,6 +31,14 @@ These scripts collect non-secret operational metadata for EdSys hosts and servic
 cd "C:\Users\jtcla\Projects\edsys-infrastructure"
 .\scripts\audit\collect-network-baseline.ps1
 ```
+
+For the broader live inventory pass:
+
+```powershell
+.\scripts\audit\collect-live-inventory.ps1
+```
+
+Use `-SkipSsh` if you only want local Windows neighbor/route data, ping checks, TCP port checks, and HTTP title probes.
 
 The script prints the audit folder path and creates:
 
