@@ -1,0 +1,22 @@
+# Bulk media and generated state exclusions.
+
+/mnt/media/movies/**
+/mnt/media/tv/**
+/mnt/media/downloads/**
+/mnt/media/qbittorrent/**
+/mnt/media/incomplete/**
+
+**/cache/**
+**/Cache/**
+**/.cache/**
+**/logs/**
+**/*.log
+**/tmp/**
+**/node_modules/**
+**/__pycache__/**
+**/.pytest_cache/**
+**/transcodes/**
+**/thumbnails/**
+**/@eaDir/**
+**/.DS_Store
+**/Thumbs.db
