@@ -58,7 +58,7 @@ The project can contain `.env.example` placeholders. It must not contain a real 
 
 ## Roadmap
 
-- Deploy to 9950x on port `8099`.
+- Maintain the 9950x deployment on port `8099`.
 - Add Prometheus-style `/metrics`.
 - Add Uptime Kuma integration.
 - Add Home Assistant sensor integration.

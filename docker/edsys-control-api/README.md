@@ -1,6 +1,6 @@
 # EdSys Control API
 
-Status: implemented locally, not deployed.
+Status: deployed on 9950x at `http://192.168.50.50:8099`.
 
 The EdSys Control API is a read-only FastAPI service that exposes the current EdSys source-of-truth YAML as structured JSON for dashboards, local AI, ChatGPT/Codex-assisted workflows, voice queries, and monitoring integrations.
 
@@ -109,16 +109,16 @@ Default local URL:
 http://localhost:8099
 ```
 
-## Eventual 9950x Deployment Plan
+## 9950x Deployment
 
-Recommended path on 9950x:
+Current path on 9950x:
 
 ```text
 /srv/edsys/edsys-infrastructure/docker/edsys-control-api
 /srv/edsys/EdSys-Master/data
 ```
 
-Recommended LAN URL:
+LAN URL:
 
 ```text
 http://192.168.50.50:8099
