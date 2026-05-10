@@ -14,9 +14,10 @@ fi
 : "${RCLONE_CONFIG:=/etc/edsys-backup/rclone.conf}"
 : "${RCLONE_REMOTE:=edsys-gdrive}"
 : "${DRIVE_BACKUP_ROOT:=EdSys Backups}"
-: "${RESTIC_REPOSITORY:=rclone:${RCLONE_REMOTE}:${DRIVE_BACKUP_ROOT}/restic/edsys-critical}"
+: "${RESTIC_REPOSITORY:=/srv/edsys-backup/restic-repo/edsys-critical}"
 : "${RESTIC_PASSWORD_FILE:=/etc/edsys-backup/restic-password}"
 : "${RESTIC_CACHE_DIR:=/var/cache/edsys-backup/restic}"
+: "${RCLONE_OFFSITE_DEST:=${RCLONE_REMOTE}:${DRIVE_BACKUP_ROOT}/restic/edsys-critical-v2}"
 : "${INCLUDE_FILE:=/etc/edsys-backup/includes.txt}"
 : "${EXCLUDE_FILE:=/etc/edsys-backup/excludes.txt}"
 : "${KEEP_DAILY:=30}"
@@ -24,18 +25,29 @@ fi
 : "${KEEP_MONTHLY:=12}"
 : "${REMOTE_COLLECTION_ENABLED:=true}"
 : "${REPORT_TO_DRIVE:=true}"
+: "${OFFSITE_SYNC_ENABLED:=true}"
+: "${RCLONE_TRANSFERS:=1}"
+: "${RCLONE_CHECKERS:=2}"
+: "${RCLONE_TPSLIMIT:=4}"
+: "${RCLONE_DRIVE_PACER_MIN_SLEEP:=500ms}"
+: "${RCLONE_DRIVE_PACER_BURST:=1}"
 
 export RCLONE_CONFIG RESTIC_REPOSITORY RESTIC_PASSWORD_FILE RESTIC_CACHE_DIR
 
 DRY_RUN=false
 RUN_COLLECTION=true
 RUN_PRUNE=true
+RUN_OFFSITE_SYNC=true
+OFFSITE_ONLY=false
 
 for arg in "$@"; do
   case "${arg}" in
     --dry-run) DRY_RUN=true ;;
     --no-collect) RUN_COLLECTION=false ;;
     --no-prune) RUN_PRUNE=false ;;
+    --no-offsite-sync) RUN_OFFSITE_SYNC=false ;;
+    --local-only) RUN_OFFSITE_SYNC=false ;;
+    --offsite-only) OFFSITE_ONLY=true; RUN_COLLECTION=false; RUN_PRUNE=false ;;
     *) echo "Unknown argument: ${arg}" >&2; exit 2 ;;
   esac
 done
@@ -72,6 +84,7 @@ command -v jq >/dev/null || fail "jq is not installed"
 [[ -r "${RESTIC_PASSWORD_FILE}" ]] || fail "RESTIC_PASSWORD_FILE is missing or unreadable"
 [[ -r "${INCLUDE_FILE}" ]] || fail "INCLUDE_FILE is missing or unreadable"
 [[ -r "${EXCLUDE_FILE}" ]] || fail "EXCLUDE_FILE is missing or unreadable"
+mkdir -p "${RESTIC_REPOSITORY}" "${RESTIC_CACHE_DIR}"
 
 if ! rclone listremotes --config "${RCLONE_CONFIG}" | grep -qx "${RCLONE_REMOTE}:"; then
   fail "rclone remote '${RCLONE_REMOTE}:' is not configured in ${RCLONE_CONFIG}"
@@ -86,46 +99,49 @@ fi
   echo "Host: ${HOSTNAME_SHORT}"
   echo "Dry run: ${DRY_RUN}"
   echo "Repository: ${RESTIC_REPOSITORY}"
+  echo "Offsite destination: ${RCLONE_OFFSITE_DEST}"
 } | tee "${LOG_FILE}"
 
-if [[ "${RUN_COLLECTION}" == "true" && "${REMOTE_COLLECTION_ENABLED}" == "true" && -x "${BACKUP_ROOT}/scripts/edsys-collect-remotes.sh" ]]; then
+if [[ "${OFFSITE_ONLY}" == "false" && "${RUN_COLLECTION}" == "true" && "${REMOTE_COLLECTION_ENABLED}" == "true" && -x "${BACKUP_ROOT}/scripts/edsys-collect-remotes.sh" ]]; then
   "${BACKUP_ROOT}/scripts/edsys-collect-remotes.sh" "${RUN_ID}" | tee -a "${LOG_FILE}" || true
 fi
 
 : > "${EXISTING_INCLUDE_FILE}"
 : > "${MISSING_INCLUDE_FILE}"
-while IFS= read -r path || [[ -n "${path}" ]]; do
-  [[ -z "${path}" || "${path}" =~ ^[[:space:]]*# ]] && continue
-  if [[ -e "${path}" ]]; then
-    printf '%s\n' "${path}" >> "${EXISTING_INCLUDE_FILE}"
-  else
-    printf '%s\n' "${path}" >> "${MISSING_INCLUDE_FILE}"
-  fi
-done < "${INCLUDE_FILE}"
-
-if [[ ! -s "${EXISTING_INCLUDE_FILE}" ]]; then
-  fail "no include paths exist; refusing to run empty backup"
-fi
-
-RESTIC_ARGS=(backup --files-from "${EXISTING_INCLUDE_FILE}" --exclude-file "${EXCLUDE_FILE}" --tag edsys-critical --tag "${HOSTNAME_SHORT}")
-if [[ "${DRY_RUN}" == "true" ]]; then
-  RESTIC_ARGS+=(--dry-run)
-fi
-
-set +e
-restic "${RESTIC_ARGS[@]}" 2>&1 | tee -a "${LOG_FILE}"
-BACKUP_STATUS="${PIPESTATUS[0]}"
-set -e
-
-if [[ "${BACKUP_STATUS}" -ne 0 ]]; then
-  fail "restic backup failed with exit code ${BACKUP_STATUS}"
-fi
-
 SNAPSHOT_ID=""
-if [[ "${DRY_RUN}" != "true" ]]; then
-  SNAPSHOT_ID="$(restic snapshots --latest 1 --json | jq -r '.[0].short_id // .[0].id // ""')"
-  if [[ "${RUN_PRUNE}" == "true" ]]; then
-    restic forget --keep-daily "${KEEP_DAILY}" --keep-weekly "${KEEP_WEEKLY}" --keep-monthly "${KEEP_MONTHLY}" --prune 2>&1 | tee -a "${LOG_FILE}"
+if [[ "${OFFSITE_ONLY}" == "false" ]]; then
+  while IFS= read -r path || [[ -n "${path}" ]]; do
+    [[ -z "${path}" || "${path}" =~ ^[[:space:]]*# ]] && continue
+    if [[ -e "${path}" ]]; then
+      printf '%s\n' "${path}" >> "${EXISTING_INCLUDE_FILE}"
+    else
+      printf '%s\n' "${path}" >> "${MISSING_INCLUDE_FILE}"
+    fi
+  done < "${INCLUDE_FILE}"
+
+  if [[ ! -s "${EXISTING_INCLUDE_FILE}" ]]; then
+    fail "no include paths exist; refusing to run empty backup"
+  fi
+
+  RESTIC_ARGS=(backup --files-from "${EXISTING_INCLUDE_FILE}" --exclude-file "${EXCLUDE_FILE}" --tag edsys-critical --tag "${HOSTNAME_SHORT}")
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    RESTIC_ARGS+=(--dry-run)
+  fi
+
+  set +e
+  restic "${RESTIC_ARGS[@]}" 2>&1 | tee -a "${LOG_FILE}"
+  BACKUP_STATUS="${PIPESTATUS[0]}"
+  set -e
+
+  if [[ "${BACKUP_STATUS}" -ne 0 ]]; then
+    fail "restic backup failed with exit code ${BACKUP_STATUS}"
+  fi
+
+  if [[ "${DRY_RUN}" != "true" ]]; then
+    SNAPSHOT_ID="$(restic snapshots --latest 1 --json | jq -r '.[0].short_id // .[0].id // ""')"
+    if [[ "${RUN_PRUNE}" == "true" ]]; then
+      restic forget --keep-daily "${KEEP_DAILY}" --keep-weekly "${KEEP_WEEKLY}" --keep-monthly "${KEEP_MONTHLY}" --prune 2>&1 | tee -a "${LOG_FILE}"
+    fi
   fi
 fi
 
@@ -135,6 +151,31 @@ REMOTE_FAILED_COUNT=0
 if [[ -f "${REMOTE_MANIFEST}" ]]; then
   REMOTE_FAILED_COUNT="$(grep -c 'FAILED' "${REMOTE_MANIFEST}" || true)"
 fi
+OFFSITE_SYNC_STATUS="skipped"
+if [[ "${RUN_OFFSITE_SYNC}" == "true" && "${OFFSITE_SYNC_ENABLED}" == "true" && "${DRY_RUN}" != "true" ]]; then
+  OFFSITE_SYNC_STATUS="running"
+  set +e
+  rclone sync "${RESTIC_REPOSITORY}" "${RCLONE_OFFSITE_DEST}" \
+    --config "${RCLONE_CONFIG}" \
+    --exclude "locks/**" \
+    --transfers "${RCLONE_TRANSFERS}" \
+    --checkers "${RCLONE_CHECKERS}" \
+    --tpslimit "${RCLONE_TPSLIMIT}" \
+    --drive-pacer-min-sleep "${RCLONE_DRIVE_PACER_MIN_SLEEP}" \
+    --drive-pacer-burst "${RCLONE_DRIVE_PACER_BURST}" \
+    --retries 20 \
+    --low-level-retries 50 \
+    --retries-sleep 30s \
+    --stats 30s \
+    --log-file "${REPORT_DIR}/rclone-sync-${RUN_ID}.log" \
+    --log-level INFO
+  RCLONE_STATUS="$?"
+  set -e
+  if [[ "${RCLONE_STATUS}" -ne 0 ]]; then
+    fail "rclone offsite sync failed with exit code ${RCLONE_STATUS}"
+  fi
+  OFFSITE_SYNC_STATUS="success"
+fi
 
 jq -n \
   --arg status "success" \
@@ -142,12 +183,14 @@ jq -n \
   --arg host "${HOSTNAME_SHORT}" \
   --arg timestamp "$(date -Is)" \
   --arg repository "${RESTIC_REPOSITORY}" \
+  --arg offsite_destination "${RCLONE_OFFSITE_DEST}" \
+  --arg offsite_sync_status "${OFFSITE_SYNC_STATUS}" \
   --arg snapshot_id "${SNAPSHOT_ID}" \
   --argjson dry_run "${DRY_RUN}" \
   --argjson included_count "${INCLUDED_COUNT}" \
   --argjson missing_count "${MISSING_COUNT}" \
   --argjson remote_failed_count "${REMOTE_FAILED_COUNT}" \
-  '{status:$status,run_id:$run_id,host:$host,timestamp:$timestamp,repository:$repository,snapshot_id:$snapshot_id,dry_run:$dry_run,included_path_count:$included_count,missing_path_count:$missing_count,remote_collection_failed_count:$remote_failed_count}' \
+  '{status:$status,run_id:$run_id,host:$host,timestamp:$timestamp,repository:$repository,offsite_destination:$offsite_destination,offsite_sync_status:$offsite_sync_status,snapshot_id:$snapshot_id,dry_run:$dry_run,included_path_count:$included_count,missing_path_count:$missing_count,remote_collection_failed_count:$remote_failed_count}' \
   | tee "${STATUS_JSON}" > "${REPORT_JSON}"
 
 {
@@ -161,6 +204,8 @@ jq -n \
   echo "- Missing paths: ${MISSING_COUNT}"
   echo "- Remote collection failures: ${REMOTE_FAILED_COUNT}"
   echo "- Repository: ${RESTIC_REPOSITORY}"
+  echo "- Offsite destination: ${RCLONE_OFFSITE_DEST}"
+  echo "- Offsite sync: ${OFFSITE_SYNC_STATUS}"
   echo
   echo "## Missing Paths"
   if [[ -s "${MISSING_INCLUDE_FILE}" ]]; then

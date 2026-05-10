@@ -16,6 +16,7 @@ install -d -m 0755 -o root -g root /srv/edsys-backup/scripts
 install -d -m 0750 -o root -g root /srv/edsys-backup/staging
 install -d -m 0755 -o root -g root /srv/edsys-backup/reports
 install -d -m 0750 -o root -g root /srv/edsys-backup/restore-tests
+install -d -m 0750 -o root -g root /srv/edsys-backup/restic-repo
 install -d -m 0755 -o root -g root /var/lib/edsys-backup
 install -d -m 0750 -o root -g root /var/cache/edsys-backup/restic
 

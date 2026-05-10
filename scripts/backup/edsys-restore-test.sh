@@ -10,7 +10,7 @@ fi
 : "${RCLONE_CONFIG:=/etc/edsys-backup/rclone.conf}"
 : "${RCLONE_REMOTE:=edsys-gdrive}"
 : "${DRIVE_BACKUP_ROOT:=EdSys Backups}"
-: "${RESTIC_REPOSITORY:=rclone:${RCLONE_REMOTE}:${DRIVE_BACKUP_ROOT}/restic/edsys-critical}"
+: "${RESTIC_REPOSITORY:=/srv/edsys-backup/restic-repo/edsys-critical}"
 : "${RESTIC_PASSWORD_FILE:=/etc/edsys-backup/restic-password}"
 : "${RESTIC_CACHE_DIR:=/var/cache/edsys-backup/restic}"
 : "${RESTORE_TEST_DIR:=/srv/edsys-backup/restore-tests}"
