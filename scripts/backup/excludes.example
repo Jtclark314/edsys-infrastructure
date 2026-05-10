@@ -5,13 +5,22 @@
 /mnt/media/downloads/**
 /mnt/media/qbittorrent/**
 /mnt/media/incomplete/**
+/mnt/media/**
+/srv/downloads/**
+**/downloads/**
+**/Downloads/**
 
 **/cache/**
 **/Cache/**
+**/CacheStorage/**
+**/Code Cache/**
+**/GPUCache/**
 **/.cache/**
 **/logs/**
 **/*.log
 **/tmp/**
+**/temp/**
+**/Temp/**
 **/node_modules/**
 **/__pycache__/**
 **/.pytest_cache/**
@@ -20,3 +29,19 @@
 **/@eaDir/**
 **/.DS_Store
 **/Thumbs.db
+
+/var/lib/docker/overlay2/**
+/var/lib/docker/containers/**
+/mnt/ai-store/models/**
+/mnt/ai-store/cache/**
+
+*.iso
+*.img
+*.qcow2
+*.vmdk
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.mp3
+*.flac

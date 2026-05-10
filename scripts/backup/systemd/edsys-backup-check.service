@@ -5,4 +5,4 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/srv/edsys-backup/scripts/edsys-restic-check.sh
+ExecStart=/srv/edsys-backup/scripts/edsys-backup-check.sh --read-data-subset=1G

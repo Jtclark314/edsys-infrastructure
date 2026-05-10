@@ -1,0 +1,58 @@
+# Copy to /etc/edsys-backup/edsys-backup.conf on 9950x.
+# Keep the real file root-only and never commit it.
+
+BACKUP_ROOT=/srv/edsys-backup
+STAGING_DIR=/srv/edsys-backup/staging
+REPORT_DIR=/srv/edsys-backup/reports
+RESTORE_TEST_DIR=/srv/edsys-backup/restore-tests
+STATUS_DIR=/var/lib/edsys-backup
+
+RCLONE_CONFIG=/etc/edsys-backup/rclone.conf
+RCLONE_REMOTE=edsys-gdrive
+DRIVE_BACKUP_ROOT="EdSys Backups"
+RCLONE_OFFSITE_DEST="edsys-gdrive:EdSys Backups/restic/edsys-critical-v3"
+
+RESTIC_REPOSITORY=/srv/edsys-backup/restic-repo/edsys-critical
+RESTIC_PASSWORD_FILE=/etc/edsys-backup/restic-password
+RESTIC_CACHE_DIR=/var/cache/edsys-backup/restic
+
+INCLUDE_FILE=/etc/edsys-backup/includes.txt
+EXCLUDE_FILE=/etc/edsys-backup/excludes.txt
+
+KEEP_DAILY=30
+KEEP_WEEKLY=12
+KEEP_MONTHLY=12
+
+REMOTE_COLLECTION_ENABLED=true
+REPORT_TO_DRIVE=false
+
+# Offsite sync modes: conservative, balanced, fast
+OFFSITE_SYNC_MODE=balanced
+
+# Conservative mode
+RCLONE_CONSERVATIVE_TRANSFERS=1
+RCLONE_CONSERVATIVE_CHECKERS=2
+RCLONE_CONSERVATIVE_TPSLIMIT=4
+RCLONE_CONSERVATIVE_TPSLIMIT_BURST=4
+
+# Balanced default
+RCLONE_BALANCED_TRANSFERS=2
+RCLONE_BALANCED_CHECKERS=4
+RCLONE_BALANCED_TPSLIMIT=8
+RCLONE_BALANCED_TPSLIMIT_BURST=8
+
+# Faster test mode, only after custom OAuth is proven stable
+RCLONE_FAST_TRANSFERS=4
+RCLONE_FAST_CHECKERS=8
+RCLONE_FAST_TPSLIMIT=12
+RCLONE_FAST_TPSLIMIT_BURST=12
+
+RCLONE_DRIVE_PACER_MIN_SLEEP=20ms
+RCLONE_DRIVE_PACER_BURST=100
+RCLONE_DRIVE_CHUNK_SIZE=64M
+RCLONE_BUFFER_SIZE=32M
+RCLONE_RETRIES=20
+RCLONE_LOW_LEVEL_RETRIES=50
+RCLONE_RETRIES_SLEEP=30s
+RCLONE_TIMEOUT=5m
+RCLONE_CONTIMEOUT=30s

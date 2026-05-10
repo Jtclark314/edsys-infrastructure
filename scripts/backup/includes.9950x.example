@@ -1,13 +1,17 @@
-# Direct paths on 9950x for the first critical backup set.
+# Direct non-media paths on 9950x for the critical backup set.
 # Missing paths are logged and skipped by edsys-backup.sh.
 
 /srv/edsys
-/srv/homepage
+/etc
+/home/jeremy/.ssh
+/home/jeremy/.config
+/srv/ssd1/docker/stacks
+/srv/ssd1/docker/appdata
+/srv/homepage/config
+/srv/homepage/icons
 /srv/plex-config
 /srv/jellyfin
 /srv/tautulli
-/srv/ssd1/docker/stacks/factorio
-/etc/frigate
 /mnt/ai-store/anythingllm
 /mnt/ai-store/qdrant
 /mnt/ai-store/rag

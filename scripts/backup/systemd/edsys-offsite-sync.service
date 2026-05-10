@@ -1,0 +1,8 @@
+[Unit]
+Description=EdSys Google Drive offsite backup mirror
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/srv/edsys-backup/scripts/edsys-offsite-sync.sh
