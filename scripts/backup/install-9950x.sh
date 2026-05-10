@@ -46,6 +46,10 @@ if [[ ! -f /etc/edsys-backup/rclone.conf ]]; then
   install -m 0600 /dev/null /etc/edsys-backup/rclone.conf
 fi
 
+if [[ ! -f /etc/edsys-backup/known_hosts ]]; then
+  install -m 0644 /dev/null /etc/edsys-backup/known_hosts
+fi
+
 install -m 0644 "${SCRIPT_DIR}/systemd/edsys-backup.service" /etc/systemd/system/edsys-backup.service
 install -m 0644 "${SCRIPT_DIR}/systemd/edsys-backup.timer" /etc/systemd/system/edsys-backup.timer
 install -m 0644 "${SCRIPT_DIR}/systemd/edsys-backup-check.service" /etc/systemd/system/edsys-backup-check.service

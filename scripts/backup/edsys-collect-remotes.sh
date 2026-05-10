@@ -9,16 +9,58 @@ fi
 
 : "${BACKUP_ROOT:=/srv/edsys-backup}"
 : "${STAGING_DIR:=${BACKUP_ROOT}/staging}"
+: "${BACKUP_SSH_KEY:=/home/jeremy/.ssh/id_ed25519}"
+: "${BACKUP_KNOWN_HOSTS:=/etc/edsys-backup/known_hosts}"
 
 RUN_ID="${1:-$(date -u +%Y%m%dT%H%M%SZ)}"
 OUT_DIR="${STAGING_DIR}/remote-exports/${RUN_ID}"
 mkdir -p "${OUT_DIR}"
+touch "${BACKUP_KNOWN_HOSTS}"
 
 MANIFEST="${OUT_DIR}/MANIFEST.txt"
 : > "${MANIFEST}"
 
 log() {
   echo "[$(date -Is)] $*" | tee -a "${MANIFEST}"
+}
+
+ssh_args() {
+  local args=(
+    -o BatchMode=yes
+    -o ConnectTimeout=8
+    -o StrictHostKeyChecking=accept-new
+    -o UserKnownHostsFile="${BACKUP_KNOWN_HOSTS}"
+  )
+  if [[ -r "${BACKUP_SSH_KEY}" ]]; then
+    args+=(-i "${BACKUP_SSH_KEY}" -o IdentitiesOnly=yes)
+  fi
+  printf '%s\0' "${args[@]}"
+}
+
+run_ssh() {
+  local user="$1"
+  local host="$2"
+  shift 2
+  local args=()
+  while IFS= read -r -d '' arg; do
+    args+=("${arg}")
+  done < <(ssh_args)
+  ssh "${args[@]}" "${user}@${host}" "$@"
+}
+
+collect_local_text() {
+  local label="$1"
+  local output="${OUT_DIR}/${label}.txt"
+
+  log "Collecting local text ${label}"
+  {
+    hostnamectl
+    ip -br addr
+    df -h
+    docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || true
+  } > "${output}" 2>&1 \
+    && log "OK ${label} ${output}" \
+    || { log "FAILED ${label}; see ${output}"; }
 }
 
 collect_tar() {
@@ -33,11 +75,11 @@ collect_tar() {
 
   log "Collecting ${label} from ${user}@${host}: ${paths[*]}"
   if [[ "${user}" == "root" ]]; then
-    ssh -o BatchMode=yes -o ConnectTimeout=8 "${user}@${host}" "tar -czf -${path_args} 2>/dev/null" > "${output}" \
+    run_ssh "${user}" "${host}" "tar -czf -${path_args} 2>/dev/null" > "${output}" \
       && log "OK ${label} ${output}" \
       || { rm -f "${output}"; log "FAILED ${label}"; }
   else
-    ssh -o BatchMode=yes -o ConnectTimeout=8 "${user}@${host}" "sudo -n tar -czf -${path_args} 2>/dev/null" > "${output}" \
+    run_ssh "${user}" "${host}" "sudo -n tar -czf -${path_args} 2>/dev/null" > "${output}" \
       && log "OK ${label} ${output}" \
       || { rm -f "${output}"; log "FAILED ${label}"; }
   fi
@@ -51,12 +93,12 @@ collect_text() {
   local output="${OUT_DIR}/${label}.txt"
 
   log "Collecting text ${label} from ${user}@${host}"
-  ssh -o BatchMode=yes -o ConnectTimeout=8 "${user}@${host}" "${command}" > "${output}" 2>&1 \
+  run_ssh "${user}" "${host}" "${command}" > "${output}" 2>&1 \
     && log "OK ${label} ${output}" \
     || { log "FAILED ${label}; see ${output}"; }
 }
 
-collect_text "9950x-local-baseline" "jeremy" "127.0.0.1" "hostnamectl; ip -br addr; df -h; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || true"
+collect_local_text "9950x-local-baseline"
 
 collect_tar "edcore-dnsmasq" "jeremy" "192.168.50.1" "/etc/dnsmasq.d" "/var/lib/misc/dnsmasq.leases" "/etc/hostname" "/etc/hosts"
 collect_tar "pihole-primary-config" "jeremy" "192.168.50.5" "/etc/pihole" "/etc/dnsmasq.d" "/etc/hostname" "/etc/hosts"

@@ -49,6 +49,7 @@ STATUS_JSON="${STATUS_DIR}/status.json"
 LOG_FILE="${REPORT_DIR}/backup-${RUN_ID}.log"
 EXISTING_INCLUDE_FILE="${RUN_DIR}/existing-includes.txt"
 MISSING_INCLUDE_FILE="${RUN_DIR}/missing-includes.txt"
+REMOTE_MANIFEST="${STAGING_DIR}/remote-exports/${RUN_ID}/MANIFEST.txt"
 
 mkdir -p "${RUN_DIR}" "${REPORT_DIR}" "${STATUS_DIR}" "${RESTIC_CACHE_DIR}"
 
@@ -130,6 +131,10 @@ fi
 
 MISSING_COUNT="$(wc -l < "${MISSING_INCLUDE_FILE}" | tr -d ' ')"
 INCLUDED_COUNT="$(wc -l < "${EXISTING_INCLUDE_FILE}" | tr -d ' ')"
+REMOTE_FAILED_COUNT=0
+if [[ -f "${REMOTE_MANIFEST}" ]]; then
+  REMOTE_FAILED_COUNT="$(grep -c 'FAILED' "${REMOTE_MANIFEST}" || true)"
+fi
 
 jq -n \
   --arg status "success" \
@@ -141,7 +146,8 @@ jq -n \
   --argjson dry_run "${DRY_RUN}" \
   --argjson included_count "${INCLUDED_COUNT}" \
   --argjson missing_count "${MISSING_COUNT}" \
-  '{status:$status,run_id:$run_id,host:$host,timestamp:$timestamp,repository:$repository,snapshot_id:$snapshot_id,dry_run:$dry_run,included_path_count:$included_count,missing_path_count:$missing_count}' \
+  --argjson remote_failed_count "${REMOTE_FAILED_COUNT}" \
+  '{status:$status,run_id:$run_id,host:$host,timestamp:$timestamp,repository:$repository,snapshot_id:$snapshot_id,dry_run:$dry_run,included_path_count:$included_count,missing_path_count:$missing_count,remote_collection_failed_count:$remote_failed_count}' \
   | tee "${STATUS_JSON}" > "${REPORT_JSON}"
 
 {
@@ -153,6 +159,7 @@ jq -n \
   echo "- Snapshot: ${SNAPSHOT_ID:-none}"
   echo "- Included paths: ${INCLUDED_COUNT}"
   echo "- Missing paths: ${MISSING_COUNT}"
+  echo "- Remote collection failures: ${REMOTE_FAILED_COUNT}"
   echo "- Repository: ${RESTIC_REPOSITORY}"
   echo
   echo "## Missing Paths"
