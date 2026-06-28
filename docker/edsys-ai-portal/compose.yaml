@@ -12,6 +12,7 @@ services:
       - "100.87.137.47:3020:8080"
     volumes:
       - ${PORTAL_STATE_DIR:-/opt/edsys-workhorse/edsys-ai-portal}/data:/data
+      - /mnt/ai-store/rag/grounding:/data/rag:ro
       - /home/jeremy/code/edsys-ai-portal/config:/app/config:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
