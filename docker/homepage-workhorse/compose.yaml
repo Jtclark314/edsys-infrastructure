@@ -1,0 +1,17 @@
+services:
+  homepage-workhorse:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage-workhorse
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /srv/homepage-workhorse/config:/app/config
+      - /srv/homepage/icons:/app/public/icons:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /mnt/ai-store:/mnt/ai-store:ro
+      - /opt/edsys-workhorse:/opt/edsys-workhorse:ro
+      - /srv/edsys:/srv/edsys:ro
+    environment:
+      TZ: America/New_York
+      PORT: "3019"
+      HOMEPAGE_ALLOWED_HOSTS: 192.168.50.50:3019,192.168.50.50,localhost:3019,localhost,127.0.0.1:3019,127.0.0.1,9950x:3019,9950x,100.87.137.47:3019,100.87.137.47

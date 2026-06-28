@@ -1,0 +1,68 @@
+# EdSys LiteLLM broker routes for the 9950x workhorse.
+# Secrets and UI-managed provider credentials live outside Git.
+# Keep store_model_in_db=true so LiteLLM UI/DB-added OpenAI models remain authoritative.
+
+model_list:
+  # Existing local Ollama routes retained for backward compatibility.
+  - model_name: edsys-gpt-oss-20b
+    litellm_params:
+      model: ollama_chat/gpt-oss:20b
+      api_base: http://host.docker.internal:11434
+  - model_name: edsys-qwen-coder-32b
+    litellm_params:
+      model: ollama_chat/qwen2.5-coder:32b
+      api_base: http://host.docker.internal:11434
+  - model_name: edsys-llama-8b
+    litellm_params:
+      model: ollama_chat/llama3.1:8b
+      api_base: http://host.docker.internal:11434
+  - model_name: edsys-embeddings
+    litellm_params:
+      model: ollama/nomic-embed-text:latest
+      api_base: http://host.docker.internal:11434
+
+  # New local-first use-case routes.
+  - model_name: edsys-voice-fast
+    litellm_params:
+      model: ollama_chat/llama3.2:3b
+      api_base: http://host.docker.internal:11434
+      timeout: 30
+  - model_name: edsys-embeddings-fast
+    litellm_params:
+      model: openai/michaelfeil/bge-small-en-v1.5
+      api_base: http://host.docker.internal:7997
+      api_key: edsys-local-infinity-noauth
+
+router_settings:
+  num_retries: 1
+  timeout: 120
+  max_fallbacks: 2
+  model_group_alias:
+    # Local-friendly aliases.
+    edsys-chat-local: edsys-gpt-oss-20b
+    edsys-coder-local: edsys-qwen-coder-32b
+    edsys-voice-quality: edsys-llama-8b
+
+    # Cloud aliases target UI/DB-managed OpenAI models.
+    # Do not replace these with config-stored API keys.
+    edsys-chat-cloud: gpt-5-chat-latest
+    edsys-coder-cloud: gpt-5-codex
+  fallbacks:
+    - edsys-chat-cloud:
+        - edsys-chat-local
+    - edsys-coder-cloud:
+        - edsys-coder-local
+    - edsys-voice-quality:
+        - edsys-voice-fast
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: true
+  disable_spend_logs: false
+  disable_error_logs: false
+
+litellm_settings:
+  request_timeout: 120
+  num_retries: 1
+  set_verbose: false

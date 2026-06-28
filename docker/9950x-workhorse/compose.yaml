@@ -1,0 +1,431 @@
+name: 9950x-workhorse
+
+services:
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: workhorse-dozzle
+    restart: unless-stopped
+    ports:
+      - "${WORKHORSE_LAN_BIND_IP:-192.168.50.50}:${DOZZLE_HOST_PORT:-3013}:8080"
+      - "${WORKHORSE_TAILSCALE_BIND_IP:-100.87.137.47}:${DOZZLE_HOST_PORT:-3013}:8080"
+    environment:
+      DOZZLE_LEVEL: info
+      DOZZLE_NO_ANALYTICS: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: workhorse-ntfy
+    restart: unless-stopped
+    command: ["serve"]
+    ports:
+      - "${WORKHORSE_LAN_BIND_IP:-192.168.50.50}:${NTFY_HOST_PORT:-3015}:80"
+      - "${WORKHORSE_TAILSCALE_BIND_IP:-100.87.137.47}:${NTFY_HOST_PORT:-3015}:80"
+    environment:
+      NTFY_BASE_URL: ${NTFY_BASE_URL:-http://192.168.50.50:3015}
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
+      NTFY_ATTACHMENT_CACHE_DIR: /var/cache/ntfy/attachments
+      NTFY_AUTH_DEFAULT_ACCESS: deny-all
+      NTFY_BEHIND_PROXY: "true"
+    volumes:
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/ntfy/cache:/var/cache/ntfy
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/ntfy/etc:/etc/ntfy
+
+  searxng-redis:
+    image: valkey/valkey:8-alpine
+    container_name: workhorse-searxng-redis
+    restart: unless-stopped
+    command: valkey-server --save 30 1 --loglevel warning
+    volumes:
+      - searxng-redis:/data
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: workhorse-searxng
+    restart: unless-stopped
+    depends_on:
+      - searxng-redis
+    ports:
+      - "${WORKHORSE_LAN_BIND_IP:-192.168.50.50}:${SEARXNG_HOST_PORT:-3017}:8080"
+      - "${WORKHORSE_TAILSCALE_BIND_IP:-100.87.137.47}:${SEARXNG_HOST_PORT:-3017}:8080"
+    environment:
+      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://192.168.50.50:3017/}
+      SEARXNG_REDIS_URL: redis://searxng-redis:6379/0
+      UWSGI_WORKERS: ${SEARXNG_UWSGI_WORKERS:-4}
+      UWSGI_THREADS: ${SEARXNG_UWSGI_THREADS:-4}
+    volumes:
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/searxng:/etc/searxng:ro
+
+  karakeep-chrome:
+    image: gcr.io/zenika-hub/alpine-chrome:124
+    container_name: workhorse-karakeep-chrome
+    restart: unless-stopped
+    command:
+      - --no-sandbox
+      - --disable-gpu
+      - --disable-dev-shm-usage
+      - --remote-debugging-address=0.0.0.0
+      - --remote-debugging-port=9222
+      - --hide-scrollbars
+
+  karakeep-meilisearch:
+    image: getmeili/meilisearch:v1.41.0
+    container_name: workhorse-karakeep-meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${KARAKEEP_MEILI_MASTER_KEY:?set in .env}
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - karakeep-meilisearch:/meili_data
+
+  karakeep:
+    image: ghcr.io/karakeep-app/karakeep:${KARAKEEP_VERSION:-release}
+    container_name: workhorse-karakeep
+    restart: unless-stopped
+    depends_on:
+      - karakeep-chrome
+      - karakeep-meilisearch
+    ports:
+      - "${WORKHORSE_LAN_BIND_IP:-192.168.50.50}:${KARAKEEP_HOST_PORT:-3018}:3000"
+      - "${WORKHORSE_TAILSCALE_BIND_IP:-100.87.137.47}:${KARAKEEP_HOST_PORT:-3018}:3000"
+    environment:
+      DATA_DIR: /data
+      NEXTAUTH_URL: ${KARAKEEP_NEXTAUTH_URL:-http://192.168.50.50:3018}
+      NEXTAUTH_SECRET: ${KARAKEEP_NEXTAUTH_SECRET:?set in .env}
+      MEILI_ADDR: http://karakeep-meilisearch:7700
+      MEILI_MASTER_KEY: ${KARAKEEP_MEILI_MASTER_KEY:?set in .env}
+      BROWSER_WEB_URL: http://karakeep-chrome:9222
+      DISABLE_SIGNUPS: ${KARAKEEP_DISABLE_SIGNUPS:-false}
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/karakeep/data:/data
+
+  healthchecks-db:
+    image: postgres:16-alpine
+    container_name: workhorse-healthchecks-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${HEALTHCHECKS_DB_NAME:-healthchecks}
+      POSTGRES_USER: ${HEALTHCHECKS_DB_USER:-healthchecks}
+      POSTGRES_PASSWORD: ${HEALTHCHECKS_DB_PASSWORD:?set in .env}
+    volumes:
+      - healthchecks-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${HEALTHCHECKS_DB_USER:-healthchecks} -d ${HEALTHCHECKS_DB_NAME:-healthchecks}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  healthchecks:
+    image: healthchecks/healthchecks:latest
+    container_name: workhorse-healthchecks
+    restart: unless-stopped
+    depends_on:
+      healthchecks-db:
+        condition: service_healthy
+    command: bash -c 'while !</dev/tcp/healthchecks-db/5432; do sleep 1; done; uwsgi /opt/healthchecks/docker/uwsgi.ini'
+    ports:
+      - "${WORKHORSE_LAN_BIND_IP:-192.168.50.50}:${HEALTHCHECKS_HOST_PORT:-3014}:8000"
+      - "${WORKHORSE_TAILSCALE_BIND_IP:-100.87.137.47}:${HEALTHCHECKS_HOST_PORT:-3014}:8000"
+    environment:
+      DB: postgres
+      DB_HOST: healthchecks-db
+      DB_PORT: 5432
+      DB_NAME: ${HEALTHCHECKS_DB_NAME:-healthchecks}
+      DB_USER: ${HEALTHCHECKS_DB_USER:-healthchecks}
+      DB_PASSWORD: ${HEALTHCHECKS_DB_PASSWORD:?set in .env}
+      SECRET_KEY: ${HEALTHCHECKS_SECRET_KEY:?set in .env}
+      SITE_ROOT: ${HEALTHCHECKS_SITE_ROOT:-http://192.168.50.50:3014}
+      ALLOWED_HOSTS: ${HEALTHCHECKS_ALLOWED_HOSTS:-127.0.0.1,localhost,192.168.50.50,100.87.137.47}
+      DEBUG: "False"
+      REGISTRATION_OPEN: "False"
+      MASTER_BADGE_LABEL: EdSys
+      PING_ENDPOINT: ${HEALTHCHECKS_SITE_ROOT:-http://192.168.50.50:3014}/ping/
+
+  backrest:
+    image: garethgeorge/backrest:latest
+    container_name: workhorse-backrest
+    restart: unless-stopped
+    ports:
+      - "${WORKHORSE_LAN_BIND_IP:-192.168.50.50}:${BACKREST_HOST_PORT:-9898}:9898"
+      - "${WORKHORSE_TAILSCALE_BIND_IP:-100.87.137.47}:${BACKREST_HOST_PORT:-9898}:9898"
+    environment:
+      BACKREST_DATA: /data
+      BACKREST_CONFIG: /config/config.json
+      XDG_CACHE_HOME: /cache
+    volumes:
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/backrest/data:/data
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/backrest/config:/config
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/backrest/cache:/cache
+      - /srv/edsys-backup:/srv/edsys-backup:ro
+      - /home/jeremy/code:/host/home/jeremy/code:ro
+      - /mnt/ai-store:/host/mnt/ai-store:ro
+
+  scrutiny:
+    image: ghcr.io/analogj/scrutiny:master-omnibus
+    container_name: workhorse-scrutiny
+    restart: unless-stopped
+    privileged: true
+    cap_add:
+      - SYS_RAWIO
+    ports:
+      - "${WORKHORSE_LAN_BIND_IP:-192.168.50.50}:${SCRUTINY_HOST_PORT:-3016}:8080"
+      - "${WORKHORSE_TAILSCALE_BIND_IP:-100.87.137.47}:${SCRUTINY_HOST_PORT:-3016}:8080"
+      - "127.0.0.1:${SCRUTINY_COLLECTOR_PORT:-8086}:8086"
+    volumes:
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/scrutiny/config:/opt/scrutiny/config
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/scrutiny/influxdb:/opt/scrutiny/influxdb
+      - /run/udev:/run/udev:ro
+    devices:
+      - /dev:/dev
+
+  loki:
+    image: grafana/loki:latest
+    container_name: workhorse-loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    ports:
+      - "${WORKHORSE_LAN_BIND_IP:-192.168.50.50}:${LOKI_HOST_PORT:-3100}:3100"
+      - "${WORKHORSE_TAILSCALE_BIND_IP:-100.87.137.47}:${LOKI_HOST_PORT:-3100}:3100"
+    volumes:
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/loki-config/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/loki:/loki
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: workhorse-alloy
+    restart: unless-stopped
+    depends_on:
+      - loki
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=127.0.0.1:12345
+      - --storage.path=/var/lib/alloy/data
+    volumes:
+      - ./config/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/alloy:/var/lib/alloy
+
+  litellm-db:
+    image: postgres:16-alpine
+    container_name: workhorse-litellm-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${LITELLM_DB_NAME:-litellm}
+      POSTGRES_USER: ${LITELLM_DB_USER:-litellm}
+      POSTGRES_PASSWORD: ${LITELLM_DB_PASSWORD:?set in .env}
+    volumes:
+      - litellm-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LITELLM_DB_USER:-litellm} -d ${LITELLM_DB_NAME:-litellm}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: workhorse-litellm
+    restart: unless-stopped
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
+    ports:
+      - "${WORKHORSE_LAN_BIND_IP:-192.168.50.50}:${LITELLM_HOST_PORT:-4000}:4000"
+      - "${WORKHORSE_TAILSCALE_BIND_IP:-100.87.137.47}:${LITELLM_HOST_PORT:-4000}:4000"
+    environment:
+      DATABASE_URL: postgresql://${LITELLM_DB_USER:-litellm}:${LITELLM_DB_PASSWORD:?set in .env}@litellm-db:5432/${LITELLM_DB_NAME:-litellm}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set in .env}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?set in .env}
+      STORE_MODEL_IN_DB: "True"
+      UI_USERNAME: ${LITELLM_UI_USERNAME:-admin}
+      UI_PASSWORD: ${LITELLM_UI_PASSWORD:?set in .env}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./config/litellm/config.yaml:/app/config.yaml:ro
+
+  langfuse-postgres:
+    image: postgres:17-alpine
+    container_name: workhorse-langfuse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${LANGFUSE_POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: postgres
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - langfuse-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: workhorse-langfuse-clickhouse
+    restart: unless-stopped
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:?set in .env}
+    volumes:
+      - langfuse-clickhouse-data:/var/lib/clickhouse
+      - langfuse-clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  langfuse-minio:
+    image: minio/minio:latest
+    container_name: workhorse-langfuse-minio
+    restart: unless-stopped
+    command: server --address ":9000" --console-address ":9001" /data
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_ROOT_PASSWORD:?set in .env}
+    volumes:
+      - langfuse-minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  langfuse-redis:
+    image: redis:7-alpine
+    container_name: workhorse-langfuse-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${LANGFUSE_REDIS_AUTH:?set in .env} --maxmemory-policy noeviction
+    volumes:
+      - langfuse-redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${LANGFUSE_REDIS_AUTH}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    environment:
+      LANGFUSE_REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:?set in .env}
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    container_name: workhorse-langfuse-worker
+    restart: unless-stopped
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+    environment: &langfuse-env
+      NEXTAUTH_URL: ${LANGFUSE_NEXTAUTH_URL:-http://192.168.50.50:3012}
+      DATABASE_URL: postgresql://postgres:${LANGFUSE_POSTGRES_PASSWORD:?set in .env}@langfuse-postgres:5432/postgres
+      DIRECT_URL: postgresql://postgres:${LANGFUSE_POSTGRES_PASSWORD:?set in .env}@langfuse-postgres:5432/postgres
+      SALT: ${LANGFUSE_SALT:?set in .env}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:?set in .env}
+      TELEMETRY_ENABLED: ${LANGFUSE_TELEMETRY_ENABLED:-false}
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: ${LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES:-false}
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:${LANGFUSE_CLICKHOUSE_PASSWORD:?set in .env}@langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:?set in .env}
+      CLICKHOUSE_CLUSTER_ENABLED: false
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD:?set in .env}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: true
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD:?set in .env}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: true
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+      LANGFUSE_S3_BATCH_EXPORT_ENABLED: false
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: 6379
+      REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:?set in .env}
+      LANGFUSE_BULLMQ_SKIP_REDIS_VERSION_CHECK: false
+      EMAIL_FROM_ADDRESS: ""
+      SMTP_CONNECTION_URL: ""
+
+  langfuse:
+    image: langfuse/langfuse:3
+    container_name: workhorse-langfuse
+    restart: unless-stopped
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+    ports:
+      - "${WORKHORSE_LAN_BIND_IP:-192.168.50.50}:${LANGFUSE_HOST_PORT:-3012}:3000"
+      - "${WORKHORSE_TAILSCALE_BIND_IP:-100.87.137.47}:${LANGFUSE_HOST_PORT:-3012}:3000"
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:?set in .env}
+      LANGFUSE_INIT_ORG_ID: ${LANGFUSE_INIT_ORG_ID:-}
+      LANGFUSE_INIT_ORG_NAME: ${LANGFUSE_INIT_ORG_NAME:-}
+      LANGFUSE_INIT_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID:-}
+      LANGFUSE_INIT_PROJECT_NAME: ${LANGFUSE_INIT_PROJECT_NAME:-}
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:-}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-}
+      LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-}
+
+  renovate:
+    image: renovate/renovate:latest
+    container_name: workhorse-renovate
+    profiles: ["manual"]
+    restart: "no"
+    environment:
+      RENOVATE_CONFIG_FILE: /usr/src/app/config/config.js
+      RENOVATE_TOKEN: ${RENOVATE_TOKEN:-}
+    volumes:
+      - ./config/renovate/config.js:/usr/src/app/config/config.js:ro
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/renovate/cache:/tmp/renovate/cache
+
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: workhorse-crowdsec
+    restart: unless-stopped
+    environment:
+      COLLECTIONS: crowdsecurity/linux crowdsecurity/sshd
+      GID: ${DOCKER_GROUP_GID:-999}
+    volumes:
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/crowdsec/config:/etc/crowdsec
+      - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/crowdsec/data:/var/lib/crowdsec/data
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+volumes:
+  searxng-redis:
+  karakeep-meilisearch:
+  healthchecks-db:
+  litellm-db:
+  langfuse-postgres:
+  langfuse-clickhouse-data:
+  langfuse-clickhouse-logs:
+  langfuse-minio:
+  langfuse-redis:
