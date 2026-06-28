@@ -1,0 +1,22 @@
+services:
+  edsys-ai-portal:
+    build:
+      context: /home/jeremy/code/edsys-ai-portal
+      dockerfile: Dockerfile
+    container_name: edsys-ai-portal
+    restart: unless-stopped
+    env_file:
+      - /home/jeremy/code/edsys-ai-portal/.env
+    ports:
+      - "192.168.50.50:3020:8080"
+      - "100.87.137.47:3020:8080"
+    volumes:
+      - ${PORTAL_STATE_DIR:-/opt/edsys-workhorse/edsys-ai-portal}/data:/data
+      - /home/jeremy/code/edsys-ai-portal/config:/app/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

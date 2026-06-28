@@ -11,7 +11,8 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `DOCKER_COMPOSE_STANDARD.md`
 - `CONFIG_TEMPLATE_STANDARD.md`
 - `../docker/9950x-workhorse/README.md` - loopback-only 9950x workhorse stack for EdSys + AI services, observability, backup UI, notifications, and dependency-update templates.
-- `../docker/homepage-workhorse/README.md` - second Homepage instance for the Matrix-themed Workhorse/AI/Programming/Codex dashboard.
+- `../docker/homepage-workhorse/README.md` - second Homepage instance for the Workhorse/AI/Programming/Codex dashboard.
+- `../docker/edsys-ai-portal/README.md` - private LiteLLM-backed EdSys operator UI.
 - `../docker/edsys-control-api/README.md` - read-only API and dashboard over the EdSys-Master source-of-truth YAML.
 - `../scripts/backup/README.md` - Google Drive offsite backup tooling using `9950x`, `restic`, and `rclone`.
 - `../scripts/deploy/README.md` - deployment preparation helpers.
