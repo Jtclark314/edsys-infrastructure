@@ -1,6 +1,6 @@
 # EdSys Google Drive Offsite Backup Tooling
 
-Status: implementation baseline.
+Status: active baseline.
 
 This directory contains the host-side tooling for EdSys offsite backups.
 
@@ -16,6 +16,8 @@ This directory contains the host-side tooling for EdSys offsite backups.
 - Private config: `/etc/edsys-backup`
 
 The scripts are designed to protect critical service state first. They exclude replaceable bulk media by default.
+
+As of the 2026-06-29 UTC hardening pass, the default 9950x include set also protects the operator repos under `/home/jeremy/code`, selected shell/Codex hub state, and `/opt/edsys-workhorse` runtime state. Replaceable Codex package caches and Loki/renovate cache-heavy paths remain excluded.
 
 ## Files
 
@@ -47,13 +49,17 @@ Use `edsys-gdrive` as the rclone remote name.
 
 The local backup is independent of Google Drive. `edsys-backup.sh` creates or updates the local encrypted restic repository only.
 
+Each local backup is tagged with its UTC `RUN_ID` so the generated JSON report can record the exact snapshot created by that run.
+
+Remote Pi-hole config exports intentionally exclude volatile `pihole-FTL.db*` query-history database files from the tar stream. Core Pi-hole config remains protected; query history should be promoted through a separate backup policy only if it becomes recovery-critical.
+
 The offsite mirror is a separate operation handled by `edsys-offsite-sync.sh`. It refuses to run unless the `edsys-gdrive` rclone remote has a dedicated Google OAuth client ID and secret configured.
 
 This is more reliable than using restic directly against the `rclone:` backend for Google Drive, because snapshot creation is decoupled from Google API throttling and the offsite sync can resume cleanly.
 
 ## Creating a Dedicated Google OAuth Client for rclone
 
-Do this before running a full offsite sync.
+Do this before running a full offsite sync. The active 9950x setup completed the first full v3 mirror as run `20260629T020604Z`; keep the live config private and rotate credentials if exposed.
 
 1. Open Google Cloud Console.
 2. Create a project named `EdSys Backup Rclone`.
@@ -89,7 +95,7 @@ Do not paste the client secret, rclone token, refresh token, or config contents 
 
 ## Offsite Sync
 
-After the custom OAuth client is confirmed:
+After the custom OAuth client is confirmed, or when manually verifying the existing active setup:
 
 ```bash
 sudo /srv/edsys-backup/scripts/edsys-offsite-sync.sh --test-only

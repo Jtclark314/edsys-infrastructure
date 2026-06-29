@@ -66,3 +66,8 @@ litellm_settings:
   request_timeout: 120
   num_retries: 1
   set_verbose: false
+  callbacks:
+    - langfuse_otel
+  # Keep Workhorse observability metadata-rich but content-safe by default.
+  # Prompt/response bodies stay out of Langfuse unless this is deliberately changed.
+  turn_off_message_logging: true

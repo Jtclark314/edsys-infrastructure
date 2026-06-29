@@ -10,3 +10,6 @@ redis:
 search:
   safe_search: 1
   autocomplete: "duckduckgo"
+  formats:
+    - html
+    - json

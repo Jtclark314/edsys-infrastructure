@@ -45,3 +45,14 @@
 *.mov
 *.mp3
 *.flac
+/home/jeremy/.codex/packages/**
+/home/jeremy/.codex/cache/**
+/home/jeremy/.codex/.tmp/**
+/home/jeremy/.codex/app-server-control/**
+/opt/edsys-workhorse/loki/chunks/**
+/opt/edsys-workhorse/loki/wal/**
+/opt/edsys-workhorse/loki/tsdb-shipper-cache/**
+/opt/edsys-workhorse/loki/tsdb-shipper-active/**
+/opt/edsys-workhorse/renovate/cache/**
+**/*.sock
+**/*.pid

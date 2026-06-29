@@ -13,6 +13,8 @@ LOKI_CONFIG_FILE="$LOKI_CONFIG_DIR/loki-config.yaml"
 rand_b64() { openssl rand -base64 "${1:-32}" | tr -d '\n'; }
 rand_hex() { openssl rand -hex "${1:-32}" | tr -d '\n'; }
 rand_key() { printf 'sk-%s' "$(rand_hex 24)"; }
+rand_lf_pk() { printf 'lf_pk_%s' "$(rand_hex 24)"; }
+rand_lf_sk() { printf 'lf_sk_%s' "$(rand_hex 24)"; }
 
 owner="${SUDO_USER:-$USER}"
 group="$(id -gn "$owner" 2>/dev/null || id -gn)"
@@ -85,6 +87,15 @@ LANGFUSE_SALT=$(rand_b64 32)
 LANGFUSE_ENCRYPTION_KEY=$(rand_hex 32)
 LANGFUSE_NEXTAUTH_SECRET=$(rand_b64 32)
 LANGFUSE_TELEMETRY_ENABLED=false
+LANGFUSE_INIT_ORG_ID=workhorse
+LANGFUSE_INIT_ORG_NAME=EdSys Workhorse
+LANGFUSE_INIT_PROJECT_ID=workhorse-ai-portal
+LANGFUSE_INIT_PROJECT_NAME=EdSys Workhorse AI Portal
+LANGFUSE_INIT_PROJECT_PUBLIC_KEY=$(rand_lf_pk)
+LANGFUSE_INIT_PROJECT_SECRET_KEY=$(rand_lf_sk)
+LANGFUSE_INIT_USER_EMAIL=jeremy@edsys.local
+LANGFUSE_INIT_USER_NAME=Jeremy
+LANGFUSE_INIT_USER_PASSWORD=$(rand_b64 24)
 RENOVATE_TOKEN=
 DOCKER_GROUP_GID=$(getent group docker | cut -d: -f3 || echo 999)
 ENV
@@ -108,6 +119,9 @@ redis:
 search:
   safe_search: 1
   autocomplete: "duckduckgo"
+  formats:
+    - html
+    - json
 YAML
   chmod 0600 "$SEARXNG_SETTINGS"
   echo "Created private SearXNG settings at $SEARXNG_SETTINGS"

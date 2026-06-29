@@ -14,7 +14,7 @@ Operator-facing human/admin interfaces bind to the 9950x LAN and Tailnet address
 | Healthchecks | Timer/job heartbeat dashboard | `http://192.168.50.50:3014` / `http://100.87.137.47:3014` |
 | ntfy | Local notification endpoint | `http://192.168.50.50:3015` / `http://100.87.137.47:3015` |
 | Scrutiny | SMART disk health dashboard | `http://192.168.50.50:3016` / `http://100.87.137.47:3016` |
-| SearXNG | Private metasearch for local workflows | `http://192.168.50.50:3017` / `http://100.87.137.47:3017` |
+| SearXNG | Private metasearch for local workflows and EdSys AI Portal live web grounding | `http://192.168.50.50:3017` / `http://100.87.137.47:3017` |
 | Karakeep | Bookmark/read-it-later knowledge capture | `http://192.168.50.50:3018` / `http://100.87.137.47:3018` |
 | Backrest | Restic backup browser/orchestrator UI | `http://192.168.50.50:9898` / `http://100.87.137.47:9898` |
 | Loki/Alloy | Local container log pipeline | `http://192.168.50.50:3100` / `http://100.87.137.47:3100` |
@@ -39,6 +39,41 @@ That script creates local Healthchecks records, private root-readable files unde
 Renovate is configured with a `manual` Compose profile because it requires a local GitHub token in the ignored `.env` file. It is PR-only/no-automerge by default.
 
 CrowdSec is deployed detection-only. There is no firewall, reverse-proxy, or SSH bouncer in this stack; add blocking only after baseline review.
+
+## Workhorse observability for the AI Portal
+
+Langfuse, Loki, and Grafana Alloy are the standard Workhorse observability path for the AI Portal:
+
+- LiteLLM emits Langfuse OTEL traces with Workhorse/Portal tags and request metadata.
+- LiteLLM `turn_off_message_logging=true` keeps prompts/responses redacted in Langfuse.
+- The `langfuse-minio-init` one-shot service creates the required private MinIO `langfuse` bucket before Langfuse/worker startup.
+- Alloy collects Docker container logs into Loki; the Portal only exposes bounded, redacted lookups for an allow-list of Workhorse containers.
+- The Portal resolves Langfuse traces asynchronously by request ID because Langfuse ingestion is not immediate.
+
+Smoke checks:
+
+```bash
+curl -fsS http://192.168.50.50:3012/api/public/health
+curl -fsS http://192.168.50.50:3100/ready
+docker compose -f docker/9950x-workhorse/compose.yaml up -d langfuse-minio-init
+```
+
+## SearXNG web grounding
+
+SearXNG is used by EdSys AI Portal for current/public prompt grounding. Keep both `html` and `json` formats enabled in the private runtime settings so the human UI and Portal search client both work:
+
+```yaml
+search:
+  formats:
+    - html
+    - json
+```
+
+Smoke test:
+
+```bash
+curl -fsS 'http://192.168.50.50:3017/search?q=USA%20FIFA%20World%20Cup%202026%20standings&format=json'
+```
 
 
 ## LiteLLM broker operations

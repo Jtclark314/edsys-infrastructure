@@ -106,7 +106,7 @@ if [[ ! -s "${EXISTING_INCLUDE_FILE}" ]]; then
   fail "no include paths exist; refusing to run empty backup"
 fi
 
-RESTIC_ARGS=(backup --files-from "${EXISTING_INCLUDE_FILE}" --exclude-file "${EXCLUDE_FILE}" --tag edsys-critical --tag "${HOSTNAME_SHORT}")
+RESTIC_ARGS=(backup --files-from "${EXISTING_INCLUDE_FILE}" --exclude-file "${EXCLUDE_FILE}" --tag edsys-critical --tag "${HOSTNAME_SHORT}" --tag "${RUN_ID}")
 if [[ "${DRY_RUN}" == "true" ]]; then
   RESTIC_ARGS+=(--dry-run)
 fi
@@ -122,7 +122,7 @@ fi
 
 SNAPSHOT_ID=""
 if [[ "${DRY_RUN}" != "true" ]]; then
-  SNAPSHOT_ID="$(restic snapshots --latest 1 --json | jq -r '.[0].short_id // .[0].id // ""')"
+  SNAPSHOT_ID="$(restic snapshots --tag "${RUN_ID}" --json | jq -r 'if length > 0 then (max_by(.time).short_id // max_by(.time).id // "") else "" end')"
   restic forget --keep-daily "${KEEP_DAILY}" --keep-weekly "${KEEP_WEEKLY}" --keep-monthly "${KEEP_MONTHLY}" --prune 2>&1 | tee -a "${LOG_FILE}"
 fi
 
