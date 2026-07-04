@@ -1,0 +1,26 @@
+services:
+  mailbrain:
+    build:
+      context: /home/jeremy/code/edsys-mailbrain
+      dockerfile: Dockerfile
+    container_name: mailbrain
+    restart: unless-stopped
+    env_file:
+      - path: /home/jeremy/code/edsys-mailbrain/.env
+        required: false
+    ports:
+      - "127.0.0.1:3035:8080"
+      - "192.168.50.50:3035:8080"
+      - "100.87.137.47:3035:8080"
+    volumes:
+      - /mnt/ai-store/rag/mailbrain:/data/mailbrain
+      - /mnt/ai-store/rag/docs/EdSysVault:/mnt/ai-store/rag/docs/EdSysVault
+      - /home/jeremy/code:/host-code:ro
+      - /opt/edsys-workhorse/mailbrain:/opt/edsys-workhorse/mailbrain
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
