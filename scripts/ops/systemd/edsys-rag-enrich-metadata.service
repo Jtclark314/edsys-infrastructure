@@ -1,0 +1,7 @@
+[Unit]
+Description=Build local-only EdSys RAG metadata enrichment index
+After=edsys-rag-sync.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/edsys-rag-enrich-metadata

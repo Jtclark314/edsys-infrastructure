@@ -1,0 +1,12 @@
+[Unit]
+Description=Watch reviewed EdSys RAG summaries and trigger sync
+After=syncthing.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/edsys-rag-watch-sync --debounce-seconds 8
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=default.target

@@ -1,8 +1,10 @@
 # EdSys Workhorse AI Portal
 
-Status: deployed on 9950x, Phase 1 MVP plus grounded RAG enforcement, live web grounding, prompt-aware Model Router, and Workhorse observability.
+Status: deployed on 9950x, Phase 1 backend plus Mission Control React redesign work in progress, grounded RAG enforcement, live web grounding, prompt-aware Model Router, Workhorse observability, and v1 safe agent/RAGOps APIs.
 
 Private LiteLLM-backed operator UI for EdSys. The app repository lives at `/home/jeremy/code/edsys-ai-portal`; this folder only records the sanitized deployment shape and validation commands.
+
+The app repo now builds a Vite + React + TypeScript + Tailwind **Mission Control** frontend into `app/static/app/`. FastAPI serves the compiled static assets with the legacy static page as fallback. Production still uses one container; Node exists only in the Docker build stage and there is no separate Node runtime service.
 
 ## Interfaces
 
@@ -24,9 +26,11 @@ Private runtime files on 9950x:
 - `/opt/edsys-workhorse/litellm/client-env/edsys-ai-portal.env` — recovery/client copy of the LiteLLM service-key env.
 - `/opt/edsys-workhorse/edsys-ai-portal/data/` — future SQLite/export runtime data; Phase 1 history is disabled.
 - `/mnt/ai-store/rag/grounding/edsys-grounding.sqlite` — current-only grounding index mounted read-only at `/data/rag/edsys-grounding.sqlite`.
+- `/mnt/ai-store/rag/evals/` — RAGOps eval result JSON files written by the host-side eval helper.
 - `http://192.168.50.50:3017` — private SearXNG provider for live web grounding; JSON format must remain enabled in the workhorse SearXNG settings.
 - `http://192.168.50.50:3012` — private Langfuse instance initialized with the `workhorse-ai-portal` project.
 - `http://192.168.50.50:3100` — private Loki endpoint populated by Grafana Alloy.
+- `http://192.168.50.50:8099` — read-only EdSys Control API used by v1 safe agent tools.
 
 ## Model Policy
 
@@ -66,6 +70,32 @@ The standard name for this operator surface is now **Workhorse AI Portal** / **W
 
 Langfuse keys used for trace lookup are backend-only runtime secrets in the ignored `.env`; they must not be committed or rendered into browser JavaScript. LiteLLM message logging stays disabled so Langfuse stores redacted prompt/response placeholders plus model/router/usage metadata.
 
+## Mission Control UI
+
+The operator surface is organized by workspace instead of one long page:
+
+- Overview, Command, Systems, Models, Knowledge, Observability, Agents, Voice, and Evaluations.
+- Dense lists use paginated/filterable tables for services, models, logs, traces, tools, sources, and eval summaries.
+- UI aggregation endpoints are metadata-focused and bounded: `/api/ui/overview`, `/api/control/summary`, `/api/control/search`, `/api/control/health`, `/api/rag/evals/summary`, and `/api/voice/latency/summary`.
+- Write-like actions remain proposal-only; the Evaluations workspace summarizes previous results and copyable CLI commands but does not execute cloud evals from the browser.
+
+## Safe Agent and RAGOps APIs
+
+V1 agent tools are safe by default:
+
+- `/api/tools` returns the tool catalog and safety policy.
+- `/api/agent/run` and `/api/agent/run/stream` use LiteLLM/OpenAI-compatible tool calling to select one tool, then execute one read-only tool call or return a proposal for write-like/disabled actions.
+- Enabled read-only tools cover EdSys Control API summary/search/health, current RAG search, Workhorse status/logs/trace lookup.
+- ntfy summary publishing is side-effectful and requires explicit confirmation.
+- Foothills ASI and Obsidian update adapters are present only as disabled/proposal paths until live state and write approval are reviewed.
+
+RAGOps golden queries live in `/home/jeremy/code/EdSys-Master/data/rag-golden-queries.yml`. Run evals from the app repo virtualenv; cloud or DeepEval judges require explicit `--cloud-confirmed` and a service-scoped eval key outside Git.
+
+Voice endpoints are measurement/proposal only:
+
+- `/api/voice/latency` records wake/STT/first-token/TTS/playback timings to runtime JSONL.
+- `/api/voice/intent` classifies simple edge intents but never executes Home Assistant actions in v1.
+
 ## Grounding Index
 
 Build or refresh the index on the host before/after deployment:
@@ -86,6 +116,8 @@ cd /home/jeremy/code/edsys-ai-portal
 docker compose config --quiet
 docker compose up -d --build
 ```
+
+The app `Dockerfile` is multi-stage: Node builds the frontend bundle first, then the Python image copies the compiled bundle into `/app/app/static/app/` and serves it through FastAPI.
 
 Equivalent sanitized infrastructure reference:
 
@@ -113,6 +145,9 @@ Expected behavior:
 - `/api/workhorse/status` reports Langfuse and Loki `ok`.
 - `/api/workhorse/logs?container=edsys-ai-portal&limit=5` returns recent redacted Portal log lines.
 - After a smoke chat, `/api/workhorse/trace/{request_id}` resolves to a Langfuse trace URL within a few seconds.
+- `/api/tools` lists read-only tools plus disabled/proposal-only ASI/Obsidian adapters.
+- `POST /api/agent/run` with "Check LiteLLM status" uses a read-only Control API path and does not call a write executor.
+- `POST /api/voice/intent` for a lights command returns `action_allowed=false`.
 
 ## Backup Notes
 
