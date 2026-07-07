@@ -39,13 +39,30 @@ The compose stack mounts:
 
 After deploying code changes, run a supervised knowledge sync through `POST /api/mailbrain-knowledge/sync` and verify `GET /api/operator/context-preview?query=...` returns base prompt and curated snippets. Curated knowledge guides MailBrain behavior only; Outlook email RAG remains authoritative for current email status, outcomes, and action-owner claims.
 
-## First supervised sync
+## Microsoft Graph cutover sync
+
+Live cutover status as of 2026-07-07: Graph backfill and Qdrant rebuild completed on the running portal, with 10,028 indexed messages, 172,193 chunks, 7,734 attachment records, and 2,682 indexed attachment-text records.
+
+Create/refresh the delegated Graph token outside Git, then dry-run one page per folder before resetting the temporary connector corpus:
 
 ```bash
 cd /home/jeremy/code/edsys-mailbrain
+.venv/bin/python tools/mailbrain_graph_auth.py --expected-email jclark@thompsonturner.com
+
 GRAPH_ACCESS_TOKEN_FILE=/opt/edsys-workhorse/mailbrain/graph-access-token \
 MAILBRAIN_SQLITE_PATH=/mnt/ai-store/rag/mailbrain/mailbrain.sqlite \
-.venv/bin/python tools/mailbrain_graph_sync.py --all-folders --limit-pages 1
+.venv/bin/python tools/mailbrain_graph_sync.py --all-folders --backfill --limit-pages 1 --dry-run --progress
 ```
 
-Remove `--limit-pages` after the first run is validated. Add `--embed` when LiteLLM and Qdrant are confirmed reachable.
+After the dry-run succeeds, archive and reset email-only state, then run a supervised write sync with embeddings:
+
+```bash
+MAILBRAIN_SQLITE_PATH=/mnt/ai-store/rag/mailbrain/mailbrain.sqlite \
+.venv/bin/python tools/mailbrain_graph_cutover.py --archive --reset-email-index --reset-qdrant --yes
+
+GRAPH_ACCESS_TOKEN_FILE=/opt/edsys-workhorse/mailbrain/graph-access-token \
+MAILBRAIN_SQLITE_PATH=/mnt/ai-store/rag/mailbrain/mailbrain.sqlite \
+.venv/bin/python tools/mailbrain_graph_sync.py --all-folders --backfill --limit-pages 1 --embed --progress
+```
+
+Remove `--limit-pages` for the full historical backfill after the supervised run validates searches, source cards, attachment extraction, and vector scores. Run a normal non-`--backfill` Graph sync afterward to maintain per-folder delta links for ongoing changes. If embeddings must be rebuilt, use `tools/mailbrain_reembed_all.py --reset-collection --batch-size 64`. Very large supported attachments above `MAILBRAIN_ATTACHMENT_TEXT_MAX_BYTES` remain metadata-only so backfill cannot stall on huge PDFs/workbooks.
