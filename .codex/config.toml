@@ -1,0 +1,4 @@
+# Project-local Codex configuration.
+# Keep this file portable and free of secrets or machine-specific auth settings.
+
+model_instructions_file = "../AGENTS.md"
