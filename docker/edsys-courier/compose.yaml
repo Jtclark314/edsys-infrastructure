@@ -1,0 +1,40 @@
+name: edsys-courier
+
+services:
+  courier-server:
+    image: edsys-courier-server:${COURIER_VERSION:-0.1.0}
+    pull_policy: never
+    container_name: edsys-courier-server
+    restart: unless-stopped
+    user: "${COURIER_UID:?set COURIER_UID}:${COURIER_GID:?set COURIER_GID}"
+    env_file:
+      - /etc/edsys-courier/courier.env
+    environment:
+      COURIER_LISTEN_ADDRESS: 0.0.0.0:8080
+      COURIER_DESTINATION_ROOT: /data/images
+      COURIER_STATE_DIR: /var/lib/edsys-courier
+      TZ: America/New_York
+    ports:
+      - "127.0.0.1:3045:8080"
+    volumes:
+      - /mnt/media/images:/data/images:rw
+      - /srv/edsys/courier/state:/var/lib/edsys-courier:rw
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

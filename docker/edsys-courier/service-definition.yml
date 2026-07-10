@@ -1,0 +1,22 @@
+name: EdSys Courier
+description: Private manual copy-and-verify photo and video ingest service
+host: 9950x
+runtime: Docker Compose plus host Tailscale Serve HTTPS
+ports:
+  - 127.0.0.1:3045 to container 8080
+volumes:
+  - /mnt/media/images:/data/images
+  - /srv/edsys/courier/state:/var/lib/edsys-courier
+environment:
+  - live values in /etc/edsys-courier/courier.env
+  - sanitized placeholders in courier.env.example
+secrets_required: []
+backup:
+  state: covered by the existing encrypted /srv/edsys backup scope
+  media: not included in the current offsite backup; source clients must retain originals
+monitoring:
+  - container health check on /healthz
+  - Tailscale Serve status
+restore_notes: Recreate the service account, restore state if available, rebuild the pinned image, and reapply private Serve without Funnel.
+owner: Jeremy Clark
+last_verified: 2026-07-10 - container, loopback bind, private Tailscale Serve, disabled Funnel, and Nimo HTTPS pilot verified
