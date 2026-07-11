@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="${COURIER_SOURCE_DIR:-/home/jeremy/code/edsys-courier}"
-VERSION="${COURIER_VERSION:-0.2.0}"
+VERSION="${COURIER_VERSION:-0.3.2}"
 
 test -f "${SOURCE_DIR}/server/Dockerfile" || {
   echo "Courier source not found at ${SOURCE_DIR}" >&2

@@ -19,4 +19,4 @@ monitoring:
   - Tailscale Serve status
 restore_notes: Recreate the service account, restore state if available, rebuild the pinned image, and reapply private Serve without Funnel.
 owner: Jeremy Clark
-last_verified: 2026-07-11 UTC - 0.2 container, migrated state, loopback bind, private Tailscale Serve, and disabled Funnel verified; Nimo 0.2 installer built/tested/installed with settings and history preserved; interactive transfer acceptance remains to be confirmed
+last_verified: 2026-07-11 UTC - 0.3 container, schema-3 state, loopback bind, private Tailscale Serve, disabled Funnel, authentication, and unchanged historical media verified; 0.3.2 Windows extended-local-path repair deployed; Nimo 0.3.2 installed; extended-path north/West assignments and 12-file SHA-256-verified transfers passed; resilience acceptance remains to be confirmed
