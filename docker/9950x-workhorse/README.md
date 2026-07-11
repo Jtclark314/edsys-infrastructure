@@ -106,4 +106,4 @@ Recurring broker smoke testing is installed on 9950x as `edsys-litellm-broker-sm
 
 ## Reachability
 
-Operator-facing workhorse UI ports bind to `WORKHORSE_LAN_BIND_IP` and `WORKHORSE_TAILSCALE_BIND_IP` only, currently `192.168.50.50` and `100.87.137.47`. This fixes browser links from other machines while avoiding public internet exposure. Keep database/collector-only ports loopback or Docker-internal unless separately reviewed.
+Operator-facing workhorse UI ports bind to `WORKHORSE_LAN_BIND_IP` and `WORKHORSE_TAILSCALE_BIND_IP`, currently `192.168.50.50` and `100.87.137.47`. Healthchecks also binds its same configured host port on `127.0.0.1` so host-local heartbeat/status tooling can use a stable loopback endpoint without depending on LAN or Tailnet routing. This fixes browser links from other machines while avoiding public internet exposure. Keep database/collector-only ports loopback or Docker-internal unless separately reviewed.

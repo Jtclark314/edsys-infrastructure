@@ -128,6 +128,7 @@ services:
         condition: service_healthy
     command: bash -c 'while !</dev/tcp/healthchecks-db/5432; do sleep 1; done; uwsgi /opt/healthchecks/docker/uwsgi.ini'
     ports:
+      - "127.0.0.1:${HEALTHCHECKS_HOST_PORT:-3014}:8000"
       - "${WORKHORSE_LAN_BIND_IP:-192.168.50.50}:${HEALTHCHECKS_HOST_PORT:-3014}:8000"
       - "${WORKHORSE_TAILSCALE_BIND_IP:-100.87.137.47}:${HEALTHCHECKS_HOST_PORT:-3014}:8000"
     environment:
