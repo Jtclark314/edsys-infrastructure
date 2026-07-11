@@ -36,6 +36,18 @@ Authenticated API checks must pass through Tailscale Serve or deliberately suppl
 
 Pull and test the application source, bump the pinned version in `.env`, then rerun `build-and-deploy.sh`. Incomplete transfers remain in the state/media paths and resume after restart.
 
+For a candidate source worktree, override both values explicitly; the script
+exports the chosen version to Compose so the built and deployed tags cannot
+silently diverge:
+
+```bash
+COURIER_SOURCE_DIR=/path/to/edsys-courier COURIER_VERSION=0.2.0 ./build-and-deploy.sh
+```
+
+Courier 0.2 keeps the `/api/v1` routes used by the 0.1 client and adds run
+cancellation, changed-file replanning, and sanitized verification receipts.
+Deploy the server before upgrading Windows clients.
+
 ## Restore
 
 Recreate the runtime account and directories, restore `/srv/edsys/courier/state` if available, rebuild the image from the pinned source revision, and reapply the private Tailscale Serve route. If state is unavailable, existing final media remains authoritative and Courier will hash files it encounters during future planning.

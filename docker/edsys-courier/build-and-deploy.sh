@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="${COURIER_SOURCE_DIR:-/home/jeremy/code/edsys-courier}"
-VERSION="${COURIER_VERSION:-0.1.0}"
+VERSION="${COURIER_VERSION:-0.2.0}"
 
 test -f "${SOURCE_DIR}/server/Dockerfile" || {
   echo "Courier source not found at ${SOURCE_DIR}" >&2
@@ -15,6 +15,7 @@ test -f /etc/edsys-courier/courier.env || {
 }
 
 docker build --pull -t "edsys-courier-server:${VERSION}" "${SOURCE_DIR}/server"
+export COURIER_VERSION="${VERSION}"
 docker compose --env-file "${SCRIPT_DIR}/.env" -f "${SCRIPT_DIR}/compose.yaml" config --quiet
 docker compose --env-file "${SCRIPT_DIR}/.env" -f "${SCRIPT_DIR}/compose.yaml" up -d
 
