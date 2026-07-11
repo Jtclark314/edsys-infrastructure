@@ -1,0 +1,13 @@
+[Unit]
+Description=Proxy Courier Tailnet SMB to loopback Samba
+Documentation=man:systemd-socket-proxyd(8)
+After=smbd.service
+Requires=smbd.service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:445
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+RestrictAddressFamilies=AF_INET AF_INET6

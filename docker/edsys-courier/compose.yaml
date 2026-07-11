@@ -2,7 +2,7 @@ name: edsys-courier
 
 services:
   courier-server:
-    image: edsys-courier-server:${COURIER_VERSION:-0.3.2}
+    image: edsys-courier-server:${COURIER_VERSION:-0.4.0}
     pull_policy: never
     container_name: edsys-courier-server
     restart: unless-stopped
