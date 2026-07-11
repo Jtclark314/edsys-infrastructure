@@ -41,7 +41,7 @@ exports the chosen version to Compose so the built and deployed tags cannot
 silently diverge:
 
 ```bash
-COURIER_SOURCE_DIR=/path/to/edsys-courier COURIER_VERSION=0.3.0 ./build-and-deploy.sh
+COURIER_SOURCE_DIR=/path/to/edsys-courier COURIER_VERSION=0.3.1 ./build-and-deploy.sh
 ```
 
 Courier 0.3 keeps the `/api/v1` routes used by 0.2 clients and adds permanent exact-name folder targets and hidden direct batches while
