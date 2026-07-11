@@ -4,13 +4,15 @@ host: 9950x
 runtime: Docker Compose plus host Tailscale Serve HTTPS
 ports:
   - 127.0.0.1:3045 to container 8080
+  - host SMB 445 on LAN and tailscale0 for authenticated read-only CourierMedia
 volumes:
   - /mnt/media/images:/data/images
   - /srv/edsys/courier/state:/var/lib/edsys-courier
 environment:
   - live values in /etc/edsys-courier/courier.env
   - sanitized placeholders in courier.env.example
-secrets_required: []
+secrets_required:
+  - courier-reader Samba password, stored outside Git and in authorized Windows Credential Manager profiles
 backup:
   state: covered by the existing encrypted /srv/edsys backup scope
   media: not included in the current offsite backup; source clients must retain originals

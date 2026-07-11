@@ -32,6 +32,34 @@ tailscale serve status
 
 Authenticated API checks must pass through Tailscale Serve or deliberately supply the allowed identity header from local loopback during a controlled test.
 
+## Read-only Windows Explorer
+
+Courier 0.4 can open a paired target in native Windows File Explorer. This is
+provided by a separate host Samba share; the container and upload API remain
+localhost-only.
+
+1. Back up `/etc/samba/smb.conf` outside Git.
+2. Create no-login Unix identity `courier-reader` with primary group `media`.
+3. Run `sudo smbpasswd -a courier-reader` interactively. Never place the
+   password in Git, Courier settings, shell history, or an environment file.
+4. Add `tailscale0` to the existing `interfaces = lo enp7s0` global setting.
+5. Include `samba-courier-media.conf.example` as the `[CourierMedia]` share.
+6. Run `testparm -s`, restart `smbd`, and inspect the listeners. Samba may not
+   bind directly to Tailscale's non-broadcast `/32` interface. On hosts where
+   that limitation is observed, install the two sanitized
+   `courier-smb-tailnet.*.example` units with the current 9950x Tailscale IP.
+   The socket is bound to `tailscale0` and proxies encrypted SMB to Samba's
+   loopback listener without creating a wildcard listener.
+7. Confirm TCP 445 listens only on loopback, the LAN address, and the exact
+   Tailscale address. No listener may use `0.0.0.0:445`.
+8. Verify authenticated listing/read/copy succeeds and create/rename/delete
+   fails before setting `COURIER_EXPLORER_SHARE_NAME=CourierMedia` in the live
+   Courier environment.
+
+Windows stores the dedicated credential in Credential Manager. Courier stores
+no SMB password. The app derives the SMB hostname from its configured Tailnet
+HTTPS URL and opens only the server-confirmed paired directory.
+
 ## Update
 
 Pull and test the application source, bump the pinned version in `.env`, then rerun `build-and-deploy.sh`. Incomplete transfers remain in the state/media paths and resume after restart.
@@ -41,11 +69,11 @@ exports the chosen version to Compose so the built and deployed tags cannot
 silently diverge:
 
 ```bash
-COURIER_SOURCE_DIR=/path/to/edsys-courier COURIER_VERSION=0.3.2 ./build-and-deploy.sh
+COURIER_SOURCE_DIR=/path/to/edsys-courier COURIER_VERSION=0.4.0 ./build-and-deploy.sh
 ```
 
-Courier 0.3 keeps the `/api/v1` routes used by 0.2 clients and adds permanent exact-name folder targets and hidden direct batches while
-retaining run cancellation, changed-file replanning, and sanitized verification receipts.
+Courier 0.4 keeps the `/api/v1` routes used by 0.3 clients and additively
+advertises read-only Explorer access only after the host share is verified.
 Deploy the server before upgrading Windows clients.
 
 ## Restore
