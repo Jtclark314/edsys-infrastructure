@@ -1,0 +1,11 @@
+[Unit]
+Description=Audit EdSys desired container state without mutation
+After=docker.service network-online.target
+Requires=docker.service
+RequiresMountsFor=/mnt/data-500g
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/edsys-container-recovery audit
+TimeoutStartSec=10min
+Nice=15

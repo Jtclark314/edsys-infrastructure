@@ -1,0 +1,84 @@
+name: 9950x-core
+
+services:
+  portainer:
+    image: portainer/portainer-ce@sha256:8d2f5c9fbc5b8490fb3a12efadbad74978e22991911e1db611d8a45871775112
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+
+  plex:
+    image: lscr.io/linuxserver/plex@sha256:8d937dd32659bb1defa02d713a3b1cc99919f12aa17a072d588e770a6f1d7d26
+    container_name: plex
+    restart: unless-stopped
+    env_file:
+      - path: /etc/edsys-container-recovery/env/plex.env
+        required: false
+    ports:
+      - "32400:32400"
+    volumes:
+      - /srv/plex-config:/config
+      - /mnt/media/movies:/media/movies
+      - /mnt/media/tv:/media/tv
+      - /mnt/media/music:/media/music
+      - /mnt/media/downloads:/media/downloads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:32400/identity >/dev/null"]
+      interval: 20s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  tautulli:
+    image: lscr.io/linuxserver/tautulli@sha256:7077fd6654547c225ca5a740c4c954379129589f875c84cbe138641d4dd8a9d9
+    container_name: tautulli
+    restart: unless-stopped
+    env_file:
+      - path: /etc/edsys-container-recovery/env/tautulli.env
+        required: false
+    depends_on:
+      plex:
+        condition: service_healthy
+    ports:
+      - "8181:8181"
+    volumes:
+      - /srv/tautulli/config:/config
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8181/status >/dev/null"]
+      interval: 20s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  openwebui:
+    image: ghcr.io/open-webui/open-webui@sha256:7f1b0a1a50cfbac23da3b16f96bc968fd757b26dc9e54e93813d61768ea9184e
+    container_name: openwebui
+    restart: unless-stopped
+    env_file:
+      - path: /etc/edsys-container-recovery/env/openwebui.env
+        required: false
+    ports:
+      - "3000:8080"
+    volumes:
+      - /srv/ssd1/docker/volumes/openwebui/_data:/app/backend/data
+    networks:
+      - ai-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health >/dev/null"]
+      interval: 20s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+volumes:
+  portainer_data:
+    external: true
+
+networks:
+  ai-net:
+    external: true

@@ -1,0 +1,252 @@
+version: 1
+host: 9950x
+docker_wait_seconds: 90
+cooldown_seconds: 300
+maintenance_flag: /run/edsys/container-recovery.disabled
+notification_url_file: /etc/edsys-container-recovery/notify-url
+required_mounts:
+  - /mnt/data-500g
+
+tiers:
+  - name: operator-visibility
+    blocking: true
+    projects:
+      - name: 9950x-core
+        files:
+          - /srv/edsys/edsys-infrastructure/docker/9950x-core/compose.yaml
+        services: [portainer]
+        healthchecks:
+          - url: http://127.0.0.1:9000/
+            codes: [200]
+      - name: homepage
+        files: [/srv/homepage/docker-compose.yml]
+        services: [homepage]
+        healthchecks:
+          - url: http://192.168.50.50:3005/api/services
+            codes: [200]
+      - name: homepage-workhorse
+        files: [/srv/edsys/edsys-infrastructure/docker/homepage-workhorse/compose.yaml]
+        services: [homepage-workhorse]
+        healthchecks:
+          - url: http://127.0.0.1:3019/api/services
+            codes: [200]
+      - name: uptime-kuma
+        files: [/home/jeremy/stacks/uptime-kuma/docker-compose.yml]
+        services: [uptime-kuma]
+        healthchecks:
+          - url: http://127.0.0.1:3001/dashboard
+            codes: [200, 302]
+      - name: edsys-control-api
+        files: [/srv/edsys/edsys-infrastructure/docker/edsys-control-api/compose.yaml]
+        services: [edsys-control-api]
+        healthchecks:
+          - url: http://127.0.0.1:8099/
+            codes: [200, 404]
+
+  - name: shared-foundations
+    blocking: true
+    required_mounts: [/mnt/ai-store]
+    projects:
+      - name: ai
+        files: [/home/jeremy/stacks/ai/docker-compose.yml]
+        services: [ollama, qdrant, infinity, piper, whisper, wyoming-openwakeword]
+        wait_timeout_seconds: 300
+        healthchecks:
+          - url: http://127.0.0.1:11434/api/tags
+            codes: [200]
+          - url: http://127.0.0.1:6333/readyz
+            codes: [200]
+          - url: http://127.0.0.1:7997/health
+            codes: [200, 404]
+      - name: 9950x-workhorse
+        files: [/srv/edsys/edsys-infrastructure/docker/9950x-workhorse/compose.yaml]
+        services:
+          - healthchecks-db
+          - healthchecks
+          - litellm-db
+          - langfuse-postgres
+          - langfuse-redis
+          - langfuse-clickhouse
+          - langfuse-minio
+          - karakeep-meilisearch
+          - searxng-redis
+          - loki
+          - alloy
+          - ntfy
+          - crowdsec
+          - dozzle
+          - scrutiny
+          - backrest
+        wait_timeout_seconds: 300
+        healthchecks:
+          - url: http://127.0.0.1:3014/
+            codes: [200, 302]
+          - url: http://192.168.50.50:3100/ready
+            codes: [200]
+          - url: http://192.168.50.50:3015/v1/health
+            codes: [200]
+      - name: n8n
+        files:
+          - /home/jeremy/stacks/n8n/docker-compose.yml
+          - /home/jeremy/stacks/n8n/docker-compose.override.yml
+        services: [postgres]
+      - name: sentinel
+        files: [/opt/stacks/sentinel/docker-compose.yml]
+        services: [postgres, redis, minio]
+      - name: edsys-finance
+        files: [/srv/edsys-finance/docker-compose.yml]
+        services: [db]
+      - name: spending-ledger
+        files: [/srv/ssd1/docker/stacks/spending-ledger/docker-compose.yml]
+        services: [spending-db]
+      - name: penpot
+        files: [/mnt/data-500g/docker/stacks/penpot/docker-compose.yml]
+        services: [penpot-postgres, penpot-valkey, penpot-mailcatch]
+
+  - name: primary-services
+    blocking: true
+    required_mounts: [/mnt/media]
+    projects:
+      - name: 9950x-core
+        files: [/srv/edsys/edsys-infrastructure/docker/9950x-core/compose.yaml]
+        services: [plex, tautulli]
+        healthchecks:
+          - url: http://127.0.0.1:32400/identity
+            codes: [200]
+          - url: http://127.0.0.1:8181/status
+            codes: [200]
+      - name: jellyfin
+        files: [/home/jeremy/stacks/jellyfin/docker-compose.yml]
+        services: [jellyfin]
+        healthchecks:
+          - url: http://127.0.0.1:8096/health
+            codes: [200]
+      - name: frigate
+        files: [/opt/stacks/frigate/docker-compose.yml]
+        services: [frigate]
+        wait_timeout_seconds: 300
+        healthchecks:
+          - url: http://127.0.0.1:5000/
+            codes: [200]
+      - name: wyze-bridge
+        files: [/home/jeremy/wyze-bridge/docker-compose.yml]
+        services: [wyze-bridge]
+        healthchecks:
+          - url: http://127.0.0.1:5010/
+            codes: [200, 302]
+      - name: audiobookshelf
+        files: [/srv/ssd1/docker/stacks/audiobookshelf/docker-compose.yml]
+        services: [audiobookshelf]
+        healthchecks:
+          - url: http://127.0.0.1:13378/
+            codes: [200]
+      - name: 9950x-workhorse
+        files: [/srv/edsys/edsys-infrastructure/docker/9950x-workhorse/compose.yaml]
+        services: [litellm, langfuse-worker, langfuse, karakeep-chrome, karakeep, searxng]
+        wait_timeout_seconds: 300
+        healthchecks:
+          - url: http://192.168.50.50:4000/health/liveliness
+            codes: [200]
+          - url: http://192.168.50.50:3012/api/public/health
+            codes: [200]
+          - url: http://192.168.50.50:3017/
+            codes: [200]
+      - name: n8n
+        files:
+          - /home/jeremy/stacks/n8n/docker-compose.yml
+          - /home/jeremy/stacks/n8n/docker-compose.override.yml
+        services: [n8n]
+        healthchecks:
+          - url: http://127.0.0.1:5678/
+            codes: [200]
+      - name: edsys-metrics-agent
+        files: [/opt/edsys-metrics-agent/docker-compose.yml]
+        services: [telegraf]
+
+  - name: dependent-applications
+    blocking: false
+    projects:
+      - name: 9950x-core
+        files: [/srv/edsys/edsys-infrastructure/docker/9950x-core/compose.yaml]
+        services: [openwebui]
+        healthchecks:
+          - url: http://127.0.0.1:3000/health
+            codes: [200]
+      - name: anythingllm
+        files: [/home/jeremy/stacks/anythingllm/docker-compose.yml]
+        services: [anythingllm]
+        healthchecks:
+          - url: http://127.0.0.1:3002/
+            codes: [200]
+      - name: edsys-ai-portal
+        files: [/home/jeremy/code/edsys-ai-portal/docker-compose.yml]
+        services: [edsys-ai-portal]
+        healthchecks:
+          - url: http://192.168.50.50:3020/api/health
+            codes: [200]
+      - name: mailbrain
+        files: [/srv/edsys/edsys-infrastructure/docker/mailbrain/compose.yaml]
+        services: [mailbrain]
+        healthchecks:
+          - url: http://127.0.0.1:3035/api/health
+            codes: [200]
+      - name: edsys-ai-gateway
+        files: [/home/jeremy/code/foothills-project-portal/edsys-ai-gateway/docker-compose.yml]
+        services: [edsys-ai-gateway]
+        healthchecks:
+          - url: http://127.0.0.1:8020/health
+            codes: [200]
+      - name: gateway
+        files: [/srv/edsys-glasses-assistant/gateway/docker-compose.yml]
+        services: [edsys-glasses-gateway]
+        healthchecks:
+          - url: http://127.0.0.1:8015/health
+            codes: [200]
+      - name: edsys-portal
+        files: [/mnt/data-500g/stacks/edsys-portal/docker-compose.yml]
+        services: [edsys-portal]
+        healthchecks:
+          - url: http://127.0.0.1:3010/
+            codes: [200]
+      - name: edsys-finance
+        files: [/srv/edsys-finance/docker-compose.yml]
+        services: [api, web]
+        healthchecks:
+          - url: http://192.168.50.50:8094/healthz
+            codes: [200]
+      - name: spending-ledger
+        files: [/srv/ssd1/docker/stacks/spending-ledger/docker-compose.yml]
+        services: [spending-proxy, spending-metabase]
+        healthchecks:
+          - url: http://192.168.50.50:3011/
+            codes: [200, 302]
+      - name: penpot
+        files: [/mnt/data-500g/docker/stacks/penpot/docker-compose.yml]
+        services: [penpot-backend, penpot-exporter, penpot-frontend]
+        healthchecks:
+          - url: http://127.0.0.1:9002/
+            codes: [200]
+      - name: sentinel
+        files: [/opt/stacks/sentinel/docker-compose.yml]
+        services: [sentinel-api, vault-connector]
+
+  - name: secondary-and-development
+    blocking: false
+    projects:
+      - name: exercise-routine-server
+        files: [/home/jeremy/exercise-routine-server/docker-compose.yml]
+        services: [exercise-routine]
+        healthchecks:
+          - url: http://127.0.0.1:8095/health
+            codes: [200]
+      - name: factorio
+        files: [/srv/ssd1/docker/stacks/factorio/compose.yaml]
+        services: [factorio]
+      - name: the-last-relay
+        files: [/home/jeremy/code/the-last-relay/docker-compose.yml]
+        services: [api, web]
+        healthchecks:
+          - url: http://127.0.0.1:8000/api/v1/ready
+            codes: [200]
+          - url: http://127.0.0.1:4173/healthz
+            codes: [200]

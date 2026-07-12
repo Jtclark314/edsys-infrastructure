@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic audit of EdSys desired container state
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,4 @@
+# Optional: store one private Home Assistant webhook or external heartbeat URL
+# as the only line in /etc/edsys-container-recovery/notify-url.
+# Do not commit the real URL.
+https://example.invalid/private-recovery-webhook

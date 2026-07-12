@@ -17,6 +17,7 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `../scripts/backup/README.md` - Google Drive offsite backup tooling using `9950x`, `restic`, and `rclone`.
 - `../scripts/deploy/README.md` - deployment preparation helpers.
 - `../scripts/ops/README.md` - operations/report helpers.
+- `CONTAINER_RECOVERY.md` - ordered 9950x Docker recovery architecture and operations.
 
 ## Rule
 

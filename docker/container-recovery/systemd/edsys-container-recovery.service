@@ -1,0 +1,14 @@
+[Unit]
+Description=EdSys ordered Docker container recovery
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+RequiresMountsFor=/mnt/data-500g
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/edsys-container-recovery recover
+TimeoutStartSec=30min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
