@@ -7,7 +7,9 @@ profile edsys-share-smb-preexec flags=(attach_disconnected) {
 
   /usr/bin/dash mr,
   /usr/local/libexec/edsys-share/edsys-share-mount-check-smb rix,
+  /apparmor/.null rw,
   /proc/@{pid}/mountinfo r,
+  /var/log/samba/log.* a,
   /mnt/ai-store/ r,
   /mnt/ai-store/edsys-share/ r,
   /EdSys-Share/ r,
