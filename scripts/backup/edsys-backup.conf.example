@@ -23,6 +23,9 @@ EXCLUDE_FILE=/etc/edsys-backup/excludes.txt
 KEEP_DAILY=30
 KEEP_WEEKLY=12
 KEEP_MONTHLY=12
+# Keep three full monthly Codex restore drills and one year of small reports.
+CODEX_RESTORE_KEEP_RUNS=3
+CODEX_RESTORE_KEEP_REPORTS=12
 
 REMOTE_COLLECTION_ENABLED=true
 REPORT_TO_DRIVE=false

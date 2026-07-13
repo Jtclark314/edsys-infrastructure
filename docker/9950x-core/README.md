@@ -7,6 +7,8 @@ Plex, Tautulli, and Open WebUI.
 Images are pinned to the digests verified during the 2026-07-12 recovery work.
 Runtime environment values, including Open WebUI service credentials, remain
 under `/etc/edsys-container-recovery/env/` and are never committed.
+Open WebUI publishes directly only on loopback/LAN; its exact Tailnet listener
+is the FreeBind proxy documented in `../../scripts/network/README.md`.
 
 ## Storage and backup
 

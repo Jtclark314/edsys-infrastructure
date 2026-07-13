@@ -1,0 +1,14 @@
+[Unit]
+Description=Restrict 9950x SSH to intended LAN and Tailnet controllers
+Before=ssh.socket ssh.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/edsys-ssh-guard
+ExecReload=/usr/local/sbin/edsys-ssh-guard
+ExecStop=-/usr/sbin/nft delete table inet edsys_ssh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=ssh.socket ssh.service

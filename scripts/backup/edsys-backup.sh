@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+umask 0077
 
 CONFIG_FILE="${EDSYS_BACKUP_CONFIG:-/etc/edsys-backup/edsys-backup.conf}"
 if [[ ! -f "${CONFIG_FILE}" ]]; then
@@ -22,6 +23,7 @@ source "${CONFIG_FILE}"
 : "${KEEP_WEEKLY:=12}"
 : "${KEEP_MONTHLY:=12}"
 : "${REMOTE_COLLECTION_ENABLED:=true}"
+: "${CODEX_STATE_STAGE_SCRIPT:=${BACKUP_ROOT}/scripts/edsys-codex-state-stage.py}"
 
 export RESTIC_REPOSITORY RESTIC_PASSWORD_FILE RESTIC_CACHE_DIR
 
@@ -89,6 +91,11 @@ fi
 
 if [[ "${RUN_COLLECTION}" == "true" && "${REMOTE_COLLECTION_ENABLED}" == "true" && -x "${BACKUP_ROOT}/scripts/edsys-collect-remotes.sh" ]]; then
   "${BACKUP_ROOT}/scripts/edsys-collect-remotes.sh" "${RUN_ID}" | tee -a "${LOG_FILE}" || true
+fi
+
+if [[ "${DRY_RUN}" != "true" ]]; then
+  [[ -x "${CODEX_STATE_STAGE_SCRIPT}" ]] || fail "Codex state staging helper is missing or not executable"
+  "${CODEX_STATE_STAGE_SCRIPT}" stage 2>&1 | tee -a "${LOG_FILE}" || fail "Codex state staging failed"
 fi
 
 : > "${EXISTING_INCLUDE_FILE}"

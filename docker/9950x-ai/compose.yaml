@@ -1,0 +1,98 @@
+name: ai
+
+services:
+  ollama:
+    image: ollama/ollama@sha256:46399ef084d97b381955b5dc585c5d836dbe7ed3f79f170d1c04660fed511e3a
+    container_name: ollama
+    restart: unless-stopped
+    networks: [ai-net]
+    ports:
+      - "127.0.0.1:11434:11434"
+      - "192.168.50.50:11434:11434"
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+    volumes:
+      - /mnt/ai-store/models/ollama:/root/.ollama
+      - /mnt/ai-store/cache:/root/.cache
+
+  wyoming-openwakeword:
+    image: rhasspy/wyoming-openwakeword@sha256:52cb1168731a1849fc28cf339c935fde58746bbabc94226668a40ef6ddf5d42b
+    container_name: wyoming-openwakeword
+    restart: unless-stopped
+    networks: [ai-net]
+    ports:
+      - "127.0.0.1:10400:10400"
+      - "192.168.50.50:10400:10400"
+    command: >
+      --preload-model hey_jarvis
+
+  qdrant:
+    image: qdrant/qdrant@sha256:75eab8c4ba42096724fdcfde8b4de0b5713d529dde32f285a1f86fdcb2c9e50c
+    container_name: qdrant
+    restart: unless-stopped
+    networks: [ai-net]
+    ports:
+      - "127.0.0.1:6333:6333"
+      - "192.168.50.50:6333:6333"
+    volumes:
+      - /mnt/ai-store/qdrant:/qdrant/storage
+
+  infinity:
+    image: michaelf34/infinity@sha256:11e8b3921b9f1a58965afaad4a844c435c9807cbc82c51e47cb147b7d977fc88
+    container_name: infinity
+    restart: unless-stopped
+    networks: [ai-net]
+    ports:
+      - "127.0.0.1:7997:7997"
+      - "192.168.50.50:7997:7997"
+    volumes:
+      - /mnt/ai-store/infinity:/app/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command:
+      - v2
+      - --host
+      - 0.0.0.0
+      - --port
+      - "7997"
+      - --model-id
+      - michaelfeil/bge-small-en-v1.5
+      - --device
+      - cuda
+      - --device-id
+      - "0"
+
+  whisper:
+    image: rhasspy/wyoming-whisper@sha256:9501d2659eee83b6eead98d53842193e5fed011eda6c5b1c3ad36f3146b28fed
+    container_name: whisper
+    restart: unless-stopped
+    networks: [ai-net]
+    ports:
+      - "127.0.0.1:10300:10300"
+      - "192.168.50.50:10300:10300"
+    volumes:
+      - /mnt/ai-store/whisper/data:/data
+    command: >
+      --model base --language en --uri tcp://0.0.0.0:10300
+
+  piper:
+    image: rhasspy/wyoming-piper@sha256:c874e4a04657ae3381332ee5d0c8c70a310dae6722892840f530ac0890b44eb3
+    container_name: piper
+    restart: unless-stopped
+    networks: [ai-net]
+    ports:
+      - "127.0.0.1:10200:10200"
+      - "192.168.50.50:10200:10200"
+    volumes:
+      - /mnt/ai-store/piper/data:/data
+    command: >
+      --voice en_US-lessac-medium --uri tcp://0.0.0.0:10200
+
+networks:
+  ai-net:
+    external: true

@@ -49,6 +49,8 @@
 /home/jeremy/.codex/cache/**
 /home/jeremy/.codex/.tmp/**
 /home/jeremy/.codex/app-server-control/**
+# Mutable Codex SQLite files are protected through the consistent staging copy.
+/home/jeremy/.codex/*.sqlite*
 /opt/edsys-workhorse/loki/chunks/**
 /opt/edsys-workhorse/loki/wal/**
 /opt/edsys-workhorse/loki/tsdb-shipper-cache/**

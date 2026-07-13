@@ -1,0 +1,15 @@
+name: gateway
+
+services:
+  edsys-glasses-gateway:
+    build:
+      context: /srv/edsys-glasses-assistant/gateway
+    container_name: edsys-glasses-gateway
+    env_file:
+      - /srv/edsys-glasses-assistant/gateway/.env
+    ports:
+      - "127.0.0.1:${GATEWAY_HOST_PORT:-8015}:8000"
+      - "192.168.50.50:${GATEWAY_HOST_PORT:-8015}:8000"
+    volumes:
+      - /srv/edsys-glasses-assistant/gateway/data/captures:/data/captures
+    restart: unless-stopped

@@ -125,6 +125,20 @@ http://192.168.50.50:8099
 ```
 
 Mount `/srv/edsys/EdSys-Master/data` read-only to `/data` in the container.
+Docker publishes the service only on loopback and LAN. The exact Tailnet
+listener is the reviewed FreeBind proxy in `../../scripts/network/README.md`.
+Routine deployment uses the already-built image and never pulls or builds
+implicitly:
+
+```bash
+docker compose --project-name edsys-control-api -f compose.yaml config --quiet
+docker compose --project-name edsys-control-api -f compose.yaml \
+  up -d --pull never --no-build
+```
+
+Build a replacement image only from reviewed source in a separate maintenance
+window, then prove API, dashboard, source-data, and client acceptance before
+promotion.
 
 ## API Endpoints
 

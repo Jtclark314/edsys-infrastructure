@@ -1,0 +1,28 @@
+[Unit]
+Description=Stage SQLite-consistent Codex state for EdSys backup
+Before=edsys-backup.service
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/srv/edsys-backup/scripts/edsys-codex-state-stage.py stage
+TimeoutStartSec=30m
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadOnlyPaths=/home/jeremy/.codex
+ReadWritePaths=/srv/edsys-backup/staging/codex-state /run
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX

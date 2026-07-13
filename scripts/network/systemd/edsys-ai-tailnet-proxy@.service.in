@@ -1,0 +1,29 @@
+[Unit]
+Description=EdSys AI Tailnet proxy for TCP %i
+Documentation=file:/srv/edsys/edsys-infrastructure/scripts/network/README.md
+Requires=edsys-ai-tailnet-proxy@%i.socket
+After=edsys-ai-tailnet-proxy@%i.socket
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/test -f /etc/edsys-ai-tailnet-proxy/ports/%i
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd --connections-max=256 --exit-idle-time=60s @LAN_IP@:%i
+DynamicUser=yes
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native

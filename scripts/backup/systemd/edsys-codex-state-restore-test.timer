@@ -1,0 +1,11 @@
+[Unit]
+Description=Run monthly Codex-state restore drill
+
+[Timer]
+OnCalendar=Sun *-*-01..07 05:15:00
+Persistent=true
+RandomizedDelaySec=30m
+AccuracySec=1m
+
+[Install]
+WantedBy=timers.target

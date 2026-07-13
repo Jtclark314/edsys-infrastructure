@@ -48,7 +48,7 @@ tiers:
     required_mounts: [/mnt/ai-store]
     projects:
       - name: ai
-        files: [/home/jeremy/stacks/ai/docker-compose.yml]
+        files: [/srv/edsys/edsys-infrastructure/docker/9950x-ai/compose.yaml]
         services: [ollama, qdrant, infinity, piper, whisper, wyoming-openwakeword]
         wait_timeout_seconds: 300
         healthchecks:
@@ -173,7 +173,7 @@ tiers:
           - url: http://127.0.0.1:3000/health
             codes: [200]
       - name: anythingllm
-        files: [/home/jeremy/stacks/anythingllm/docker-compose.yml]
+        files: [/srv/edsys/edsys-infrastructure/docker/anythingllm/compose.yaml]
         services: [anythingllm]
         healthchecks:
           - url: http://127.0.0.1:3002/
@@ -197,7 +197,7 @@ tiers:
           - url: http://127.0.0.1:8020/health
             codes: [200]
       - name: gateway
-        files: [/srv/edsys-glasses-assistant/gateway/docker-compose.yml]
+        files: [/srv/edsys/edsys-infrastructure/docker/edsys-glasses-gateway/compose.yaml]
         services: [edsys-glasses-gateway]
         healthchecks:
           - url: http://127.0.0.1:8015/health

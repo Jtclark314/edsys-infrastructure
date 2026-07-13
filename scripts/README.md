@@ -17,4 +17,5 @@ Scripts should:
 - `audit/` - read-only host/network/service audit collectors.
 - `backup/` - restic/rclone backup tooling for 9950x.
 - `deploy/` - deployment preparation helpers such as the 9950x workhorse bootstrap.
+- `network/` - exact-address exposure helpers, including the FreeBind AI Tailnet socket proxy.
 - `ops/` - operational helpers and report-only scripts.

@@ -27,6 +27,8 @@ As of the 2026-06-29 UTC hardening pass, the default 9950x include set also prot
 - `edsys-collect-remotes.sh` gathers selected read-only remote config exports into staging.
 - `edsys-restic-check.sh` runs a repository health check.
 - `edsys-restore-test.sh` performs a small restore test from the latest snapshot.
+- `edsys-codex-state-stage.py` uses SQLite's online backup API to atomically stage every Codex SQLite database plus small state indexes under the private backup staging tree.
+- `edsys-codex-state-restore-test.sh` restores that staged snapshot from restic into an isolated target and verifies hashes plus SQLite integrity without touching live Codex state.
 - `edsys-backup.conf.example` is the private config template.
 - `includes.9950x.example` and `excludes.example` are path selection templates.
 - `systemd/` contains service and timer units.
@@ -141,6 +143,45 @@ sudo RESTIC_PASSWORD_FILE=/etc/edsys-backup/restic-password restic -r /srv/edsys
 ```
 
 Never restore over a live service path until the target service, snapshot date, and rollback path are confirmed.
+
+### Codex state recovery
+
+The live Codex databases use WAL mode and must not be trusted as a set of
+ordinary files copied mid-write. Every non-dry-run local backup refreshes
+`/srv/edsys-backup/staging/codex-state/current` first using SQLite's online
+backup API. The direct live `*.sqlite*` files are excluded from restic; the
+consistent staging copy is authoritative for database recovery. Other Codex
+files remain protected through the normal encrypted `~/.codex` include.
+
+The staging and restore-drill timers are safe to enable independently:
+
+```bash
+sudo systemctl enable --now edsys-codex-state-stage.timer
+sudo systemctl enable --now edsys-codex-state-restore-test.timer
+sudo systemctl start edsys-codex-state-stage.service
+sudo systemctl start edsys-backup.service
+sudo systemctl start edsys-codex-state-restore-test.service
+```
+
+The restore drill always targets `/srv/edsys-backup/restore-tests/codex-state/`.
+It never writes into `~/.codex`. A live restore requires stopping the exact
+Codex app-server/session writers, retaining the current state as rollback, and
+separate operator approval.
+
+Successful drills retain the newest three full restore trees and the newest 12
+JSON reports by default. Configure `CODEX_RESTORE_KEEP_RUNS` and
+`CODEX_RESTORE_KEEP_REPORTS` in the private backup config if that policy
+changes. Retention accepts only canonical timestamp names directly below the
+dedicated non-symlink roots; it refuses mounted or non-canonical candidates.
+Reports publish through a flushed same-directory atomic rename, and a later
+successful drill safely removes canonical incoming artifacts left by a hard
+interruption.
+
+Re-running `install-9950x.sh` also migrates older customized selection files:
+it ensures `/srv/edsys-backup/staging` is an exact include and the live
+`/home/jeremy/.codex/*.sqlite*` glob is an exact exclude. Existing files are
+privately backed up before an atomic edit; symlinked or non-regular selection
+files are refused.
 
 ## Old Google Drive Paths
 

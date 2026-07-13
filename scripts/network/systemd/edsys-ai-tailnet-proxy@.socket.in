@@ -1,0 +1,18 @@
+[Unit]
+Description=EdSys AI Tailnet listener on TCP %i
+Documentation=file:/srv/edsys/edsys-infrastructure/scripts/network/README.md
+
+[Socket]
+ExecStartPre=/usr/bin/test -f /etc/edsys-ai-tailnet-proxy/ports/%i
+ListenStream=@TAILSCALE_IP@:%i
+FreeBind=yes
+Accept=no
+NoDelay=yes
+KeepAlive=yes
+Backlog=128
+Service=edsys-ai-tailnet-proxy@%i.service
+TriggerLimitIntervalSec=30s
+TriggerLimitBurst=120
+
+[Install]
+WantedBy=sockets.target

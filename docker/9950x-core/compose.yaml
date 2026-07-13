@@ -63,7 +63,8 @@ services:
       - path: /etc/edsys-container-recovery/env/openwebui.env
         required: false
     ports:
-      - "3000:8080"
+      - "127.0.0.1:3000:8080"
+      - "192.168.50.50:3000:8080"
     volumes:
       - /srv/ssd1/docker/volumes/openwebui/_data:/app/backend/data
     networks:

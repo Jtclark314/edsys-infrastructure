@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONFIG_FILE="${EDSYS_SSH_GUARD_CONFIG:-/etc/edsys-ssh/edsys-ssh-guard.conf}"
+[[ -r "${CONFIG_FILE}" ]] || { echo "Missing SSH guard config: ${CONFIG_FILE}" >&2; exit 2; }
+# shellcheck disable=SC1090
+source "${CONFIG_FILE}"
+
+: "${EDSYS_SSH_LAN_INTERFACE:?set EDSYS_SSH_LAN_INTERFACE}"
+: "${EDSYS_SSH_LAN_CIDR:?set EDSYS_SSH_LAN_CIDR}"
+: "${EDSYS_SSH_TAILNET_INTERFACE:?set EDSYS_SSH_TAILNET_INTERFACE}"
+: "${EDSYS_SSH_TAILNET_CLIENTS_V4:?set EDSYS_SSH_TAILNET_CLIENTS_V4}"
+: "${EDSYS_SSH_TAILNET_CLIENTS_V6:?set EDSYS_SSH_TAILNET_CLIENTS_V6}"
+
+read -r -a clients_v4 <<<"${EDSYS_SSH_TAILNET_CLIENTS_V4}"
+read -r -a clients_v6 <<<"${EDSYS_SSH_TAILNET_CLIENTS_V6}"
+
+python3 - "${EDSYS_SSH_LAN_CIDR}" "${clients_v4[@]}" -- "${clients_v6[@]}" <<'PY'
+import ipaddress
+import sys
+
+separator = sys.argv.index("--")
+lan = ipaddress.ip_network(sys.argv[1], strict=True)
+if lan.version != 4:
+    raise SystemExit("EDSYS_SSH_LAN_CIDR must be IPv4")
+for value in sys.argv[2:separator]:
+    if ipaddress.ip_address(value).version != 4:
+        raise SystemExit(f"not an IPv4 Tailnet client: {value}")
+for value in sys.argv[separator + 1:]:
+    if ipaddress.ip_address(value).version != 6:
+        raise SystemExit(f"not an IPv6 Tailnet client: {value}")
+PY
+
+v4_set="$(IFS=', '; echo "${clients_v4[*]}")"
+v6_set="$(IFS=', '; echo "${clients_v6[*]}")"
+tmp="$(mktemp)"
+trap 'rm -f "${tmp}"' EXIT
+
+if /usr/sbin/nft list table inet edsys_ssh >/dev/null 2>&1; then
+  printf '%s\n' 'delete table inet edsys_ssh' >"${tmp}"
+fi
+
+cat >>"${tmp}" <<NFT
+table inet edsys_ssh {
+    chain input {
+        type filter hook input priority -10; policy accept;
+        iifname "lo" tcp dport 22 counter accept
+        iifname "${EDSYS_SSH_LAN_INTERFACE}" ip saddr ${EDSYS_SSH_LAN_CIDR} tcp dport 22 counter accept
+        iifname "${EDSYS_SSH_TAILNET_INTERFACE}" ip saddr { ${v4_set} } tcp dport 22 counter accept
+        iifname "${EDSYS_SSH_TAILNET_INTERFACE}" ip6 saddr { ${v6_set} } tcp dport 22 counter accept
+        tcp dport 22 counter drop
+    }
+}
+NFT
+
+/usr/sbin/nft -c -f "${tmp}"
+/usr/sbin/nft -f "${tmp}"

@@ -99,7 +99,7 @@ services:
       DISABLE_SIGNUPS: ${KARAKEEP_DISABLE_SIGNUPS:-false}
       OLLAMA_BASE_URL: http://host.docker.internal:11434
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WORKHORSE_LAN_BIND_IP:-192.168.50.50}"
     volumes:
       - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/karakeep/data:/data
 
@@ -251,7 +251,7 @@ services:
       LANGFUSE_OTEL_HOST: http://langfuse:3000
       OTEL_SERVICE_NAME: workhorse-litellm
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WORKHORSE_LAN_BIND_IP:-192.168.50.50}"
     volumes:
       - ./config/litellm/config.yaml:/app/config.yaml:ro
 

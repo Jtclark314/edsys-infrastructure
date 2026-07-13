@@ -1,0 +1,27 @@
+[Unit]
+Description=Restore and verify staged Codex state from encrypted backup
+After=edsys-backup.service
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/srv/edsys-backup/scripts/edsys-codex-state-restore-test.sh
+TimeoutStartSec=30m
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/edsys-backup/restore-tests/codex-state /srv/edsys-backup/reports/codex-state /srv/edsys-backup/restic-repo/edsys-critical /var/cache/edsys-backup/restic /run
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX

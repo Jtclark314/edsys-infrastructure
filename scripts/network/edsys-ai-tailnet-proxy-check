@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TAILSCALE_IP="${EDSYS_AI_TAILSCALE_IP:-100.87.137.47}"
+LAN_IP="${EDSYS_AI_LAN_IP:-192.168.50.50}"
+REMOTE_PORTS=(3000 3002 6333 7997 8015 8020 8099 11434)
+VOICE_PORTS=(10200 10300 10400)
+ALLOW_TARGET_DOWN=false
+declare -A HEALTH_PATHS=(
+  [3000]="/health"
+  [3002]="/"
+  [6333]="/readyz"
+  [7997]="/health"
+  [8015]="/health"
+  [8020]="/health"
+  [8099]="/api/health"
+  [11434]="/api/tags"
+)
+
+if [[ "${1:-}" == "--allow-target-down" ]]; then
+  ALLOW_TARGET_DOWN=true
+elif [[ $# -ne 0 ]]; then
+  echo "usage: $0 [--allow-target-down]" >&2
+  exit 2
+fi
+
+for command_name in systemctl ss python3; do
+  command -v "$command_name" >/dev/null || {
+    echo "ERROR: required command is missing: $command_name" >&2
+    exit 1
+  }
+done
+
+check_exact_listener_set() {
+  local port="$1"
+  shift
+  local expected=("$@")
+  local listeners
+  local actual
+
+  listeners="$(ss -H -lntp "sport = :${port}")"
+  if [[ -z "$listeners" ]]; then
+    echo "ERROR: TCP ${port} has no host listener" >&2
+    return 1
+  fi
+
+  actual="$(awk '{print $4}' <<<"$listeners" | sort -u)"
+  for address in "${expected[@]}"; do
+    if ! grep -Fxq -- "$address" <<<"$actual"; then
+      echo "ERROR: TCP ${port} is missing expected listener ${address}" >&2
+      printf '%s\n' "$listeners" >&2
+      return 1
+    fi
+  done
+
+  if [[ "$(wc -l <<<"$actual")" -ne "${#expected[@]}" ]]; then
+    echo "ERROR: TCP ${port} has an unexpected listener set" >&2
+    printf 'expected: %s\n' "${expected[*]}" >&2
+    printf 'actual:\n%s\n' "$actual" >&2
+    return 1
+  fi
+}
+
+check_target() {
+  local port="$1"
+  if python3 - "$LAN_IP" "$port" <<'PY'
+import socket
+import sys
+
+with socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=2):
+    pass
+PY
+  then
+    return 0
+  fi
+
+  if $ALLOW_TARGET_DOWN; then
+    echo "WARN: LAN target ${LAN_IP}:${port} is not accepting TCP" >&2
+    return 0
+  fi
+
+  echo "ERROR: LAN target ${LAN_IP}:${port} is not accepting TCP" >&2
+  return 1
+}
+
+check_tailnet_http() {
+  local port="$1"
+  local path="${HEALTH_PATHS[$port]}"
+
+  python3 - "$TAILSCALE_IP" "$port" "$path" <<'PY'
+import http.client
+import sys
+
+connection = http.client.HTTPConnection(sys.argv[1], int(sys.argv[2]), timeout=5)
+try:
+    connection.request("GET", sys.argv[3])
+    response = connection.getresponse()
+    response.read(4096)
+    if not 200 <= response.status < 400:
+        raise SystemExit(
+            f"Tailnet proxy HTTP check returned {response.status} "
+            f"for {sys.argv[1]}:{sys.argv[2]}{sys.argv[3]}"
+        )
+finally:
+    connection.close()
+PY
+}
+
+for port in "${REMOTE_PORTS[@]}"; do
+  unit="edsys-ai-tailnet-proxy@${port}.socket"
+  service="edsys-ai-tailnet-proxy@${port}.service"
+  systemctl is-enabled --quiet "$unit" || {
+    echo "ERROR: ${unit} is not enabled" >&2
+    exit 1
+  }
+  systemctl is-active --quiet "$unit" || {
+    echo "ERROR: ${unit} is not active" >&2
+    exit 1
+  }
+  [[ "$(systemctl show "$unit" --property=FreeBind --value)" == "yes" ]] || {
+    echo "ERROR: ${unit} does not have FreeBind=yes" >&2
+    exit 1
+  }
+  if [[ "$(systemctl show "$service" --property=ActiveState --value)" == "failed" ]]; then
+    echo "ERROR: ${service} is failed" >&2
+    exit 1
+  fi
+  check_exact_listener_set "$port" \
+    "127.0.0.1:${port}" "${LAN_IP}:${port}" "${TAILSCALE_IP}:${port}"
+  check_target "$port"
+  if ! $ALLOW_TARGET_DOWN; then
+    check_tailnet_http "$port"
+    [[ "$(systemctl show "$service" --property=ActiveState --value)" == "active" ]] || {
+      echo "ERROR: ${service} did not activate for the Tailnet HTTP request" >&2
+      exit 1
+    }
+  fi
+done
+
+for port in "${VOICE_PORTS[@]}"; do
+  check_exact_listener_set "$port" "127.0.0.1:${port}" "${LAN_IP}:${port}"
+done
+
+echo "PASS: exact Docker listeners, FreeBind Tailnet proxy HTTP data paths, and LAN-only voice listeners verified"
