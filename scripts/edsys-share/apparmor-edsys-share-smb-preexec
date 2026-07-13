@@ -1,0 +1,14 @@
+abi <abi/4.0>,
+
+include <tunables/global>
+
+profile edsys-share-smb-preexec flags=(attach_disconnected) {
+  include <abstractions/base>
+
+  /usr/bin/dash mr,
+  /usr/local/libexec/edsys-share/edsys-share-mount-check-smb rix,
+  /proc/@{pid}/mountinfo r,
+  /mnt/ai-store/ r,
+  /mnt/ai-store/edsys-share/ r,
+  /EdSys-Share/ r,
+}

@@ -39,8 +39,11 @@ scripts/edsys-share/test-edsys-share.sh
 ```
 
 The installer backs up `/etc/fstab` and `/etc/samba/smb.conf`, creates the bind
-mount and mount guard, validates the full Samba candidate with `testparm`, and
-installs all systemd units. Drive timers remain disabled by default.
+mount and both mount guards, validates the full Samba candidate with `testparm`,
+and installs all systemd units. Samba's guard is a compiled no-shell validator
+run through a narrowly scoped AppArmor transition; arbitrary shell execution
+does not get added to the `smbd` profile. Drive timers remain disabled by
+default.
 
 After creating a new Production Google OAuth desktop client, reauthorizing the
 root-only `edsys-gdrive` remote, repairing the existing core offsite mirror,
@@ -87,15 +90,20 @@ large tree unnecessarily.
 
 ## Windows mapping
 
-Run in the normal non-elevated Windows desktop profile, entering the existing
-Samba `jeremy` password only in the interactive credential prompt:
+Run in the normal non-elevated Windows desktop profile. Windows PowerShell 5.1
+on the initial clients returned error 87 for the `New-SmbMapping -Credential`
+overload, so save the server credential through `cmdkey`'s explicit hidden
+prompt first, then create the mapping without passing a secret to PowerShell:
 
 ```powershell
-$cred = Get-Credential -UserName '9950x\jeremy'
+cmdkey /add:9950x.taile832fe.ts.net /user:9950x\jeremy /pass
 New-SmbMapping -LocalPath 'Q:' `
   -RemotePath '\\9950x.taile832fe.ts.net\EdSys-Share' `
-  -Credential $cred -Persistent $true -SaveCredentials -RequirePrivacy $true
+  -Persistent $true -RequireIntegrity $true -RequirePrivacy $true
 ```
+
+The `/pass` switch has no value on purpose and prompts without displaying or
+recording the password in command history.
 
 The initial profiles are Nimo `jtcla` and Basecamp `jeremy`. Dell work-laptop
 identity and credential policy remain intentionally deferred.
@@ -105,6 +113,9 @@ identity and credential policy remain intentionally deferred.
 1. Disable Drive timers and `edsys-share-tailnet-smb.socket`.
 2. Remove only table `inet edsys_share`.
 3. Restore the timestamped Samba/fstab backups.
-4. Unmount `/EdSys-Share`.
-5. Preserve `/mnt/ai-store/edsys-share` and both Drive trees unless their
+4. Remove the managed EdSys Share block from the local `smbd` AppArmor file,
+   restore its backup if applicable, remove the dedicated preexec profile, and
+   reload AppArmor.
+5. Unmount `/EdSys-Share`.
+6. Preserve `/mnt/ai-store/edsys-share` and both Drive trees unless their
    deletion is separately authorized.

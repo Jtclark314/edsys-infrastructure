@@ -50,6 +50,12 @@ timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 install -d -m 0700 -o root -g root /var/backups/edsys-share
 cp -a /etc/fstab "/var/backups/edsys-share/fstab.${timestamp}"
 cp -a /etc/samba/smb.conf "/var/backups/edsys-share/smb.conf.${timestamp}"
+if [[ -e /etc/apparmor.d/local/usr.sbin.smbd ]]; then
+  cp -a /etc/apparmor.d/local/usr.sbin.smbd "/var/backups/edsys-share/apparmor-local-smbd.${timestamp}"
+fi
+if [[ -e /etc/apparmor.d/edsys-share-smb-preexec ]]; then
+  cp -a /etc/apparmor.d/edsys-share-smb-preexec "/var/backups/edsys-share/apparmor-preexec.${timestamp}"
+fi
 
 install -d -m 2770 -o jeremy -g jeremy "${EDSYS_SHARE_SOURCE}"
 if ! mountpoint -q "${EDSYS_SHARE_TARGET}"; then
@@ -98,6 +104,10 @@ mountpoint -q "${EDSYS_SHARE_TARGET}" || mount "${EDSYS_SHARE_TARGET}"
 
 install -d -m 0755 -o root -g root /usr/local/libexec/edsys-share
 install -m 0755 -o root -g root "${SCRIPT_DIR}/edsys-share-mount-check" /usr/local/libexec/edsys-share/edsys-share-mount-check
+command -v cc >/dev/null || { echo "A C compiler is required for the confined Samba mount guard" >&2; exit 1; }
+cc -std=c11 -O2 -Wall -Wextra -Werror "${SCRIPT_DIR}/edsys-share-mount-check-smb.c" -o /usr/local/libexec/edsys-share/edsys-share-mount-check-smb
+chown root:root /usr/local/libexec/edsys-share/edsys-share-mount-check-smb
+chmod 0755 /usr/local/libexec/edsys-share/edsys-share-mount-check-smb
 install -m 0755 -o root -g root "${SCRIPT_DIR}/edsys-share-tailnet-guard" /usr/local/libexec/edsys-share/edsys-share-tailnet-guard
 install -m 0755 -o root -g root "${SCRIPT_DIR}/edsys-share-gdrive-sync" /usr/local/sbin/edsys-share-gdrive-sync
 install -m 0755 -o root -g root "${SCRIPT_DIR}/edsys-share-gdrive-verify" /usr/local/sbin/edsys-share-gdrive-verify
@@ -106,6 +116,25 @@ install -m 0755 -o root -g root "${SCRIPT_DIR}/edsys-share-gdrive-restore" /usr/
 install -d -m 0750 -o root -g root "${EDSYS_SHARE_STATUS_DIR}" "${EDSYS_SHARE_REPORT_DIR}" "${EDSYS_SHARE_CACHE_DIR}" "${EDSYS_SHARE_RESTORE_DIR}"
 
 /usr/local/libexec/edsys-share/edsys-share-mount-check
+/usr/local/libexec/edsys-share/edsys-share-mount-check-smb
+
+# Samba's AppArmor profile intentionally blocks arbitrary root preexec shells.
+# Transition only the fixed /bin/sh invocation into a narrow profile that may
+# execute the compiled, no-shell mount validator and read only its mount paths.
+install -m 0644 -o root -g root "${SCRIPT_DIR}/apparmor-edsys-share-smb-preexec" /etc/apparmor.d/edsys-share-smb-preexec
+python3 - "${SCRIPT_DIR}/apparmor-local-usr.sbin.smbd" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path("/etc/apparmor.d/local/usr.sbin.smbd")
+fragment = Path(sys.argv[1]).read_text().strip()
+text = path.read_text() if path.exists() else ""
+text = re.sub(r"(?ms)^# BEGIN EDSYS SHARE MANAGED PREEXEC\n.*?^# END EDSYS SHARE MANAGED PREEXEC\n?", "", text)
+path.write_text(text.rstrip() + "\n\n" + fragment + "\n")
+PY
+apparmor_parser -r /etc/apparmor.d/edsys-share-smb-preexec
+apparmor_parser -r /etc/apparmor.d/usr.sbin.smbd
 
 # Render a complete Samba candidate. The share is replaced idempotently and
 # global Samba remains bound only to loopback plus the real LAN interface.

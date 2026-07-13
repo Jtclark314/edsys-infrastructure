@@ -22,6 +22,8 @@ done
 for source_file in "${SCRIPT_DIR}/README.md" "${SCRIPT_DIR}/edsys-share.conf.example" "${SCRIPT_DIR}/samba-share.conf" "${SCRIPT_DIR}"/systemd/*; do
   [[ ! -x "${source_file}" ]] || { echo "Data/unit source is unexpectedly executable: ${source_file}" >&2; exit 1; }
 done
+cc -std=c11 -O2 -Wall -Wextra -Werror "${SCRIPT_DIR}/edsys-share-mount-check-smb.c" -o "${tmp}/edsys-share-mount-check-smb"
+"${tmp}/edsys-share-mount-check-smb"
 if command -v shellcheck >/dev/null; then
   shellcheck "${scripts[@]/#/${SCRIPT_DIR}/}"
 fi
