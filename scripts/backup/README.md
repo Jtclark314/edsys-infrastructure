@@ -153,6 +153,15 @@ backup API. The direct live `*.sqlite*` files are excluded from restic; the
 consistent staging copy is authoritative for database recovery. Other Codex
 files remain protected through the normal encrypted `~/.codex` include.
 
+The staging service retains `ProtectHome=read-only`, with a narrow systemd
+read-write exception for `~/.codex`. This exception is required because an
+active WAL database may need SQLite to create, map, lock, or update its
+adjacent `-shm` shared-memory file even when the database connection itself is
+read-only. The helper still opens every source database with URI `mode=ro`,
+sets `PRAGMA query_only=ON`, and, apart from SQLite-managed `-shm` activity,
+writes only the backup payload below the private staging root. No Codex
+database-row or application-state write is expected.
+
 The staging and restore-drill timers are safe to enable independently:
 
 ```bash
