@@ -68,7 +68,7 @@ fi
 # shellcheck source=/dev/null
 source "${CONFIG_FILE}"
 : "${EDSYS_SHARE_RESTORE_DIR:=/mnt/ai-store/edsys-share-restore-staging}"
-RESTRICTED_SMB_USER=edsys-share-dell
+RESTRICTED_SMB_USERS=(edsys-share-nimo edsys-share-dell)
 
 [[ "${EDSYS_SHARE_TARGET}" == /EdSys-Share ]] || { echo "Unexpected share target" >&2; exit 2; }
 [[ "${EDSYS_SHARE_SOURCE}" == /mnt/ai-store/* ]] || { echo "Share source must be under AI Store" >&2; exit 2; }
@@ -198,9 +198,13 @@ validate_samba_launch_contract
 candidate="$(mktemp)"
 samba_stage=""
 trap 'rm -f "${candidate:-}" "${samba_stage:-}"' EXIT
+renderer_restricted_args=()
+for restricted_smb_user in "${RESTRICTED_SMB_USERS[@]}"; do
+  renderer_restricted_args+=(--restricted-user "${restricted_smb_user}")
+done
 python3 "${SCRIPT_DIR}/render-samba-config.py" \
   /etc/samba/smb.conf "${SCRIPT_DIR}/samba-share.conf" "${candidate}" \
-  --restricted-user "${RESTRICTED_SMB_USER}"
+  "${renderer_restricted_args[@]}"
 testparm -s "${candidate}" >/dev/null
 
 if [[ "${install_runtime_config}" == true ]]; then
@@ -208,51 +212,44 @@ if [[ "${install_runtime_config}" == true ]]; then
   install -m 0640 -o root -g root "${CONFIG_FILE}" "${RUNTIME_CONFIG_FILE}"
 fi
 
-if ! getent passwd "${RESTRICTED_SMB_USER}" >/dev/null; then
-  useradd --system --user-group --no-create-home --home-dir /nonexistent \
-    --shell /usr/sbin/nologin "${RESTRICTED_SMB_USER}"
-  usermod --lock "${RESTRICTED_SMB_USER}"
-fi
-IFS=: read -r _ _ restricted_uid restricted_gid _ restricted_home restricted_shell \
-  < <(getent passwd "${RESTRICTED_SMB_USER}")
-[[ "${restricted_uid}" -gt 0 \
-  && "${restricted_uid}" -lt 1000 \
-  && "${restricted_home}" == /nonexistent \
-  && ! -e "${restricted_home}" \
-  && "${restricted_shell}" == /usr/sbin/nologin ]] || {
-  echo "Unexpected ${RESTRICTED_SMB_USER} POSIX identity attributes" >&2
-  exit 1
-}
-[[ "$(passwd -S "${RESTRICTED_SMB_USER}" | awk '{print $2}')" == L ]] || {
-  echo "${RESTRICTED_SMB_USER} POSIX password is not locked" >&2
-  exit 1
-}
-grep -q "^${RESTRICTED_SMB_USER}:" /etc/passwd \
-  || { echo "${RESTRICTED_SMB_USER} must be a local POSIX identity" >&2; exit 1; }
-IFS=: read -r restricted_group_name _ restricted_group_gid _ \
-  < <(getent group "${restricted_gid}")
-[[ "${restricted_group_name}" == "${RESTRICTED_SMB_USER}" \
-  && "${restricted_group_gid}" == "${restricted_gid}" \
-  && "$(id -G "${RESTRICTED_SMB_USER}")" == "${restricted_gid}" ]] || {
-  echo "${RESTRICTED_SMB_USER} must have only its dedicated primary group" >&2
-  exit 1
-}
-grep -q "^${RESTRICTED_SMB_USER}:" /etc/group \
-  || { echo "${RESTRICTED_SMB_USER} must have a local dedicated group" >&2; exit 1; }
-if sudo -l -U "${RESTRICTED_SMB_USER}" 2>/dev/null | grep -Fq 'may run the following'; then
-  echo "${RESTRICTED_SMB_USER} unexpectedly has sudo authorization" >&2
-  exit 1
-fi
-
-restricted_smb_state=absent
-if pdbedit -L "${RESTRICTED_SMB_USER}" >/dev/null 2>&1; then
-  if pdbedit -L -v "${RESTRICTED_SMB_USER}" \
-    | grep -Eq '^Account Flags:.*D'; then
-    restricted_smb_state=disabled
-  else
-    restricted_smb_state=enabled
+declare -A restricted_smb_states=()
+for restricted_smb_user in "${RESTRICTED_SMB_USERS[@]}"; do
+  if ! getent passwd "${restricted_smb_user}" >/dev/null; then
+    useradd --system --user-group --no-create-home --home-dir /nonexistent \
+      --shell /usr/sbin/nologin "${restricted_smb_user}"
+    usermod --lock "${restricted_smb_user}"
   fi
-fi
+  IFS=: read -r _ _ restricted_uid restricted_gid _ restricted_home restricted_shell \
+    < <(getent passwd "${restricted_smb_user}")
+  [[ "${restricted_uid}" -gt 0 && "${restricted_uid}" -lt 1000 \
+    && "${restricted_home}" == /nonexistent && ! -e "${restricted_home}" \
+    && "${restricted_shell}" == /usr/sbin/nologin ]] \
+    || { echo "Unexpected ${restricted_smb_user} POSIX identity attributes" >&2; exit 1; }
+  [[ "$(passwd -S "${restricted_smb_user}" | awk '{print $2}')" == L ]] \
+    || { echo "${restricted_smb_user} POSIX password is not locked" >&2; exit 1; }
+  grep -q "^${restricted_smb_user}:" /etc/passwd \
+    || { echo "${restricted_smb_user} must be a local POSIX identity" >&2; exit 1; }
+  IFS=: read -r restricted_group_name _ restricted_group_gid _ \
+    < <(getent group "${restricted_gid}")
+  [[ "${restricted_group_name}" == "${restricted_smb_user}" \
+    && "${restricted_group_gid}" == "${restricted_gid}" \
+    && "$(id -G "${restricted_smb_user}")" == "${restricted_gid}" ]] \
+    || { echo "${restricted_smb_user} must have only its dedicated primary group" >&2; exit 1; }
+  grep -q "^${restricted_smb_user}:" /etc/group \
+    || { echo "${restricted_smb_user} must have a local dedicated group" >&2; exit 1; }
+  if sudo -l -U "${restricted_smb_user}" 2>/dev/null | grep -Fq 'may run the following'; then
+    echo "${restricted_smb_user} unexpectedly has sudo authorization" >&2
+    exit 1
+  fi
+  restricted_smb_states["${restricted_smb_user}"]=absent
+  if pdbedit -L "${restricted_smb_user}" >/dev/null 2>&1; then
+    if pdbedit -L -v "${restricted_smb_user}" | grep -Eq '^Account Flags:.*D'; then
+      restricted_smb_states["${restricted_smb_user}"]=disabled
+    else
+      restricted_smb_states["${restricted_smb_user}"]=enabled
+    fi
+  fi
+done
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 install -d -m 0700 -o root -g root /var/backups/edsys-share
@@ -413,9 +410,10 @@ else
   echo "Drive timers installed but left disabled until OAuth, dry-run, seed, and restore checks pass."
 fi
 
-if [[ "${restricted_smb_state}" == enabled ]]; then
-  echo "EdSys Share host installation completed; work-laptop Samba identity is enabled."
-else
-  echo "EdSys Share host installation completed; work-laptop Samba identity is ${restricted_smb_state}."
-  echo "Onboarding stays disabled until an operator runs: sudo smbpasswd -a ${RESTRICTED_SMB_USER}"
-fi
+echo "EdSys Share host installation completed."
+for restricted_smb_user in "${RESTRICTED_SMB_USERS[@]}"; do
+  echo "${restricted_smb_user} Samba identity is ${restricted_smb_states[${restricted_smb_user}]}."
+  if [[ "${restricted_smb_states[${restricted_smb_user}]}" != enabled ]]; then
+    echo "Onboarding stays disabled until an operator runs: sudo smbpasswd -a ${restricted_smb_user}"
+  fi
+done

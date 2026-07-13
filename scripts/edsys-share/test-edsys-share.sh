@@ -32,6 +32,17 @@ done
 for source_file in "${SCRIPT_DIR}/README.md" "${SCRIPT_DIR}/edsys-share.conf.example" "${SCRIPT_DIR}/samba-share.conf" "${SCRIPT_DIR}"/systemd/*; do
   [[ ! -x "${source_file}" ]] || { echo "Data/unit source is unexpectedly executable: ${source_file}" >&2; exit 1; }
 done
+if command -v pwsh >/dev/null; then
+  for powershell_source in "${SCRIPT_DIR}"/windows/*.ps1; do
+    POWERSHELL_SOURCE="${powershell_source}" pwsh -NoProfile -NonInteractive -Command '
+      $errors = $null
+      [void][System.Management.Automation.Language.Parser]::ParseFile(
+        $env:POWERSHELL_SOURCE, [ref]$null, [ref]$errors
+      )
+      if ($errors) { $errors | Write-Error; exit 1 }
+    '
+  done
+fi
 cc -std=c11 -O2 -Wall -Wextra -Werror "${SCRIPT_DIR}/edsys-share-mount-check-smb.c" -o "${tmp}/edsys-share-mount-check-smb"
 "${tmp}/edsys-share-mount-check-smb"
 if command -v shellcheck >/dev/null; then
@@ -107,7 +118,7 @@ cat >"${tmp}/smb.conf" <<EOF
 EOF
 "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/smb.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/rendered-smb.conf" \
-  --restricted-user edsys-share-dell
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell
 testparm -s "${tmp}/rendered-smb.conf" >/dev/null
 testparm -sv "${tmp}/rendered-smb.conf" 2>/dev/null >"${tmp}/effective-smb.conf"
 grep -Fq 'interfaces = lo enp7s0' "${tmp}/rendered-smb.conf"
@@ -124,18 +135,18 @@ grep -Fq 'username map =' "${tmp}/rendered-smb.conf"
 grep -Fq 'username map script =' "${tmp}/rendered-smb.conf"
 grep -Fq 'root directory =' "${tmp}/rendered-smb.conf"
 grep -Fq 'smb ports = 445' "${tmp}/rendered-smb.conf"
-grep -Fq 'valid users = jeremy edsys-share-dell' "${tmp}/rendered-smb.conf"
+grep -Fq 'valid users = jeremy edsys-share-nimo edsys-share-dell' "${tmp}/rendered-smb.conf"
 grep -Fq 'force user = jeremy' "${tmp}/rendered-smb.conf"
 grep -Fq 'available = yes' "${tmp}/rendered-smb.conf"
 grep -Fq 'browseable = yes' "${tmp}/rendered-smb.conf"
 grep -Fq 'printable = no' "${tmp}/rendered-smb.conf"
 grep -Fq 'max connections = 0' "${tmp}/rendered-smb.conf"
 grep -Fq 'comment = preserve-me' "${tmp}/rendered-smb.conf"
-grep -Fq 'invalid users = alice edsys-share-dell' "${tmp}/rendered-smb.conf"
-grep -Fq 'invalid users = "Jane Doe" edsys-share-dell' "${tmp}/rendered-smb.conf"
-grep -Fq "invalid users = 'edsys-share-dell' edsys-share-dell" "${tmp}/rendered-smb.conf"
-grep -Fq 'invalid users = DOMAIN\edsys-share-dell edsys-share-dell' "${tmp}/rendered-smb.conf"
-grep -Fq 'invalid users = edsys-share-dell alice edsys-share-dell' "${tmp}/rendered-smb.conf"
+grep -Fq 'invalid users = alice edsys-share-nimo edsys-share-dell' "${tmp}/rendered-smb.conf"
+grep -Fq 'invalid users = "Jane Doe" edsys-share-nimo edsys-share-dell' "${tmp}/rendered-smb.conf"
+grep -Fq "invalid users = 'edsys-share-dell' edsys-share-nimo edsys-share-dell" "${tmp}/rendered-smb.conf"
+grep -Fq 'invalid users = DOMAIN\edsys-share-dell edsys-share-nimo edsys-share-dell' "${tmp}/rendered-smb.conf"
+grep -Fq 'invalid users = edsys-share-dell alice edsys-share-nimo' "${tmp}/rendered-smb.conf"
 if grep -Eqi '^\s*(inter faces|bindinterfacesonly|hostsallow|hostsdeny|configbackend|registryshares|usersharemaxshares|default|preload|loadprinters|serverrole|passdbbackend|usernamemap|usernamemapscript|rootdir|smbports|invalidusers)\s*=' "${tmp}/rendered-smb.conf"; then
   echo "Renderer preserved a whitespace-normalized Samba option alias" >&2
   exit 1
@@ -163,6 +174,9 @@ for name, body in sections:
     if name.casefold() not in {"global", "edsys-share"}:
         assert re.search(
             r"(?mi)^\s*invalid users\s*=.*\bedsys-share-dell\b", body
+        ), name
+        assert re.search(
+            r"(?mi)^\s*invalid users\s*=.*\bedsys-share-nimo\b", body
         ), name
 PY
 python3 - "${tmp}/effective-smb.conf" <<'PY'
@@ -196,7 +210,7 @@ PY
 
 "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/rendered-smb.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/rendered-twice.conf" \
-  --restricted-user edsys-share-dell
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell
 cmp -s "${tmp}/rendered-smb.conf" "${tmp}/rendered-twice.conf"
 
 cat >"${tmp}/misplaced-interfaces.conf" <<EOF
@@ -209,7 +223,7 @@ cat >"${tmp}/misplaced-interfaces.conf" <<EOF
 EOF
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/misplaced-interfaces.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/should-not-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted interfaces outside [global]" >&2
   exit 1
 fi
@@ -220,7 +234,7 @@ cat >"${tmp}/included.conf" <<EOF
 EOF
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/included.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/included-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted an uninspected Samba include" >&2
   exit 1
 fi
@@ -231,7 +245,7 @@ cat >"${tmp}/alternate-config.conf" <<EOF
 EOF
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/alternate-config.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/alternate-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted an alternate Samba config file" >&2
   exit 1
 fi
@@ -246,7 +260,7 @@ cat >"${tmp}/duplicate-deny.conf" <<EOF
 EOF
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/duplicate-deny.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/duplicate-deny-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted ambiguous duplicate invalid-users options" >&2
   exit 1
 fi
@@ -258,7 +272,7 @@ cat >"${tmp}/continued-option.conf" <<'EOF'
 EOF
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/continued-option.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/continued-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted a continued Samba parameter name" >&2
   exit 1
 fi
@@ -272,7 +286,7 @@ cat >"${tmp}/globals-alias.conf" <<EOF
 EOF
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/globals-alias.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/globals-alias-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted the Samba [globals] alias" >&2
   exit 1
 fi
@@ -287,7 +301,7 @@ for spaced_global in 'g l o b a l' 'glo bal' 'g l o b a l s'; do
 EOF
   if "${SCRIPT_DIR}/render-samba-config.py" \
     "${tmp}/spaced-global-alias.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/spaced-global-render.conf" \
-    --restricted-user edsys-share-dell 2>/dev/null; then
+    --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
     echo "Renderer accepted Samba special global alias [${spaced_global}]" >&2
     exit 1
   fi
@@ -304,7 +318,7 @@ cat >"${tmp}/spaced-service-alias.conf" <<EOF
 EOF
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/spaced-service-alias.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/spaced-service-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted whitespace-equivalent Samba service names" >&2
   exit 1
 fi
@@ -317,7 +331,7 @@ cat >"${tmp}/spaced-managed-share.conf" <<EOF
 EOF
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/spaced-managed-share.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/spaced-managed-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted a whitespace alias of the managed share" >&2
   exit 1
 fi
@@ -330,7 +344,7 @@ cat >"${tmp}/global-inheritance.conf" <<EOF
 EOF
 "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/global-inheritance.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/global-inheritance-render.conf" \
-  --restricted-user edsys-share-dell
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell
 for reset_option in 'admin users' 'force group' 'read list'; do
   [[ -z "$(testparm -s --section-name=EdSys-Share --parameter-name="${reset_option}" "${tmp}/global-inheritance-render.conf" 2>/dev/null)" ]]
 done
@@ -342,7 +356,7 @@ cat >"${tmp}/global-synonym.conf" <<EOF
 EOF
 "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/global-synonym.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/global-synonym-render.conf" \
-  --restricted-user edsys-share-dell
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell
 [[ "$(testparm -s --section-name=EdSys-Share --parameter-name='hosts allow' "${tmp}/global-synonym-render.conf" 2>/dev/null)" == '127.0.0.1 192.168.50.0/24' ]]
 [[ "$(testparm -s --section-name=EdSys-Share --parameter-name='hosts deny' "${tmp}/global-synonym-render.conf" 2>/dev/null)" == '0.0.0.0/0' ]]
 
@@ -353,7 +367,7 @@ for unsafe_hosts_option in \
   printf '   %s\n' "${unsafe_hosts_option}" >>"${tmp}/unsafe-hosts-fragment.conf"
   if "${SCRIPT_DIR}/render-samba-config.py" \
     "${tmp}/smb.conf" "${tmp}/unsafe-hosts-fragment.conf" "${tmp}/unsafe-hosts-render.conf" \
-    --restricted-user edsys-share-dell 2>/dev/null; then
+    --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
     echo "Renderer accepted share-local hosts override: ${unsafe_hosts_option}" >&2
     exit 1
   fi
@@ -369,7 +383,7 @@ for unsafe_target_option in \
   printf '   %s\n' "${unsafe_target_option}" >>"${tmp}/unsafe-target-fragment.conf"
   if "${SCRIPT_DIR}/render-samba-config.py" \
     "${tmp}/smb.conf" "${tmp}/unsafe-target-fragment.conf" "${tmp}/unsafe-target-render.conf" \
-    --restricted-user edsys-share-dell 2>/dev/null; then
+    --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
     echo "Renderer accepted unsafe target option: ${unsafe_target_option}" >&2
     exit 1
   fi
@@ -384,7 +398,7 @@ $(cat "${SCRIPT_DIR}/samba-share.conf")
 EOF
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/smb.conf" "${tmp}/unsafe-fragment.conf" "${tmp}/unsafe-fragment-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted an extra service in the managed share fragment" >&2
   exit 1
 fi
@@ -395,25 +409,25 @@ $(cat "${SCRIPT_DIR}/samba-share.conf")
 EOF
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/smb.conf" "${tmp}/unsafe-prefix-fragment.conf" "${tmp}/unsafe-prefix-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted active content before the fragment section" >&2
   exit 1
 fi
 
-sed 's/valid users = jeremy edsys-share-dell/valid users = jeremy edsys-share-dell root/' \
+sed 's/valid users = jeremy edsys-share-nimo edsys-share-dell/valid users = jeremy edsys-share-nimo edsys-share-dell root/' \
   "${SCRIPT_DIR}/samba-share.conf" >"${tmp}/unsafe-valid-users-fragment.conf"
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/smb.conf" "${tmp}/unsafe-valid-users-fragment.conf" "${tmp}/unsafe-users-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted an extra EdSys-Share valid user" >&2
   exit 1
 fi
 
-sed "s/valid users = jeremy edsys-share-dell/valid users = 'jeremy' edsys-share-dell/" \
+sed "s/valid users = jeremy edsys-share-nimo edsys-share-dell/valid users = 'jeremy' edsys-share-nimo edsys-share-dell/" \
   "${SCRIPT_DIR}/samba-share.conf" >"${tmp}/quoted-valid-users-fragment.conf"
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/smb.conf" "${tmp}/quoted-valid-users-fragment.conf" "${tmp}/quoted-users-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted quoted lookalike EdSys-Share valid users" >&2
   exit 1
 fi
@@ -422,7 +436,7 @@ cat "${SCRIPT_DIR}/samba-share.conf" >"${tmp}/unsafe-admin-fragment.conf"
 printf '%s\n' '   adminusers = edsys-share-dell' >>"${tmp}/unsafe-admin-fragment.conf"
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/smb.conf" "${tmp}/unsafe-admin-fragment.conf" "${tmp}/unsafe-admin-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted an EdSys-Share admin user" >&2
   exit 1
 fi
@@ -431,7 +445,7 @@ cat "${SCRIPT_DIR}/samba-share.conf" >"${tmp}/unsafe-writable-fragment.conf"
 printf '%s\n' '   writable = no' >>"${tmp}/unsafe-writable-fragment.conf"
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/smb.conf" "${tmp}/unsafe-writable-fragment.conf" "${tmp}/unsafe-writable-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted an effective read-only synonym override" >&2
   exit 1
 fi
@@ -442,7 +456,7 @@ cat >"${tmp}/missing-global.conf" <<EOF
 EOF
 if "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/missing-global.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/missing-global-render.conf" \
-  --restricted-user edsys-share-dell 2>/dev/null; then
+  --restricted-user edsys-share-nimo --restricted-user edsys-share-dell 2>/dev/null; then
   echo "Renderer accepted a configuration without [global]" >&2
   exit 1
 fi

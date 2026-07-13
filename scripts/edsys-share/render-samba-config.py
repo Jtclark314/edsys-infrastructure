@@ -199,11 +199,11 @@ def reject_dynamic_sources(text: str, label: str) -> None:
         )
 
 
-def has_plain_terminal_list_member(value: str, member: str) -> bool:
-    """Return true only for an unquoted, unescaped final Samba list token."""
+def has_plain_list_member(value: str, member: str) -> bool:
+    """Return true only for an unquoted, unescaped Samba list token."""
     return (
         re.search(
-            rf"(?:^|[ \t,]){re.escape(member)}$",
+            rf"(?:^|[ \t,]){re.escape(member)}(?=$|[ \t,])",
             value.strip(" \t"),
             flags=re.IGNORECASE,
         )
@@ -232,7 +232,7 @@ def require_single_option_alias(
     return matches[0].group("value").strip(" \t")
 
 
-def validate_fragment(fragment: str, restricted_user: str) -> None:
+def validate_fragment(fragment: str, restricted_users: tuple[str, ...]) -> None:
     validate_physical_syntax(fragment, "share fragment")
     reject_dynamic_sources(fragment, "share fragment")
     assert_unique_sections(fragment, "share fragment")
@@ -284,11 +284,12 @@ def validate_fragment(fragment: str, restricted_user: str) -> None:
     if require_single_option(body, "force user", TARGET_SECTION) != EXPECTED_FORCE_USER:
         raise SystemExit(f"[{TARGET_SECTION}] force user must be {EXPECTED_FORCE_USER}")
 
+    expected_valid_users = " ".join((EXPECTED_FORCE_USER, *restricted_users))
     valid_users = require_single_option(body, "valid users", TARGET_SECTION)
-    if valid_users != f"{EXPECTED_FORCE_USER} {restricted_user}":
+    if valid_users != expected_valid_users:
         raise SystemExit(
             f"[{TARGET_SECTION}] valid users must contain only "
-            f"{EXPECTED_FORCE_USER} and {restricted_user}"
+            f"{expected_valid_users}"
         )
     invalid_matches = assignment_matches(body, "invalid users")
     if invalid_matches[0].group("value").strip(" \t"):
@@ -363,7 +364,7 @@ def ensure_section_list_member(
     else:
         option_match = option_matches[0]
         value = option_match.group("value").rstrip()
-        if not has_plain_terminal_list_member(value, member):
+        if not has_plain_list_member(value, member):
             value = f"{value} {member}" if value else member
         replacement = f"   {option} = {value}{option_match.group('newline')}"
         body = body[: option_match.start()] + replacement + body[option_match.end() :]
@@ -434,13 +435,18 @@ def remove_managed_share_sections(text: str) -> str:
     return pattern.sub("", text)
 
 
-def render(base: str, fragment: str, restricted_user: str) -> str:
-    if re.fullmatch(r"[a-z_][a-z0-9_-]*", restricted_user) is None:
-        raise SystemExit("Restricted Samba username contains unsupported characters")
+def render(base: str, fragment: str, restricted_users: tuple[str, ...]) -> str:
+    if not restricted_users or len(set(restricted_users)) != len(restricted_users):
+        raise SystemExit("Restricted Samba usernames must be nonempty and unique")
+    for restricted_user in restricted_users:
+        if re.fullmatch(r"[a-z_][a-z0-9_-]*", restricted_user) is None:
+            raise SystemExit(
+                "Restricted Samba username contains unsupported characters"
+            )
 
     validate_physical_syntax(base, "base config")
     reject_dynamic_sources(base, "base config")
-    validate_fragment(fragment, restricted_user)
+    validate_fragment(fragment, restricted_users)
 
     text = enforce_global_policy(base)
     text = text.replace(
@@ -457,9 +463,10 @@ def render(base: str, fragment: str, restricted_user: str) -> str:
     ]
     for section in section_names:
         if normalize_section_key(section) != "global":
-            text = ensure_section_list_member(
-                text, section, "invalid users", restricted_user
-            )
+            for restricted_user in restricted_users:
+                text = ensure_section_list_member(
+                    text, section, "invalid users", restricted_user
+                )
 
     rendered = text.rstrip() + "\n\n" + fragment.strip() + "\n"
     validate_physical_syntax(rendered, "rendered config")
@@ -467,7 +474,7 @@ def render(base: str, fragment: str, restricted_user: str) -> str:
     return rendered
 
 
-def validate_effective_config(path: Path, restricted_user: str) -> None:
+def validate_effective_config(path: Path, restricted_users: tuple[str, ...]) -> None:
     testparm = shutil.which("testparm")
     if testparm is None:
         raise SystemExit("testparm is required for effective Samba validation")
@@ -554,11 +561,12 @@ def validate_effective_config(path: Path, restricted_user: str) -> None:
         raise SystemExit(f"Effective [{TARGET_SECTION}] path is unsafe")
     if query(target_name, "force user") != EXPECTED_FORCE_USER:
         raise SystemExit(f"Effective [{TARGET_SECTION}] force user is unsafe")
+    expected_valid_users = " ".join((EXPECTED_FORCE_USER, *restricted_users))
     valid_users = query(target_name, "valid users")
-    if valid_users != f"{EXPECTED_FORCE_USER} {restricted_user}":
+    if valid_users != expected_valid_users:
         raise SystemExit(
             f"Effective [{TARGET_SECTION}] valid users must contain only "
-            f"{EXPECTED_FORCE_USER} and {restricted_user}"
+            f"{expected_valid_users}"
         )
     if query(target_name, "invalid users"):
         raise SystemExit(f"Effective [{TARGET_SECTION}] invalid users must be empty")
@@ -611,8 +619,9 @@ def validate_effective_config(path: Path, restricted_user: str) -> None:
         if normalize_section_key(name) in {"global", TARGET_SECTION.casefold()}:
             continue
         invalid_users = query(name, "invalid users")
-        if not has_plain_terminal_list_member(invalid_users, restricted_user):
-            raise SystemExit(f"Effective [{name}] does not deny {restricted_user}")
+        for restricted_user in restricted_users:
+            if not has_plain_list_member(invalid_users, restricted_user):
+                raise SystemExit(f"Effective [{name}] does not deny {restricted_user}")
 
 
 def main() -> int:
@@ -620,13 +629,13 @@ def main() -> int:
     parser.add_argument("base_config", type=Path)
     parser.add_argument("share_fragment", type=Path)
     parser.add_argument("output", type=Path)
-    parser.add_argument("--restricted-user", required=True)
+    parser.add_argument("--restricted-user", required=True, action="append")
     args = parser.parse_args()
 
     rendered = render(
         args.base_config.read_text(encoding="utf-8"),
         args.share_fragment.read_text(encoding="utf-8"),
-        args.restricted_user,
+        tuple(args.restricted_user),
     )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -639,7 +648,7 @@ def main() -> int:
             handle.write(rendered)
             handle.flush()
             os.fsync(handle.fileno())
-        validate_effective_config(temporary, args.restricted_user)
+        validate_effective_config(temporary, tuple(args.restricted_user))
         os.replace(temporary, args.output)
     finally:
         temporary.unlink(missing_ok=True)

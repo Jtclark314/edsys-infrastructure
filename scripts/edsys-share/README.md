@@ -40,7 +40,7 @@ scripts/edsys-share/test-edsys-share.sh
 
 The installer backs up `/etc/fstab` and `/etc/samba/smb.conf`, creates the bind
 mount and both mount guards, creates or validates the locked, no-login POSIX
-identity `edsys-share-dell`, validates the full Samba candidate with `testparm`,
+identities `edsys-share-nimo` and `edsys-share-dell`, validates the full Samba candidate with `testparm`,
 and installs all systemd units. The renderer denies that restricted identity
 from every other statically configured Samba service; disables registry,
 usershare, default-service, auto-service, and printcap-created services; pins
@@ -56,13 +56,14 @@ no-shell validator run through a narrowly scoped AppArmor transition;
 arbitrary shell execution does not get added to the `smbd` profile. Drive
 timers remain disabled by default.
 
-The installer never creates or records an SMB password. When onboarding the
-managed work laptop, enable its Samba identity through the interactive hidden
-prompt on `9950x`, then confirm that it is present. Never pipe, echo, or place the
-password on a command line:
+The installer never creates or records an SMB password. Enable a device-specific
+Samba identity through an interactive hidden prompt on `9950x`, then confirm
+that it is present. Never pipe, echo, or place the password on a command line:
 
 ```bash
+sudo smbpasswd -a edsys-share-nimo
 sudo smbpasswd -a edsys-share-dell
+sudo pdbedit -L edsys-share-nimo
 sudo pdbedit -L edsys-share-dell
 ```
 
@@ -121,7 +122,7 @@ on the initial clients returned error 87 for the `New-SmbMapping -Credential`
 overload, so save the server credential through `cmdkey`'s explicit hidden
 prompt first, then create the mapping without passing a secret to PowerShell:
 
-For Nimo `jtcla` and Basecamp `jeremy`:
+For Basecamp `jeremy`:
 
 ```powershell
 cmdkey /add:9950x.taile832fe.ts.net /user:9950x\jeremy /pass
@@ -142,13 +143,25 @@ New-SmbMapping -LocalPath 'Q:' `
   -Persistent $true -RequireIntegrity $true -RequirePrivacy $true
 ```
 
-Nimo `jtcla` and Basecamp `jeremy` authenticate as `9950x\jeremy`. The managed
-work-laptop profile `THOMPSON\jclark` instead uses the dedicated SMB-only
-`9950x\edsys-share-dell` identity. Samba forces that identity to filesystem
-user `jeremy` only after successful authentication, preserving consistent
-ownership while allowing Dell-only credential rotation and revocation.
-Every other currently configured Samba service explicitly denies the Dell
-identity. The managed renderer must be rerun whenever a service is added.
+Nimo uses dedicated SMB-only identity `9950x\edsys-share-nimo`. To avoid the
+Windows logon restore racing Tailscale/MagicDNS, deploy the user-level reconnect
+task from `windows/` in the normal `NIMO-LAPTOP\jtcla` profile. It removes the
+native persistent `Q:` profile, waits up to five minutes for TCP 445, and creates
+an encrypted/signed nonpersistent mapping at each logon. The saved credential
+remains in Windows Credential Manager; no password is stored in either script.
+
+```powershell
+cmdkey /add:9950x.taile832fe.ts.net /user:9950x\edsys-share-nimo /pass
+& .\windows\Install-EdSysShareReconnect.ps1
+```
+
+Basecamp continues to authenticate as `9950x\jeremy`. The managed work-laptop
+profile uses dedicated SMB-only identity `9950x\edsys-share-dell`. Samba forces
+both device identities to filesystem user `jeremy` only after successful
+authentication, preserving consistent ownership while allowing per-device
+credential rotation and revocation. Every other currently configured Samba
+service explicitly denies both restricted identities. The managed renderer must
+be rerun whenever a service is added.
 
 ## Revoke Only The Work Laptop
 
