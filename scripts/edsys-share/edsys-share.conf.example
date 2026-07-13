@@ -10,7 +10,7 @@ EDSYS_SHARE_RESTORE_RESERVE_BYTES=10737418240
 # Network identity. The Tailnet listener and client list are deliberately
 # independent from Samba because tailscale0 is a non-broadcast interface.
 EDSYS_SHARE_TAILNET_LISTEN_IP=100.87.137.47
-EDSYS_SHARE_TAILNET_CLIENTS="100.108.67.36 100.120.155.81"
+EDSYS_SHARE_TAILNET_CLIENTS="100.108.67.36 100.120.155.81 100.84.178.87"
 
 # Google Drive transport. OAuth material stays in the referenced root-only
 # rclone config and never belongs in this file or Git.
