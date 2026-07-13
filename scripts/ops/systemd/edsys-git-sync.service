@@ -1,0 +1,20 @@
+[Unit]
+Description=Fast-forward authoritative EdSys Git checkouts
+Documentation=file:/srv/edsys/edsys-infrastructure/scripts/ops/README.md
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/srv/edsys
+
+[Service]
+Type=oneshot
+User=jeremy
+Group=jeremy
+WorkingDirectory=/srv/edsys
+ExecStart=/srv/edsys/sync-edsys-repos.sh
+TimeoutStartSec=4min
+UMask=0027
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+LockPersonality=yes
+RestrictSUIDSGID=yes

@@ -1,0 +1,11 @@
+/srv/edsys/sync-edsys-repos.log {
+    daily
+    maxsize 1M
+    rotate 14
+    compress
+    missingok
+    notifempty
+    create 0640 jeremy jeremy
+    su jeremy jeremy
+    dateext
+}
