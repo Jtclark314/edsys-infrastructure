@@ -1,0 +1,14 @@
+[Unit]
+Description=EdSys Share Tailnet SMB listener
+After=tailscaled.service edsys-share-tailnet-guard.service
+Requires=tailscaled.service edsys-share-tailnet-guard.service
+
+[Socket]
+ListenStream=@TAILNET_LISTEN_IP@:445
+BindToDevice=tailscale0
+FreeBind=yes
+NoDelay=yes
+Accept=no
+
+[Install]
+WantedBy=sockets.target

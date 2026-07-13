@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONFIG_FILE="${EDSYS_SHARE_CONFIG:-/etc/edsys-share/edsys-share.conf}"
+[[ -r "${CONFIG_FILE}" ]] || { echo "Missing ${CONFIG_FILE}" >&2; exit 2; }
+# shellcheck source=/dev/null
+source "${CONFIG_FILE}"
+
+read -r -a clients <<<"${EDSYS_SHARE_TAILNET_CLIENTS:?set EDSYS_SHARE_TAILNET_CLIENTS}"
+(( ${#clients[@]} > 0 )) || { echo "Tailnet client allowlist is empty" >&2; exit 2; }
+
+set_literal=""
+for client in "${clients[@]}"; do
+  [[ "${client}" =~ ^100\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || {
+    echo "Invalid Tailnet client IPv4 address: ${client}" >&2
+    exit 2
+  }
+  [[ -z "${set_literal}" ]] || set_literal+=", "
+  set_literal+="${client}"
+done
+
+tmp="$(mktemp)"
+trap 'rm -f "${tmp}"' EXIT
+cat >"${tmp}" <<NFT
+table inet edsys_share {
+    chain tailnet_smb_input {
+        type filter hook input priority -10; policy accept;
+        iifname "tailscale0" tcp dport 445 ip saddr { ${set_literal} } counter accept
+        iifname "tailscale0" tcp dport 445 counter drop
+    }
+}
+NFT
+
+/usr/sbin/nft -c -f "${tmp}"
+/usr/sbin/nft delete table inet edsys_share 2>/dev/null || true
+/usr/sbin/nft -f "${tmp}"

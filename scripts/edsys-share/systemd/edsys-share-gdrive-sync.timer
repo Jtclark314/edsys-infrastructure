@@ -1,0 +1,10 @@
+[Unit]
+Description=Run EdSys Share Google Drive mirror every 15 minutes
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+RandomizedDelaySec=2m
+
+[Install]
+WantedBy=timers.target

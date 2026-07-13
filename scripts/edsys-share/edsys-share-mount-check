@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONFIG_FILE="${EDSYS_SHARE_CONFIG:-/etc/edsys-share/edsys-share.conf}"
+if [[ -r "${CONFIG_FILE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${CONFIG_FILE}"
+fi
+
+source_path="${EDSYS_SHARE_SOURCE:-/mnt/ai-store/edsys-share}"
+target_path="${EDSYS_SHARE_TARGET:-/EdSys-Share}"
+
+mountpoint -q "${target_path}" || {
+  echo "EdSys Share target is not mounted: ${target_path}" >&2
+  exit 1
+}
+findmnt -rn -M /mnt/ai-store >/dev/null || {
+  echo "AI Store backing mount is unavailable" >&2
+  exit 1
+}
+
+source_identity="$(stat -Lc '%d:%i' "${source_path}")"
+target_identity="$(stat -Lc '%d:%i' "${target_path}")"
+[[ "${source_identity}" == "${target_identity}" ]] || {
+  echo "EdSys Share target is not the expected bind mount" >&2
+  exit 1
+}
+
+if [[ "${EDSYS_SHARE_REQUIRE_WRITABLE:-true}" == true ]]; then
+  findmnt -rn -M "${target_path}" -o OPTIONS | tr ',' '\n' | grep -qx rw || {
+    echo "EdSys Share target is not writable" >&2
+    exit 1
+  }
+fi

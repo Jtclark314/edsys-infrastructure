@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONFIG_FILE="${EDSYS_SHARE_CONFIG:-/etc/edsys-share/edsys-share.conf}"
+[[ -r "${CONFIG_FILE}" ]] || { echo "Missing ${CONFIG_FILE}" >&2; exit 2; }
+# shellcheck source=/dev/null
+source "${CONFIG_FILE}"
+
+: "${EDSYS_SHARE_TARGET:=/EdSys-Share}"
+: "${EDSYS_SHARE_STATUS_DIR:=/var/lib/edsys-share}"
+: "${EDSYS_SHARE_REPORT_DIR:=/srv/edsys-backup/reports/edsys-share}"
+: "${EDSYS_SHARE_CACHE_DIR:=/var/cache/edsys-share/rclone}"
+: "${EDSYS_SHARE_RCLONE_BIN:=/opt/edsys-tools/rclone/current/rclone}"
+: "${EDSYS_SHARE_RCLONE_CONFIG:=/etc/edsys-backup/rclone.conf}"
+: "${EDSYS_SHARE_RCLONE_REMOTE:=edsys-gdrive}"
+: "${EDSYS_SHARE_DRIVE_CURRENT:=EdSys Share}"
+: "${EDSYS_SHARE_DRIVE_RECOVERY:=EdSys Share Recovery}"
+: "${EDSYS_SHARE_SETTLE_AGE:=2m}"
+: "${EDSYS_SHARE_MAX_DELETES:=100}"
+: "${EDSYS_SHARE_MASS_CHANGE_PERCENT:=25}"
+: "${EDSYS_SHARE_MASS_CHANGE_MIN_OBJECTS:=20}"
+: "${EDSYS_SHARE_TRANSFERS:=2}"
+: "${EDSYS_SHARE_CHECKERS:=4}"
+: "${EDSYS_SHARE_AI_WARN_PERCENT:=75}"
+: "${EDSYS_SHARE_AI_CRITICAL_PERCENT:=85}"
+: "${EDSYS_SHARE_AI_CRITICAL_FREE_BYTES:=268435456000}"
+: "${EDSYS_SHARE_DRIVE_WARN_FREE_PERCENT:=20}"
+: "${EDSYS_SHARE_DRIVE_CRITICAL_FREE_PERCENT:=10}"
+
+approve_run=""
+print_plan=false
+case "${1:-}" in
+  "") ;;
+  --approve) approve_run="${2:-}"; [[ -n "${approve_run}" ]] || { echo "--approve requires a run id" >&2; exit 2; } ;;
+  --dry-run) print_plan=true ;;
+  *) echo "Usage: $0 [--dry-run | --approve RUN_ID]" >&2; exit 2 ;;
+esac
+
+mkdir -p "${EDSYS_SHARE_STATUS_DIR}/plans" "${EDSYS_SHARE_REPORT_DIR}" "${EDSYS_SHARE_CACHE_DIR}"
+status_file="${EDSYS_SHARE_STATUS_DIR}/status.json"
+run_id="${approve_run:-$(date -u +%Y%m%dT%H%M%SZ)}"
+plan_file="${EDSYS_SHARE_STATUS_DIR}/plans/${run_id}.plan"
+hash_file="${EDSYS_SHARE_STATUS_DIR}/plans/${run_id}.sha256"
+seed_complete_marker="${EDSYS_SHARE_STATUS_DIR}/seed-complete"
+log_file="${EDSYS_SHARE_REPORT_DIR}/sync-${run_id}.log"
+capacity_state=ok
+failure_recorded=false
+
+write_status() {
+  local status="$1" message="$2"
+  jq -n --arg status "${status}" --arg run_id "${run_id}" --arg message "${message}" \
+    --arg timestamp "$(date -Is)" --arg log_file "${log_file}" --arg capacity "${capacity_state}" \
+    '{status:$status,run_id:$run_id,message:$message,timestamp:$timestamp,log_file:$log_file,capacity:$capacity}' \
+    >"${status_file}.tmp"
+  mv "${status_file}.tmp" "${status_file}"
+}
+
+ping_healthchecks() {
+  local state="$1"
+  if [[ -n "${HC_PING_URL:-}" && -x /usr/local/sbin/edsys-healthchecks-ping ]]; then
+    /usr/local/sbin/edsys-healthchecks-ping "${state}" >/dev/null 2>&1 || true
+  fi
+}
+
+fail() {
+  failure_recorded=true
+  write_status failed "$1"
+  ping_healthchecks fail
+  echo "$1" >&2
+  exit "${2:-1}"
+}
+
+unexpected_error() {
+  local rc="$1" line="$2"
+  if [[ "${failure_recorded}" != true ]]; then
+    write_status failed "Unexpected sync error at line ${line}"
+    ping_healthchecks fail
+  fi
+  exit "${rc}"
+}
+trap 'unexpected_error $? $LINENO' ERR
+
+exec 8>/run/edsys-share-gdrive.lock
+flock -n 8 || fail "Another EdSys Share Drive job is running" 3
+exec 9>/run/edsys-offsite-sync.lock
+flock -n 9 || fail "The core EdSys offsite sync is running" 3
+
+/usr/local/libexec/edsys-share/edsys-share-mount-check || fail "EdSys Share mount validation failed"
+[[ -x "${EDSYS_SHARE_RCLONE_BIN}" ]] || fail "Pinned rclone is unavailable"
+[[ -r "${EDSYS_SHARE_RCLONE_CONFIG}" ]] || fail "Root-only rclone config is unavailable"
+
+read -r ai_used ai_free < <(df -B1 --output=pcent,avail /mnt/ai-store | tail -1 | tr -d '%')
+if (( ai_used >= EDSYS_SHARE_AI_CRITICAL_PERCENT || ai_free <= EDSYS_SHARE_AI_CRITICAL_FREE_BYTES )); then
+  capacity_state=critical
+  echo "CRITICAL: AI Store capacity threshold reached (used=${ai_used}% free=${ai_free})" | tee -a "${log_file}" >&2
+elif (( ai_used >= EDSYS_SHARE_AI_WARN_PERCENT )); then
+  capacity_state=warning
+  echo "WARNING: AI Store capacity threshold reached (used=${ai_used}% free=${ai_free})" | tee -a "${log_file}" >&2
+fi
+
+special="$(find "${EDSYS_SHARE_TARGET}" -xdev -mindepth 1 ! -type f ! -type d -print -quit)"
+[[ -z "${special}" ]] || fail "Unsupported symlink or special file detected in EdSys Share"
+
+rclone=("${EDSYS_SHARE_RCLONE_BIN}" --config "${EDSYS_SHARE_RCLONE_CONFIG}" --cache-dir "${EDSYS_SHARE_CACHE_DIR}")
+remote_root="${EDSYS_SHARE_RCLONE_REMOTE}:"
+remote_current="${remote_root}${EDSYS_SHARE_DRIVE_CURRENT}"
+remote_recovery="${remote_root}${EDSYS_SHARE_DRIVE_RECOVERY}/${run_id}"
+
+"${rclone[@]}" about --json "${remote_root}" >"${EDSYS_SHARE_STATUS_DIR}/drive-about.json.tmp" 2>>"${log_file}" \
+  || fail "Google Drive connectivity/quota check failed"
+mv "${EDSYS_SHARE_STATUS_DIR}/drive-about.json.tmp" "${EDSYS_SHARE_STATUS_DIR}/drive-about.json"
+
+drive_total="$(jq -r '.total // 0' "${EDSYS_SHARE_STATUS_DIR}/drive-about.json")"
+drive_free="$(jq -r '.free // 0' "${EDSYS_SHARE_STATUS_DIR}/drive-about.json")"
+if (( drive_total > 0 )); then
+  drive_free_percent=$(( drive_free * 100 / drive_total ))
+  if (( drive_free_percent <= EDSYS_SHARE_DRIVE_CRITICAL_FREE_PERCENT )); then
+    capacity_state=critical
+    echo "CRITICAL: Google Drive free space is ${drive_free_percent}%" | tee -a "${log_file}" >&2
+  elif (( drive_free_percent <= EDSYS_SHARE_DRIVE_WARN_FREE_PERCENT )) && [[ "${capacity_state}" == ok ]]; then
+    capacity_state=warning
+    echo "WARNING: Google Drive free space is ${drive_free_percent}%" | tee -a "${log_file}" >&2
+  fi
+fi
+
+remote_exists="$("${rclone[@]}" lsjson "${remote_root}" --dirs-only --max-depth 1 2>>"${log_file}" \
+  | jq -r --arg name "${EDSYS_SHARE_DRIVE_CURRENT}" 'any(.[]; .Name == $name)')" \
+  || fail "Unable to inspect the Google Drive mirror root"
+if [[ "${remote_exists}" == true ]]; then
+  remote_size="$("${rclone[@]}" size --json "${remote_current}" 2>>"${log_file}")" \
+    || fail "Unable to measure the existing Google Drive mirror"
+else
+  remote_size='{"count":0,"bytes":0}'
+fi
+remote_count="$(jq -r '.count // 0' <<<"${remote_size}")"
+
+sync_args=(
+  sync "${EDSYS_SHARE_TARGET}" "${remote_current}"
+  --backup-dir "${remote_recovery}"
+  --create-empty-src-dirs
+  --delete-after
+  --drive-use-trash=true
+  --min-age "${EDSYS_SHARE_SETTLE_AGE}"
+  --transfers "${EDSYS_SHARE_TRANSFERS}"
+  --checkers "${EDSYS_SHARE_CHECKERS}"
+  --retries 10
+  --low-level-retries 20
+  --contimeout 30s
+  --timeout 5m
+  --fast-list
+  --log-level INFO
+)
+
+candidate="$(mktemp)"
+plan_document="$(mktemp)"
+trap 'rm -f "${candidate}" "${plan_document}"' EXIT
+"${rclone[@]}" "${sync_args[@]}" --dry-run --combined "${candidate}" --log-file "${log_file}" \
+  || fail "Drive dry-run planning failed"
+{
+  printf 'run_id=%s\nsource=%s\ndestination=%s\nrecovery=%s\n' \
+    "${run_id}" "${EDSYS_SHARE_TARGET}" "${remote_current}" "${remote_recovery}"
+  printf 'rclone_version=%s\n' "$("${EDSYS_SHARE_RCLONE_BIN}" version | head -1)"
+  printf 'sync_argument=%s\n' "${sync_args[@]}"
+  printf '%s\n' '--- combined dry-run plan ---'
+  cat "${candidate}"
+} >"${plan_document}"
+candidate_hash="$(sha256sum "${plan_document}" | awk '{print $1}')"
+
+if [[ -n "${approve_run}" ]]; then
+  [[ -r "${plan_file}" && -r "${hash_file}" ]] || fail "Approved plan does not exist: ${approve_run}" 2
+  saved_hash="$(cat "${hash_file}")"
+  [[ "${candidate_hash}" == "${saved_hash}" ]] || fail "Approved plan changed; review the new plan" 75
+else
+  install -m 0600 "${plan_document}" "${plan_file}"
+  printf '%s\n' "${candidate_hash}" >"${hash_file}"
+  chmod 0600 "${hash_file}"
+fi
+
+deletions="$(grep -c '^- ' "${candidate}" || true)"
+changes="$(grep -Ec '^[+*] ' "${candidate}" || true)"
+
+hold_reason=""
+if [[ -z "${approve_run}" ]]; then
+  if [[ ! -f "${seed_complete_marker}" ]]; then
+    hold_reason="Initial seed requires review"
+  elif (( deletions > EDSYS_SHARE_MAX_DELETES )); then
+    hold_reason="Deletion count ${deletions} exceeds ${EDSYS_SHARE_MAX_DELETES}"
+  elif (( remote_count >= EDSYS_SHARE_MASS_CHANGE_MIN_OBJECTS && (deletions + changes) * 100 >= EDSYS_SHARE_MASS_CHANGE_PERCENT * remote_count )); then
+    hold_reason="Changed/deleted objects exceed ${EDSYS_SHARE_MASS_CHANGE_PERCENT}% of the remote"
+  fi
+fi
+
+if [[ "${print_plan}" == true ]]; then
+  cat "${candidate}"
+  write_status dry-run "Dry-run plan saved"
+  exit 0
+fi
+if [[ -n "${hold_reason}" ]]; then
+  write_status held "${hold_reason}; review ${plan_file} and approve run ${run_id}"
+  ping_healthchecks fail
+  echo "${hold_reason}. Review ${plan_file}; approve with: $0 --approve ${run_id}" >&2
+  exit 75
+fi
+
+"${rclone[@]}" "${sync_args[@]}" --log-file "${log_file}" || fail "Google Drive sync failed"
+if [[ -n "${approve_run}" && ! -f "${seed_complete_marker}" ]]; then
+  install -m 0600 /dev/null "${seed_complete_marker}"
+fi
+write_status success "Google Drive current mirror synchronized; capacity=${capacity_state}"
+ping_healthchecks success
+touch "${EDSYS_SHARE_STATUS_DIR}/last-sync-success"
+echo "EdSys Share Drive sync completed: ${run_id}"

@@ -1,0 +1,19 @@
+[Unit]
+Description=EdSys Share Tailnet SMB loopback proxy
+Requires=edsys-share-tailnet-smb.socket smbd.service
+After=edsys-share-tailnet-smb.socket smbd.service
+
+[Service]
+Type=notify
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd --connections-max=64 --exit-idle-time=5min 127.0.0.1:445
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes

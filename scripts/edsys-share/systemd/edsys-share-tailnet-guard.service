@@ -1,0 +1,13 @@
+[Unit]
+Description=EdSys Share Tailnet SMB client allowlist
+After=tailscaled.service
+Wants=tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/edsys-share/edsys-share-tailnet-guard
+ExecStop=-/usr/sbin/nft delete table inet edsys_share
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

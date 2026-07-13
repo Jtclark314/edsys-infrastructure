@@ -1,0 +1,20 @@
+[Unit]
+Description=Verify EdSys Share Google Drive mirror by size
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/EdSys-Share /mnt/ai-store
+
+[Service]
+Type=oneshot
+UMask=0077
+EnvironmentFile=-/etc/edsys-healthchecks/edsys-share-gdrive.env
+Environment=EDSYS_SHARE_REQUIRE_WRITABLE=false
+ExecStart=/usr/local/sbin/edsys-share-gdrive-verify
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadOnlyPaths=/EdSys-Share /etc/edsys-share
+ReadWritePaths=/etc/edsys-backup/rclone.conf /var/lib/edsys-share /var/cache/edsys-share /srv/edsys-backup/reports/edsys-share /run
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

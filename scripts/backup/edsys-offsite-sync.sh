@@ -13,6 +13,7 @@ source "${CONFIG_FILE}"
 : "${REPORT_DIR:=${BACKUP_ROOT}/reports}"
 : "${STATUS_DIR:=/var/lib/edsys-backup}"
 : "${RCLONE_CONFIG:=/etc/edsys-backup/rclone.conf}"
+: "${RCLONE_BIN:=/opt/edsys-tools/rclone/current/rclone}"
 : "${RCLONE_REMOTE:=edsys-gdrive}"
 : "${DRIVE_BACKUP_ROOT:=EdSys Backups}"
 : "${RCLONE_OFFSITE_DEST:=${RCLONE_REMOTE}:${DRIVE_BACKUP_ROOT}/restic/edsys-critical-v3}"
@@ -82,12 +83,12 @@ fail() {
   exit 1
 }
 
-command -v rclone >/dev/null || fail "rclone is not installed"
+command -v "${RCLONE_BIN}" >/dev/null || fail "pinned rclone is not installed: ${RCLONE_BIN}"
 command -v jq >/dev/null || fail "jq is not installed"
 [[ -d "${RESTIC_REPOSITORY}" ]] || fail "local restic repository is missing: ${RESTIC_REPOSITORY}"
 [[ -r "${RCLONE_CONFIG}" ]] || fail "rclone config is missing or unreadable: ${RCLONE_CONFIG}"
 
-if ! rclone listremotes --config "${RCLONE_CONFIG}" | grep -qx "${RCLONE_REMOTE}:"; then
+if ! "${RCLONE_BIN}" listremotes --config "${RCLONE_CONFIG}" | grep -qx "${RCLONE_REMOTE}:"; then
   fail "rclone remote '${RCLONE_REMOTE}:' is not configured"
 fi
 
@@ -96,12 +97,12 @@ if ! grep -qE '^[[:space:]]*client_id[[:space:]]*=[[:space:]]*[^[:space:]]+' "${
   fail "refusing offsite sync: ${RCLONE_REMOTE} does not have a custom Google OAuth client_id and client_secret"
 fi
 
-rclone about --config "${RCLONE_CONFIG}" "${RCLONE_REMOTE}:" >/dev/null || fail "rclone remote '${RCLONE_REMOTE}:' failed connectivity check"
+"${RCLONE_BIN}" about --config "${RCLONE_CONFIG}" "${RCLONE_REMOTE}:" >/dev/null || fail "rclone remote '${RCLONE_REMOTE}:' failed connectivity check"
 
 if [[ "${TEST_ONLY}" == "true" ]]; then
   TEST_FILE="$(mktemp)"
   printf 'EdSys offsite test %s\n' "${RUN_ID}" > "${TEST_FILE}"
-  rclone copyto --config "${RCLONE_CONFIG}" "${TEST_FILE}" "${RCLONE_REMOTE}:${DRIVE_BACKUP_ROOT}/manual-exports/offsite-test/${RUN_ID}.txt" \
+  "${RCLONE_BIN}" copyto --config "${RCLONE_CONFIG}" "${TEST_FILE}" "${RCLONE_REMOTE}:${DRIVE_BACKUP_ROOT}/manual-exports/offsite-test/${RUN_ID}.txt" \
     --log-file "${LOG_FILE}" --log-level INFO
   rm -f "${TEST_FILE}"
   jq -n --arg status "success" --arg run_id "${RUN_ID}" --arg mode "test-only" --arg timestamp "$(date -Is)" \
@@ -139,7 +140,7 @@ if [[ "${DRY_RUN}" == "true" ]]; then
 fi
 
 set +e
-rclone "${RCLONE_ARGS[@]}"
+"${RCLONE_BIN}" "${RCLONE_ARGS[@]}"
 SYNC_STATUS="$?"
 set -e
 if [[ "${SYNC_STATUS}" -ne 0 ]]; then

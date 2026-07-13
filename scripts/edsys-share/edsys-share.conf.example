@@ -1,0 +1,37 @@
+# Runtime paths
+EDSYS_SHARE_SOURCE=/mnt/ai-store/edsys-share
+EDSYS_SHARE_TARGET=/EdSys-Share
+EDSYS_SHARE_STATUS_DIR=/var/lib/edsys-share
+EDSYS_SHARE_REPORT_DIR=/srv/edsys-backup/reports/edsys-share
+EDSYS_SHARE_CACHE_DIR=/var/cache/edsys-share/rclone
+EDSYS_SHARE_RESTORE_DIR=/mnt/ai-store/edsys-share-restore-staging
+EDSYS_SHARE_RESTORE_RESERVE_BYTES=10737418240
+
+# Network identity. The Tailnet listener and client list are deliberately
+# independent from Samba because tailscale0 is a non-broadcast interface.
+EDSYS_SHARE_TAILNET_LISTEN_IP=100.87.137.47
+EDSYS_SHARE_TAILNET_CLIENTS="100.108.67.36 100.120.155.81"
+
+# Google Drive transport. OAuth material stays in the referenced root-only
+# rclone config and never belongs in this file or Git.
+EDSYS_SHARE_RCLONE_BIN=/opt/edsys-tools/rclone/current/rclone
+EDSYS_SHARE_RCLONE_CONFIG=/etc/edsys-backup/rclone.conf
+EDSYS_SHARE_RCLONE_REMOTE=edsys-gdrive
+EDSYS_SHARE_DRIVE_CURRENT="EdSys Share"
+EDSYS_SHARE_DRIVE_RECOVERY="EdSys Share Recovery"
+
+# Sync/recovery policy
+EDSYS_SHARE_SETTLE_AGE=2m
+EDSYS_SHARE_MAX_DELETES=100
+EDSYS_SHARE_MASS_CHANGE_PERCENT=25
+EDSYS_SHARE_MASS_CHANGE_MIN_OBJECTS=20
+EDSYS_SHARE_RETENTION_DAYS=90
+EDSYS_SHARE_TRANSFERS=2
+EDSYS_SHARE_CHECKERS=4
+
+# Capacity policy (250 GiB minimum free on AI Store)
+EDSYS_SHARE_AI_WARN_PERCENT=75
+EDSYS_SHARE_AI_CRITICAL_PERCENT=85
+EDSYS_SHARE_AI_CRITICAL_FREE_BYTES=268435456000
+EDSYS_SHARE_DRIVE_WARN_FREE_PERCENT=20
+EDSYS_SHARE_DRIVE_CRITICAL_FREE_PERCENT=10

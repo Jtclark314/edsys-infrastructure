@@ -59,6 +59,7 @@ checks = [
     ("edsys-git-sync", "EdSys git sync", 2, 1),
     ("edsys-restore-test", "EdSys monthly restore test", 45 * 24, 24),
     ("edsys-offsite-sync", "EdSys offsite sync placeholder", 8 * 24, 24),
+    ("edsys-share-gdrive", "EdSys Share Google Drive mirror", 1, 1),
 ]
 for slug, name, timeout_hours, grace_hours in checks:
     check, _ = Check.objects.get_or_create(
@@ -111,7 +112,7 @@ for slug in "${!SYSTEMD_SERVICES[@]}"; do
   cat >"$tmp_dropin" <<UNIT
 [Service]
 EnvironmentFile=-${OUT_DIR}/${slug}.env
-ExecStartPost=/usr/local/sbin/edsys-healthchecks-ping success
+ExecStartPost=-/usr/local/sbin/edsys-healthchecks-ping success
 UNIT
   sudo install -d -m 0755 -o root -g root "$dropin_dir"
   sudo install -m 0644 -o root -g root "$tmp_dropin" "$dropin_dir/20-healthchecks.conf"

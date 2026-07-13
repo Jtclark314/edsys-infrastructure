@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONFIG_FILE="${EDSYS_SHARE_CONFIG:-/etc/edsys-share/edsys-share.conf}"
+[[ -r "${CONFIG_FILE}" ]] || { echo "Missing ${CONFIG_FILE}" >&2; exit 2; }
+# shellcheck source=/dev/null
+source "${CONFIG_FILE}"
+
+: "${EDSYS_SHARE_STATUS_DIR:=/var/lib/edsys-share}"
+: "${EDSYS_SHARE_REPORT_DIR:=/srv/edsys-backup/reports/edsys-share}"
+: "${EDSYS_SHARE_CACHE_DIR:=/var/cache/edsys-share/rclone}"
+: "${EDSYS_SHARE_RCLONE_BIN:=/opt/edsys-tools/rclone/current/rclone}"
+: "${EDSYS_SHARE_RCLONE_CONFIG:=/etc/edsys-backup/rclone.conf}"
+: "${EDSYS_SHARE_RCLONE_REMOTE:=edsys-gdrive}"
+: "${EDSYS_SHARE_DRIVE_RECOVERY:=EdSys Share Recovery}"
+: "${EDSYS_SHARE_RETENTION_DAYS:=90}"
+
+dry_run=false
+[[ "${1:-}" == "--dry-run" ]] && dry_run=true
+[[ $# -eq 0 || "${1:-}" == "--dry-run" ]] || { echo "Usage: $0 [--dry-run]" >&2; exit 2; }
+
+mkdir -p "${EDSYS_SHARE_STATUS_DIR}" "${EDSYS_SHARE_REPORT_DIR}" "${EDSYS_SHARE_CACHE_DIR}"
+/usr/local/libexec/edsys-share/edsys-share-mount-check || {
+  echo "EdSys Share mount validation failed; refusing to prune" >&2
+  exit 1
+}
+verify_stamp="${EDSYS_SHARE_STATUS_DIR}/last-verify-success"
+[[ -f "${verify_stamp}" ]] || { echo "No successful verification marker exists; refusing to prune" >&2; exit 1; }
+(( $(date +%s) - $(stat -c %Y "${verify_stamp}") <= 86400 )) || {
+  echo "Latest successful verification is older than 24 hours; refusing to prune" >&2
+  exit 1
+}
+
+exec 8>/run/edsys-share-gdrive.lock
+flock -n 8 || { echo "Another EdSys Share Drive job is running" >&2; exit 3; }
+exec 9>/run/edsys-offsite-sync.lock
+flock -n 9 || { echo "The core EdSys offsite sync is running" >&2; exit 3; }
+
+rclone=("${EDSYS_SHARE_RCLONE_BIN}" --config "${EDSYS_SHARE_RCLONE_CONFIG}" --cache-dir "${EDSYS_SHARE_CACHE_DIR}")
+recovery_root="${EDSYS_SHARE_RCLONE_REMOTE}:${EDSYS_SHARE_DRIVE_RECOVERY}"
+cutoff="$(date -u -d "${EDSYS_SHARE_RETENTION_DAYS} days ago" +%Y%m%dT%H%M%SZ)"
+run_id="$(date -u +%Y%m%dT%H%M%SZ)"
+log_file="${EDSYS_SHARE_REPORT_DIR}/prune-${run_id}.log"
+pruned=0
+folders_file="$(mktemp)"
+trap 'rm -f "${folders_file}"' EXIT
+"${rclone[@]}" about "${EDSYS_SHARE_RCLONE_REMOTE}:" >/dev/null 2>>"${log_file}" || {
+  echo "Google Drive connectivity check failed; refusing to prune" >&2
+  exit 1
+}
+"${rclone[@]}" lsf "${recovery_root}" --dirs-only --max-depth 1 >"${folders_file}" 2>>"${log_file}" || {
+  echo "Unable to enumerate recovery folders; refusing to prune" >&2
+  exit 1
+}
+
+while IFS= read -r folder; do
+  folder="${folder%/}"
+  [[ "${folder}" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || continue
+  [[ "${folder}" < "${cutoff}" ]] || continue
+  if [[ "${dry_run}" == true ]]; then
+    printf 'would-trash %s/%s\n' "${recovery_root}" "${folder}" | tee -a "${log_file}"
+  else
+    "${rclone[@]}" purge "${recovery_root}/${folder}" --drive-use-trash=true --log-file "${log_file}" --log-level INFO
+  fi
+  ((pruned+=1))
+done <"${folders_file}"
+
+jq -n --arg status success --arg run_id "${run_id}" --arg timestamp "$(date -Is)" \
+  --argjson dry_run "${dry_run}" --argjson folders "${pruned}" \
+  '{status:$status,run_id:$run_id,timestamp:$timestamp,dry_run:$dry_run,folders:$folders}' \
+  >"${EDSYS_SHARE_STATUS_DIR}/prune-status.json"
+echo "EdSys Share recovery prune completed: folders=${pruned} dry_run=${dry_run}"

@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONFIG_FILE="${EDSYS_SHARE_CONFIG:-/etc/edsys-share/edsys-share.conf}"
+[[ -r "${CONFIG_FILE}" ]] || { echo "Missing ${CONFIG_FILE}" >&2; exit 2; }
+# shellcheck source=/dev/null
+source "${CONFIG_FILE}"
+
+: "${EDSYS_SHARE_STATUS_DIR:=/var/lib/edsys-share}"
+: "${EDSYS_SHARE_REPORT_DIR:=/srv/edsys-backup/reports/edsys-share}"
+: "${EDSYS_SHARE_CACHE_DIR:=/var/cache/edsys-share/rclone}"
+: "${EDSYS_SHARE_RESTORE_DIR:=/mnt/ai-store/edsys-share-restore-staging}"
+: "${EDSYS_SHARE_RESTORE_RESERVE_BYTES:=10737418240}"
+: "${EDSYS_SHARE_RCLONE_BIN:=/opt/edsys-tools/rclone/current/rclone}"
+: "${EDSYS_SHARE_RCLONE_CONFIG:=/etc/edsys-backup/rclone.conf}"
+: "${EDSYS_SHARE_RCLONE_REMOTE:=edsys-gdrive}"
+: "${EDSYS_SHARE_DRIVE_CURRENT:=EdSys Share}"
+: "${EDSYS_SHARE_DRIVE_RECOVERY:=EdSys Share Recovery}"
+
+relative_path=""
+case "${1:-}" in
+  --current)
+    shift
+    label=current
+    remote="${EDSYS_SHARE_RCLONE_REMOTE}:${EDSYS_SHARE_DRIVE_CURRENT}"
+    ;;
+  --recovery)
+    recovery_id="${2:-}"
+    [[ "${recovery_id}" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || {
+      echo "Recovery run id must have UTC form YYYYMMDDTHHMMSSZ" >&2
+      exit 2
+    }
+    shift 2
+    label="recovery-${recovery_id}"
+    remote="${EDSYS_SHARE_RCLONE_REMOTE}:${EDSYS_SHARE_DRIVE_RECOVERY}/${recovery_id}"
+    ;;
+  *) echo "Usage: $0 --current [--path RELATIVE] | --recovery RUN_ID [--path RELATIVE]" >&2; exit 2 ;;
+esac
+if [[ "${1:-}" == --path && -n "${2:-}" && $# -eq 2 ]]; then
+  relative_path="${2}"
+  [[ "${relative_path}" != /* && "${relative_path}" != *..* && "${relative_path}" != *$'\n'* ]] || {
+    echo "Restore path must be a safe relative path without '..'" >&2
+    exit 2
+  }
+  remote="${remote}/${relative_path%/}"
+  label="${label}-selection"
+elif (( $# != 0 )); then
+  echo "Usage: $0 --current [--path RELATIVE] | --recovery RUN_ID [--path RELATIVE]" >&2
+  exit 2
+fi
+
+/usr/local/libexec/edsys-share/edsys-share-mount-check || {
+  echo "EdSys Share mount validation failed; refusing restore staging" >&2
+  exit 1
+}
+[[ -x "${EDSYS_SHARE_RCLONE_BIN}" && -r "${EDSYS_SHARE_RCLONE_CONFIG}" ]] || {
+  echo "Pinned rclone or its root-only config is unavailable" >&2
+  exit 1
+}
+
+exec 8>/run/edsys-share-gdrive.lock
+flock -n 8 || { echo "Another EdSys Share Drive job is running" >&2; exit 3; }
+exec 9>/run/edsys-offsite-sync.lock
+flock -n 9 || { echo "The core EdSys offsite sync is running" >&2; exit 3; }
+
+umask 077
+run_id="$(date -u +%Y%m%dT%H%M%SZ)"
+staging="${EDSYS_SHARE_RESTORE_DIR}/${run_id}-${label}"
+log_file="${EDSYS_SHARE_REPORT_DIR}/restore-${run_id}-${label}.log"
+[[ ! -e "${staging}" ]] || { echo "Restore staging path already exists: ${staging}" >&2; exit 1; }
+mkdir -p "${EDSYS_SHARE_STATUS_DIR}" "${EDSYS_SHARE_REPORT_DIR}" "${EDSYS_SHARE_CACHE_DIR}" "${staging}"
+rclone=("${EDSYS_SHARE_RCLONE_BIN}" --config "${EDSYS_SHARE_RCLONE_CONFIG}" --cache-dir "${EDSYS_SHARE_CACHE_DIR}")
+
+"${rclone[@]}" about "${EDSYS_SHARE_RCLONE_REMOTE}:" >/dev/null 2>>"${log_file}" || {
+  echo "Google Drive connectivity check failed" >&2
+  exit 1
+}
+remote_size="$("${rclone[@]}" size --json "${remote}" 2>>"${log_file}")" || {
+  echo "Unable to measure requested restore source" >&2
+  exit 1
+}
+remote_bytes="$(jq -r '.bytes // 0' <<<"${remote_size}")"
+restore_free="$(df -B1 --output=avail "${EDSYS_SHARE_RESTORE_DIR}" | tail -1)"
+(( remote_bytes + EDSYS_SHARE_RESTORE_RESERVE_BYTES <= restore_free )) || {
+  echo "Restore requires ${remote_bytes} bytes plus reserve; only ${restore_free} bytes are free" >&2
+  exit 1
+}
+"${rclone[@]}" copy "${remote}" "${staging}" --create-empty-src-dirs \
+  --log-file "${log_file}" --log-level INFO || {
+  echo "Restore staging copy failed; incomplete staging was preserved for inspection" >&2
+  exit 1
+}
+"${rclone[@]}" check "${remote}" "${staging}" --checksum --one-way \
+  --log-file "${log_file}" --log-level INFO || {
+  echo "Restore staging checksum verification failed" >&2
+  exit 1
+}
+
+(cd "${staging}" && find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0r sha256sum) >"${staging}/SHA256SUMS"
+jq -n --arg status success --arg run_id "${run_id}" --arg source "${remote}" \
+  --arg staging "${staging}" --arg timestamp "$(date -Is)" \
+  '{status:$status,run_id:$run_id,source:$source,staging:$staging,timestamp:$timestamp}' \
+  >"${EDSYS_SHARE_STATUS_DIR}/restore-status.json"
+echo "Verified restore staged at ${staging}; review it before any separate copy back."

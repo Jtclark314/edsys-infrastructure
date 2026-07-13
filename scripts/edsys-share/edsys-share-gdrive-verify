@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONFIG_FILE="${EDSYS_SHARE_CONFIG:-/etc/edsys-share/edsys-share.conf}"
+[[ -r "${CONFIG_FILE}" ]] || { echo "Missing ${CONFIG_FILE}" >&2; exit 2; }
+# shellcheck source=/dev/null
+source "${CONFIG_FILE}"
+
+: "${EDSYS_SHARE_TARGET:=/EdSys-Share}"
+: "${EDSYS_SHARE_STATUS_DIR:=/var/lib/edsys-share}"
+: "${EDSYS_SHARE_REPORT_DIR:=/srv/edsys-backup/reports/edsys-share}"
+: "${EDSYS_SHARE_CACHE_DIR:=/var/cache/edsys-share/rclone}"
+: "${EDSYS_SHARE_RCLONE_BIN:=/opt/edsys-tools/rclone/current/rclone}"
+: "${EDSYS_SHARE_RCLONE_CONFIG:=/etc/edsys-backup/rclone.conf}"
+: "${EDSYS_SHARE_RCLONE_REMOTE:=edsys-gdrive}"
+: "${EDSYS_SHARE_DRIVE_CURRENT:=EdSys Share}"
+: "${EDSYS_SHARE_SETTLE_AGE:=2m}"
+
+mode="size"
+[[ "${1:-}" == "--checksum" ]] && mode="checksum"
+[[ $# -eq 0 || "${1:-}" == "--checksum" ]] || { echo "Usage: $0 [--checksum]" >&2; exit 2; }
+
+mkdir -p "${EDSYS_SHARE_STATUS_DIR}" "${EDSYS_SHARE_REPORT_DIR}" "${EDSYS_SHARE_CACHE_DIR}"
+run_id="$(date -u +%Y%m%dT%H%M%SZ)"
+log_file="${EDSYS_SHARE_REPORT_DIR}/verify-${mode}-${run_id}.log"
+status_file="${EDSYS_SHARE_STATUS_DIR}/verify-status.json"
+
+ping_healthchecks() {
+  if [[ -n "${HC_PING_URL:-}" && -x /usr/local/sbin/edsys-healthchecks-ping ]]; then
+    /usr/local/sbin/edsys-healthchecks-ping "$1" >/dev/null 2>&1 || true
+  fi
+}
+fail() {
+  jq -n --arg status failed --arg mode "${mode}" --arg run_id "${run_id}" --arg message "$1" \
+    --arg timestamp "$(date -Is)" '{status:$status,mode:$mode,run_id:$run_id,message:$message,timestamp:$timestamp}' >"${status_file}"
+  ping_healthchecks fail
+  echo "$1" >&2
+  exit 1
+}
+
+exec 8>/run/edsys-share-gdrive.lock
+flock -n 8 || fail "Another EdSys Share Drive job is running"
+exec 9>/run/edsys-offsite-sync.lock
+flock -n 9 || fail "The core EdSys offsite sync is running"
+
+/usr/local/libexec/edsys-share/edsys-share-mount-check || fail "EdSys Share mount validation failed"
+rclone=("${EDSYS_SHARE_RCLONE_BIN}" --config "${EDSYS_SHARE_RCLONE_CONFIG}" --cache-dir "${EDSYS_SHARE_CACHE_DIR}")
+remote="${EDSYS_SHARE_RCLONE_REMOTE}:${EDSYS_SHARE_DRIVE_CURRENT}"
+"${rclone[@]}" about "${EDSYS_SHARE_RCLONE_REMOTE}:" >/dev/null 2>>"${log_file}" || fail "Google Drive connectivity check failed"
+
+args=(check "${EDSYS_SHARE_TARGET}" "${remote}" --min-age "${EDSYS_SHARE_SETTLE_AGE}" --combined "${log_file}.combined" --log-file "${log_file}" --log-level INFO)
+if [[ "${mode}" == checksum ]]; then
+  args+=(--checksum)
+else
+  args+=(--size-only)
+fi
+"${rclone[@]}" "${args[@]}" || fail "Google Drive ${mode} verification found differences or errors"
+
+# rclone check validates files, but not empty directories. Compare normalized
+# directory trees separately so the daily verification covers structure too.
+local_dirs="${EDSYS_SHARE_STATUS_DIR}/local-directories-${run_id}.txt"
+remote_dirs="${EDSYS_SHARE_STATUS_DIR}/remote-directories-${run_id}.txt"
+find "${EDSYS_SHARE_TARGET}" -xdev -mindepth 1 -type d -printf '%P/\n' | LC_ALL=C sort >"${local_dirs}"
+"${rclone[@]}" lsf "${remote}" --dirs-only --recursive 2>>"${log_file}" | LC_ALL=C sort >"${remote_dirs}" \
+  || fail "Unable to enumerate the Google Drive directory structure"
+cmp -s "${local_dirs}" "${remote_dirs}" || fail "Google Drive directory structure verification found differences"
+rm -f "${local_dirs}" "${remote_dirs}"
+
+jq -n --arg status success --arg mode "${mode}" --arg run_id "${run_id}" --arg timestamp "$(date -Is)" \
+  '{status:$status,mode:$mode,run_id:$run_id,timestamp:$timestamp}' >"${status_file}"
+touch "${EDSYS_SHARE_STATUS_DIR}/last-verify-success"
+ping_healthchecks success
+echo "EdSys Share Drive ${mode} verification completed: ${run_id}"

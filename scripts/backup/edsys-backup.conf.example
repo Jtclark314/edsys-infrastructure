@@ -8,6 +8,7 @@ RESTORE_TEST_DIR=/srv/edsys-backup/restore-tests
 STATUS_DIR=/var/lib/edsys-backup
 
 RCLONE_CONFIG=/etc/edsys-backup/rclone.conf
+RCLONE_BIN=/opt/edsys-tools/rclone/current/rclone
 RCLONE_REMOTE=edsys-gdrive
 DRIVE_BACKUP_ROOT="EdSys Backups"
 RCLONE_OFFSITE_DEST="edsys-gdrive:EdSys Backups/restic/edsys-critical-v3"
