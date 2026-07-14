@@ -1,0 +1,17 @@
+[Unit]
+Description=One-shot EdSys full-host reboot acceptance
+After=network-online.target docker.service edsys-container-recovery.service EdSys\x2dShare.mount
+Wants=network-online.target edsys-container-recovery.service
+RequiresMountsFor=/mnt/data-500g /mnt/ai-store /EdSys-Share
+ConditionPathExists=/var/lib/edsys-reboot-acceptance/pending
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/edsys-reboot-acceptance check
+TimeoutStartSec=20min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+
+[Install]
+WantedBy=multi-user.target
