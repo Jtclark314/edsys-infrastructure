@@ -17,6 +17,7 @@
 /mnt/ai-store/rag
 /mnt/ai-store/piper
 /mnt/ai-store/whisper
+/mnt/ai-store/remotion/outputs
 /srv/edsys-backup/staging
 /home/jeremy/code
 /home/jeremy/.codex

@@ -17,7 +17,7 @@ This directory contains the host-side tooling for EdSys offsite backups.
 
 The scripts are designed to protect critical service state first. They exclude replaceable bulk media by default.
 
-As of the 2026-06-29 UTC hardening pass, the default 9950x include set also protects the operator repos under `/home/jeremy/code`, selected shell/Codex hub state, and `/opt/edsys-workhorse` runtime state. Replaceable Codex package caches and Loki/renovate cache-heavy paths remain excluded.
+As of the 2026-07-13 Remotion hardening pass, the default 9950x include set also protects the operator repos under `/home/jeremy/code`, selected shell/Codex hub state, `/opt/edsys-workhorse` runtime state, and durable Remotion deliverables under `/mnt/ai-store/remotion/outputs`. Replaceable Remotion browser caches/temp data, Codex package caches, and Loki/renovate cache-heavy paths remain excluded.
 
 ## Files
 
