@@ -20,6 +20,9 @@ It checks:
 Private run records live under `/var/lib/edsys-reboot-acceptance/` and must not
 enter Git or RAG.
 
+Identity sets are normalized with the C locale so interactive arming and
+system-service verification cannot disagree solely because of collation.
+
 ## Install and arm
 
 ```bash

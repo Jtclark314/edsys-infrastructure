@@ -87,7 +87,7 @@ atomic_write() {
 capture_failed_units() {
   systemctl --failed --no-legend --plain 2>/dev/null \
     | awk '$1 ~ /\.service$/ {print $1}' \
-    | sort -u
+    | LC_ALL=C sort -u
 }
 
 capture_docker_identities() {
@@ -95,7 +95,9 @@ capture_docker_identities() {
   mapfile -t ids < <(docker ps -aq)
   ((${#ids[@]} > 0)) || return 0
   # Container identity, not start time, is the stable reboot boundary.
-  docker inspect "${ids[@]}" --format '{{.Name}}|{{.Id}}' | sed 's#^/##' | sort
+  docker inspect "${ids[@]}" --format '{{.Name}}|{{.Id}}' \
+    | sed 's#^/##' \
+    | LC_ALL=C sort
 }
 
 capture_package_versions() {
@@ -192,9 +194,18 @@ full_acceptance() {
   local run_dir="$1"
   local unit port
 
-  [[ -x ${SHARE_MOUNT_CHECK} ]] || die "missing Share mount validator: ${SHARE_MOUNT_CHECK}"
-  [[ -x ${AI_PROXY_CHECK} ]] || die "missing AI proxy validator: ${AI_PROXY_CHECK}"
-  [[ -x ${CONTAINER_RECOVERY} ]] || die "missing container recovery validator: ${CONTAINER_RECOVERY}"
+  [[ -x ${SHARE_MOUNT_CHECK} ]] || {
+    echo "missing Share mount validator: ${SHARE_MOUNT_CHECK}" >&2
+    return 1
+  }
+  [[ -x ${AI_PROXY_CHECK} ]] || {
+    echo "missing AI proxy validator: ${AI_PROXY_CHECK}" >&2
+    return 1
+  }
+  [[ -x ${CONTAINER_RECOVERY} ]] || {
+    echo "missing container recovery validator: ${CONTAINER_RECOVERY}" >&2
+    return 1
+  }
   "${SHARE_MOUNT_CHECK}"
   "${AI_PROXY_CHECK}"
   "${CONTAINER_RECOVERY}" audit
@@ -218,25 +229,36 @@ full_acceptance() {
 
   local unhealthy
   unhealthy="$(docker ps --filter health=unhealthy --format '{{.Names}}')"
-  [[ -z ${unhealthy} ]] || die "unhealthy containers: ${unhealthy//$'\n'/,}"
+  [[ -z ${unhealthy} ]] || {
+    echo "unhealthy containers: ${unhealthy//$'\n'/,}" >&2
+    return 1
+  }
 
   capture_docker_identities >"${run_dir}/docker-identities.after"
-  cmp -s "${run_dir}/docker-identities.before" "${run_dir}/docker-identities.after" \
-    || die "Docker container identity set changed across reboot"
+  cmp -s "${run_dir}/docker-identities.before" "${run_dir}/docker-identities.after" || {
+    echo "Docker container identity set changed across reboot" >&2
+    return 1
+  }
 
   capture_package_versions >"${run_dir}/packages.after"
-  cmp -s "${run_dir}/packages.before" "${run_dir}/packages.after" \
-    || die "accepted package versions changed across reboot"
+  cmp -s "${run_dir}/packages.before" "${run_dir}/packages.after" || {
+    echo "accepted package versions changed across reboot" >&2
+    return 1
+  }
 
   /home/jeremy/.local/bin/codex --version >"${run_dir}/codex.after"
-  cmp -s "${run_dir}/codex.before" "${run_dir}/codex.after" \
-    || die "Codex version changed before reboot acceptance"
+  cmp -s "${run_dir}/codex.before" "${run_dir}/codex.after" || {
+    echo "Codex version changed before reboot acceptance" >&2
+    return 1
+  }
 
   capture_failed_units >"${run_dir}/failed-units.after"
   comm -13 "${run_dir}/failed-units.before" "${run_dir}/failed-units.after" \
     >"${run_dir}/failed-units.new"
-  [[ ! -s ${run_dir}/failed-units.new ]] || \
-    die "new failed systemd units appeared after reboot"
+  [[ ! -s ${run_dir}/failed-units.new ]] || {
+    echo "new failed systemd units appeared after reboot" >&2
+    return 1
+  }
 
   tailscale ip -4 | grep -Fxq '100.87.137.47'
   nvidia-smi --query-gpu=name,driver_version --format=csv,noheader >/dev/null
