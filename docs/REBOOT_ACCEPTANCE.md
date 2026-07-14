@@ -17,6 +17,21 @@ It checks:
 - NVIDIA visibility, the accepted Codex version, accepted package versions,
   and absence of newly failed systemd services.
 
+Ubuntu's supported OpenSSH socket-activation posture is accepted when
+`ssh.socket` is enabled/active and `ssh.service` is active; the service itself
+does not need a duplicate enablement link. EdSys firewall guards that are
+required by early sockets run before `network-pre.target`, while the
+Tailnet-only SMB socket starts from `multi-user.target` after Tailscale. This
+avoids creating a `basic.target`/`sockets.target` ordering cycle that can leave
+remote listeners absent on an otherwise successful boot.
+
+Docker live restore is deliberately disabled for full-host reboot reliability.
+Dockerd stops containers before systemd removes Docker network namespaces and
+unmounts `/mnt/data-500g`; restart policies plus the ordered recovery service
+then restore the same container identities and gate application health. The
+daemon receives a 120-second container shutdown budget within a three-minute
+systemd stop window.
+
 Private run records live under `/var/lib/edsys-reboot-acceptance/` and must not
 enter Git or RAG.
 

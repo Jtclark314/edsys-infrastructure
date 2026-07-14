@@ -14,6 +14,13 @@ valid before the network devices appear, so boot does not need a fail-open
 listener window. Reload replaces the dedicated table in one checked nftables
 transaction rather than deleting it before the replacement is ready.
 
+The guard uses `DefaultDependencies=no`, runs after local filesystems and
+before `network-pre.target`, and is required by both OpenSSH units. That early
+placement is intentional: keeping the ordinary service defaults while making
+`ssh.socket` depend on the guard creates a cycle through
+`basic.target -> sockets.target`, causing systemd to drop the SSH socket's boot
+job.
+
 Install only after validating the configured interface names and controller
 addresses:
 

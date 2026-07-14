@@ -1,7 +1,13 @@
 [Unit]
 Description=EdSys Share Tailnet SMB listener
+# This listener needs tailscaled and the nftables allowlist, both of which start
+# after basic.target.  Disable the socket unit's implicit Before=sockets.target
+# ordering so the late network dependency cannot form a boot ordering cycle.
+DefaultDependencies=no
 After=tailscaled.service edsys-share-tailnet-guard.service
 Requires=tailscaled.service edsys-share-tailnet-guard.service
+Before=shutdown.target
+Conflicts=shutdown.target
 
 [Socket]
 ListenStream=@TAILNET_LISTEN_IP@:445
@@ -11,4 +17,4 @@ NoDelay=yes
 Accept=no
 
 [Install]
-WantedBy=sockets.target
+WantedBy=multi-user.target

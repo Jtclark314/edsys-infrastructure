@@ -5,7 +5,7 @@ Status: helper scripts for local EdSys operations. Prefer report-only behavior u
 ## Scripts
 
 - `edsys-container-recovery.py` - manifest-driven, health-gated Docker recovery and audit.
-- `install-container-recovery.sh` - validated installer for the recovery manifest, systemd units, Docker drop-in, and live-restore setting.
+- `install-container-recovery.sh` - validated installer for the recovery manifest, systemd units, Docker drop-in, and deterministic host-shutdown posture with live restore disabled.
 - `docker-cleanup-report.sh` - prints Docker disk/reclaimable/exited-container/unused-volume candidates without pruning or deleting anything.
 - `edsys-healthchecks-ping.sh` - generic systemd `ExecStartPost` ping helper. It reads `HC_PING_URL` from a private environment file and prints no ping URLs.
 - `bootstrap-healthchecks.sh` - creates local Healthchecks records, private systemd environment files, and systemd drop-ins for EdSys timer pings. The generated files belong under `/etc/edsys-healthchecks/` and `/etc/systemd/system/*.service.d/`, not Git.

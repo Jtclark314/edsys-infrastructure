@@ -1,6 +1,12 @@
 [Unit]
 Description=Restrict 9950x SSH to intended LAN and Tailnet controllers
-Before=ssh.socket ssh.service
+# ssh.socket normally starts before sockets.target.  Run this firewall guard
+# early enough that requiring it from ssh.socket cannot create a boot ordering
+# cycle through basic.target -> sockets.target.
+DefaultDependencies=no
+After=local-fs.target
+Before=network-pre.target ssh.socket ssh.service
+Wants=network-pre.target
 
 [Service]
 Type=oneshot

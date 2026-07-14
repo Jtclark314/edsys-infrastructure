@@ -18,6 +18,16 @@ CORE_SERVICES=(
   edsys-share-tailnet-guard.service
 )
 
+CORE_ENABLED_SERVICES=(
+  containerd.service
+  docker.service
+  tailscaled.service
+  smbd.service
+  nmbd.service
+  netdata.service
+  edsys-share-tailnet-guard.service
+)
+
 CRITICAL_TIMERS=(
   edsys-backup.timer
   edsys-backup-check.timer
@@ -209,11 +219,21 @@ full_acceptance() {
   "${SHARE_MOUNT_CHECK}"
   "${AI_PROXY_CHECK}"
   "${CONTAINER_RECOVERY}" audit
+  [[ $(docker info --format '{{.LiveRestoreEnabled}}') == false ]] || {
+    echo "Docker live restore must remain disabled for deterministic host shutdown" >&2
+    return 1
+  }
 
-  for unit in "${CORE_SERVICES[@]}"; do
+  for unit in "${CORE_ENABLED_SERVICES[@]}"; do
     systemctl is-enabled --quiet "${unit}"
     systemctl is-active --quiet "${unit}"
   done
+  # Ubuntu 24.04 can use systemd socket activation for OpenSSH.  In that
+  # supported posture ssh.service is active but intentionally not enabled;
+  # ssh.socket is the enabled boot unit.
+  systemctl is-enabled --quiet ssh.socket
+  systemctl is-active --quiet ssh.socket
+  systemctl is-active --quiet ssh.service
   systemctl is-enabled --quiet edsys-share-tailnet-smb.socket
   systemctl is-active --quiet edsys-share-tailnet-smb.socket
 

@@ -381,7 +381,11 @@ for unit in \
 done
 
 systemctl daemon-reload
-systemctl enable --now edsys-share-tailnet-guard.service edsys-share-tailnet-smb.socket
+systemctl enable --now edsys-share-tailnet-guard.service
+# Reenable migrates an existing install from the former sockets.target link to
+# multi-user.target after the late-network socket ordering fix.
+systemctl reenable edsys-share-tailnet-smb.socket
+systemctl start edsys-share-tailnet-smb.socket
 
 if [[ "${ENABLE_BACKUP}" == true ]]; then
   "${EDSYS_SHARE_RCLONE_BIN}" --config "${EDSYS_SHARE_RCLONE_CONFIG}" about "${EDSYS_SHARE_RCLONE_REMOTE}:" >/dev/null

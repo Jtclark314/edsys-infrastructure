@@ -8,8 +8,14 @@ used after a Docker daemon restart or host reboot.
 - Automatic recovery only targets explicitly listed long-running services.
 - Existing containers are required before a tier is started.
 - Recovery uses `docker compose start`, which can only start existing containers.
-- Already-running live-restored services are skipped rather than restarted or
+- Already-running healthy services are skipped rather than restarted or
   blocked on Docker health state reinitialization.
+- Docker live restore is deliberately disabled. On a host shutdown, dockerd
+  must stop containers before systemd tears down network namespaces and the
+  external Docker data-root mount; restart policies and this ordered recovery
+  controller restore the approved services on the next boot.
+- Dockerd receives a 120-second container shutdown budget, while systemd gives
+  the daemon three minutes to complete that work before escalation.
 - Missing containers, mounts, or blocking health gates stop the sequence.
 - `/run/edsys/container-recovery.disabled` suppresses recovery during maintenance.
 - A five-minute cooldown prevents restart storms.

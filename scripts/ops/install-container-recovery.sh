@@ -44,7 +44,12 @@ from pathlib import Path
 import sys
 path = Path(sys.argv[1])
 data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-data["live-restore"] = True
+# Host reboots must let dockerd stop containers before systemd tears down
+# Docker network namespaces and the external data-root mount.  The ordered
+# recovery controller and existing restart policies provide the boot recovery
+# path; live restore remains deliberately disabled for host-shutdown safety.
+data["live-restore"] = False
+data["shutdown-timeout"] = 120
 tmp = path.with_suffix(".tmp")
 tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 os.chmod(tmp, 0o644)
