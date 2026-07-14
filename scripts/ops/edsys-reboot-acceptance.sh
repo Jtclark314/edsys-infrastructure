@@ -37,6 +37,9 @@ CRITICAL_TIMERS=(
 
 AI_PROXY_PORTS=(3000 3002 6333 7997 8015 8020 8099 11434)
 PACKAGES=(containerd.io netdata-user trivy vivaldi-stable)
+SHARE_MOUNT_CHECK="${EDSYS_SHARE_MOUNT_CHECK:-/usr/local/libexec/edsys-share/edsys-share-mount-check}"
+AI_PROXY_CHECK="${EDSYS_AI_PROXY_CHECK:-/usr/local/sbin/edsys-ai-tailnet-proxy-check}"
+CONTAINER_RECOVERY="${EDSYS_CONTAINER_RECOVERY:-/usr/local/sbin/edsys-container-recovery}"
 
 usage() {
   cat <<'EOF'
@@ -189,9 +192,12 @@ full_acceptance() {
   local run_dir="$1"
   local unit port
 
-  /usr/local/sbin/edsys-share-mount-check
-  /usr/local/sbin/edsys-ai-tailnet-proxy-check
-  /usr/local/sbin/edsys-container-recovery audit
+  [[ -x ${SHARE_MOUNT_CHECK} ]] || die "missing Share mount validator: ${SHARE_MOUNT_CHECK}"
+  [[ -x ${AI_PROXY_CHECK} ]] || die "missing AI proxy validator: ${AI_PROXY_CHECK}"
+  [[ -x ${CONTAINER_RECOVERY} ]] || die "missing container recovery validator: ${CONTAINER_RECOVERY}"
+  "${SHARE_MOUNT_CHECK}"
+  "${AI_PROXY_CHECK}"
+  "${CONTAINER_RECOVERY}" audit
 
   for unit in "${CORE_SERVICES[@]}"; do
     systemctl is-enabled --quiet "${unit}"
