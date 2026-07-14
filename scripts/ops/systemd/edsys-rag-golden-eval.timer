@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the EdSys grounded-RAG quality gate every Monday at 05:00 Eastern
+
+[Timer]
+OnCalendar=Mon *-*-* 05:00:00 America/New_York
+Persistent=true
+AccuracySec=1min
+Unit=edsys-rag-golden-eval.service
+
+[Install]
+WantedBy=timers.target

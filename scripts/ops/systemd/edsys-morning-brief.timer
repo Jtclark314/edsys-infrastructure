@@ -1,0 +1,11 @@
+[Unit]
+Description=Generate the EdSys Morning Brief daily at 06:00 Eastern
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 America/New_York
+Persistent=true
+AccuracySec=1min
+Unit=edsys-morning-brief.service
+
+[Install]
+WantedBy=timers.target

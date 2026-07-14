@@ -1,0 +1,42 @@
+[Unit]
+Description=Generate the private read-only EdSys Morning Brief
+Documentation=file:/srv/edsys/edsys-infrastructure/scripts/ops/README.md
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/srv/edsys
+AssertPathIsDirectory=/srv/edsys/EdSys-Master
+AssertPathExists=/usr/local/libexec/edsys-codex-report-runner.py
+AssertPathExists=/home/jeremy/.local/bin/codex
+
+[Service]
+Type=oneshot
+User=jeremy
+Group=jeremy
+UMask=0077
+StateDirectory=edsys-codex-reports
+StateDirectoryMode=0700
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PATH=/home/jeremy/.local/bin:/home/jeremy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/bin/python3 /usr/local/libexec/edsys-codex-report-runner.py morning-brief
+TimeoutStartSec=20min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+ReadWritePaths=/var/lib/edsys-codex-reports

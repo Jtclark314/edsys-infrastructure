@@ -19,3 +19,7 @@ Scripts should:
 - `deploy/` - deployment preparation helpers such as the 9950x workhorse bootstrap.
 - `network/` - exact-address exposure helpers, including the FreeBind AI Tailnet socket proxy.
 - `ops/` - operational helpers and report-only scripts.
+
+Always-on Codex operations (Morning Brief, weekly maintenance, and grounded-RAG
+quality evaluation) are deployed from `ops/install-codex-operations.sh`; their
+runtime reports and credentials remain outside Git.

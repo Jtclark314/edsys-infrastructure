@@ -1,0 +1,11 @@
+[Unit]
+Description=Run EdSys weekly Codex maintenance every Monday at 07:30 Eastern
+
+[Timer]
+OnCalendar=Mon *-*-* 07:30:00 America/New_York
+Persistent=true
+AccuracySec=1min
+Unit=edsys-weekly-codex-maintenance.service
+
+[Install]
+WantedBy=timers.target
