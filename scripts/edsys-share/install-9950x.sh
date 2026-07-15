@@ -68,10 +68,19 @@ fi
 # shellcheck source=/dev/null
 source "${CONFIG_FILE}"
 : "${EDSYS_SHARE_RESTORE_DIR:=/mnt/ai-store/edsys-share-restore-staging}"
+: "${FOOTHILLS_INBOX_SOURCE:=/mnt/ai-store/foothills-project/00-inbox}"
+: "${FOOTHILLS_INBOX_TARGET:=/Foothills-Inbox}"
+: "${FOOTHILLS_PROJECT_INBOX_TARGET:=/home/jeremy/projects/foothills/00-inbox}"
 RESTRICTED_SMB_USERS=(edsys-share-nimo edsys-share-dell)
 
 [[ "${EDSYS_SHARE_TARGET}" == /EdSys-Share ]] || { echo "Unexpected share target" >&2; exit 2; }
 [[ "${EDSYS_SHARE_SOURCE}" == /mnt/ai-store/* ]] || { echo "Share source must be under AI Store" >&2; exit 2; }
+[[ "${FOOTHILLS_INBOX_TARGET}" == /Foothills-Inbox ]] \
+  || { echo "Unexpected Foothills Inbox target" >&2; exit 2; }
+[[ "${FOOTHILLS_PROJECT_INBOX_TARGET}" == /home/jeremy/projects/foothills/00-inbox ]] \
+  || { echo "Unexpected Foothills project inbox target" >&2; exit 2; }
+[[ "${FOOTHILLS_INBOX_SOURCE}" == /mnt/ai-store/foothills-project/00-inbox ]] \
+  || { echo "Unexpected Foothills Inbox source" >&2; exit 2; }
 ip -4 addr show tailscale0 | grep -q "inet ${EDSYS_SHARE_TAILNET_LISTEN_IP}/" || {
   echo "Configured Tailnet listen address is not present on tailscale0" >&2
   exit 2
@@ -269,28 +278,78 @@ if ! mountpoint -q "${EDSYS_SHARE_TARGET}"; then
   # bind mount is active, the visible ownership/mode come from the source.
   install -d -m 0000 -o root -g root "${EDSYS_SHARE_TARGET}"
 fi
-fstab_line="${EDSYS_SHARE_SOURCE} ${EDSYS_SHARE_TARGET} none bind,x-systemd.requires-mounts-for=/mnt/ai-store 0 0"
-python3 - "${fstab_line}" <<'PY'
+install -d -m 2770 -o jeremy -g jeremy "${FOOTHILLS_INBOX_SOURCE}"
+for foothills_target in "${FOOTHILLS_INBOX_TARGET}" "${FOOTHILLS_PROJECT_INBOX_TARGET}"; do
+  if ! mountpoint -q "${foothills_target}"; then
+    if [[ -e "${foothills_target}" || -L "${foothills_target}" ]]; then
+      [[ -d "${foothills_target}" && ! -L "${foothills_target}" ]] \
+        || { echo "Unsafe Foothills Inbox mount target: ${foothills_target}" >&2; exit 1; }
+    else
+      install -d -m 0000 -o root -g root "${foothills_target}"
+    fi
+    if find "${foothills_target}" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+      echo "Unmanaged files exist under unmounted target: ${foothills_target}" >&2
+      exit 1
+    fi
+    chown root:root "${foothills_target}"
+    chmod 0000 "${foothills_target}"
+  fi
+done
+edsys_fstab_line="${EDSYS_SHARE_SOURCE} ${EDSYS_SHARE_TARGET} none bind,x-systemd.requires-mounts-for=/mnt/ai-store 0 0"
+foothills_fstab_line="${FOOTHILLS_INBOX_SOURCE} ${FOOTHILLS_INBOX_TARGET} none bind,x-systemd.requires-mounts-for=/mnt/ai-store 0 0"
+foothills_project_fstab_line="${FOOTHILLS_INBOX_SOURCE} ${FOOTHILLS_PROJECT_INBOX_TARGET} none bind,x-systemd.requires-mounts-for=/mnt/ai-store 0 0"
+python3 - "${edsys_fstab_line}" "${foothills_fstab_line}" "${foothills_project_fstab_line}" <<'PY'
 from pathlib import Path
 import os
 import sys
 import tempfile
 
 path = Path("/etc/fstab")
-marker = "# EdSys Share: root-level bind mount backed by AI Store"
-wanted = sys.argv[1]
 lines = path.read_text().splitlines()
-target_indexes = [i for i, line in enumerate(lines) if line.strip() and not line.lstrip().startswith("#") and len(line.split()) >= 2 and line.split()[1] == "/EdSys-Share"]
-if len(target_indexes) > 1:
-    raise SystemExit("Ambiguous duplicate /EdSys-Share fstab entries")
-if target_indexes:
-    i = target_indexes[0]
-    if i == 0 or lines[i - 1].strip() != marker:
-        raise SystemExit("Unmanaged /EdSys-Share fstab entry exists; refusing replacement")
-    del lines[i - 1:i + 1]
+lines = [
+    "# Foothills Inbox: project workspace bind mount backed by AI Store"
+    if line.strip() == "# Foothills Inbox: project intake bind mount backed by AI Store"
+    else line
+    for line in lines
+]
+managed = (
+    (
+        "/EdSys-Share",
+        "# EdSys Share: root-level bind mount backed by AI Store",
+        sys.argv[1],
+    ),
+    (
+        "/Foothills-Inbox",
+        "# Foothills Inbox: root-level SMB bind mount backed by AI Store",
+        sys.argv[2],
+    ),
+    (
+        "/home/jeremy/projects/foothills/00-inbox",
+        "# Foothills Inbox: project workspace bind mount backed by AI Store",
+        sys.argv[3],
+    ),
+)
+for target, marker, wanted in managed:
+    target_indexes = [
+        i
+        for i, line in enumerate(lines)
+        if line.strip()
+        and not line.lstrip().startswith("#")
+        and len(line.split()) >= 2
+        and line.split()[1] == target
+    ]
+    if len(target_indexes) > 1:
+        raise SystemExit(f"Ambiguous duplicate {target} fstab entries")
+    if target_indexes:
+        i = target_indexes[0]
+        if i == 0 or lines[i - 1].strip() != marker:
+            raise SystemExit(f"Unmanaged {target} fstab entry exists; refusing replacement")
+        del lines[i - 1:i + 1]
+    while lines and not lines[-1].strip():
+        lines.pop()
+    lines.extend(["", marker, wanted])
 while lines and not lines[-1].strip():
     lines.pop()
-lines.extend(["", marker, wanted])
 data = "\n".join(lines) + "\n"
 fd, name = tempfile.mkstemp(dir=path.parent, prefix=".fstab.edsys-share.")
 try:
@@ -307,12 +366,18 @@ finally:
 PY
 systemctl daemon-reload
 mountpoint -q "${EDSYS_SHARE_TARGET}" || mount "${EDSYS_SHARE_TARGET}"
+mountpoint -q "${FOOTHILLS_INBOX_TARGET}" || mount "${FOOTHILLS_INBOX_TARGET}"
+mountpoint -q "${FOOTHILLS_PROJECT_INBOX_TARGET}" || mount "${FOOTHILLS_PROJECT_INBOX_TARGET}"
 
 install -d -m 0755 -o root -g root /usr/local/libexec/edsys-share
 install -m 0755 -o root -g root "${SCRIPT_DIR}/edsys-share-mount-check" /usr/local/libexec/edsys-share/edsys-share-mount-check
+install -m 0755 -o root -g root "${SCRIPT_DIR}/foothills-inbox-mount-check" /usr/local/libexec/edsys-share/foothills-inbox-mount-check
 cc -std=c11 -O2 -Wall -Wextra -Werror "${SCRIPT_DIR}/edsys-share-mount-check-smb.c" -o /usr/local/libexec/edsys-share/edsys-share-mount-check-smb
 chown root:root /usr/local/libexec/edsys-share/edsys-share-mount-check-smb
 chmod 0755 /usr/local/libexec/edsys-share/edsys-share-mount-check-smb
+cc -std=c11 -O2 -Wall -Wextra -Werror "${SCRIPT_DIR}/foothills-inbox-mount-check-smb.c" -o /usr/local/libexec/edsys-share/foothills-inbox-mount-check-smb
+chown root:root /usr/local/libexec/edsys-share/foothills-inbox-mount-check-smb
+chmod 0755 /usr/local/libexec/edsys-share/foothills-inbox-mount-check-smb
 install -m 0755 -o root -g root "${SCRIPT_DIR}/edsys-share-tailnet-guard" /usr/local/libexec/edsys-share/edsys-share-tailnet-guard
 install -m 0755 -o root -g root "${SCRIPT_DIR}/edsys-share-gdrive-sync" /usr/local/sbin/edsys-share-gdrive-sync
 install -m 0755 -o root -g root "${SCRIPT_DIR}/edsys-share-gdrive-verify" /usr/local/sbin/edsys-share-gdrive-verify
@@ -322,6 +387,8 @@ install -d -m 0750 -o root -g root "${EDSYS_SHARE_STATUS_DIR}" "${EDSYS_SHARE_RE
 
 /usr/local/libexec/edsys-share/edsys-share-mount-check
 /usr/local/libexec/edsys-share/edsys-share-mount-check-smb
+/usr/local/libexec/edsys-share/foothills-inbox-mount-check
+/usr/local/libexec/edsys-share/foothills-inbox-mount-check-smb
 
 # Samba's AppArmor profile intentionally blocks arbitrary root preexec shells.
 # Transition only the fixed /bin/sh invocation into a narrow profile that may
@@ -411,7 +478,7 @@ if [[ "${ENABLE_BACKUP}" == true ]]; then
     edsys-share-gdrive-verify-checksum.timer \
     edsys-share-gdrive-prune.timer
 else
-  echo "Drive timers installed but left disabled until OAuth, dry-run, seed, and restore checks pass."
+  echo "Drive timer enablement state was left unchanged."
 fi
 
 echo "EdSys Share host installation completed."

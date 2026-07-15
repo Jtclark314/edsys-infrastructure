@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONFIG_FILE="${EDSYS_SHARE_CONFIG:-/etc/edsys-share/edsys-share.conf}"
+if [[ -r "${CONFIG_FILE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${CONFIG_FILE}"
+fi
+
+source_path="${FOOTHILLS_INBOX_SOURCE:-/mnt/ai-store/foothills-project/00-inbox}"
+target_path="${FOOTHILLS_INBOX_TARGET:-/Foothills-Inbox}"
+
+mountpoint -q "${target_path}" || {
+  echo "Foothills Inbox target is not mounted: ${target_path}" >&2
+  exit 1
+}
+findmnt -rn -M /mnt/ai-store >/dev/null || {
+  echo "AI Store backing mount is unavailable" >&2
+  exit 1
+}
+
+source_identity="$(stat -Lc '%d:%i' "${source_path}")"
+target_identity="$(stat -Lc '%d:%i' "${target_path}")"
+[[ "${source_identity}" == "${target_identity}" ]] || {
+  echo "Foothills Inbox target is not the expected bind mount" >&2
+  exit 1
+}
+
+findmnt -rn -M "${target_path}" -o OPTIONS | tr ',' '\n' | grep -qx rw || {
+  echo "Foothills Inbox target is not writable" >&2
+  exit 1
+}

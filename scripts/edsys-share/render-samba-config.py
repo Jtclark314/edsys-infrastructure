@@ -19,10 +19,17 @@ ASSIGNMENT_PATTERN = re.compile(
     r"[ \t]*=[ \t]*(?P<value>[^\r\n]*)(?P<newline>\r?\n|\Z)"
 )
 
-TARGET_SECTION = "EdSys-Share"
-EXPECTED_PATH = "/EdSys-Share"
 EXPECTED_FORCE_USER = "jeremy"
-EXPECTED_PREEXEC = "/usr/local/libexec/edsys-share/edsys-share-mount-check-smb"
+MANAGED_SHARES = {
+    "EdSys-Share": {
+        "path": "/EdSys-Share",
+        "preexec": "/usr/local/libexec/edsys-share/edsys-share-mount-check-smb",
+    },
+    "Foothills-Inbox": {
+        "path": "/Foothills-Inbox",
+        "preexec": "/usr/local/libexec/edsys-share/foothills-inbox-mount-check-smb",
+    },
+}
 
 GLOBAL_MANAGED_OPTIONS = {
     "interfaces",
@@ -232,24 +239,11 @@ def require_single_option_alias(
     return matches[0].group("value").strip(" \t")
 
 
-def validate_fragment(fragment: str, restricted_users: tuple[str, ...]) -> None:
-    validate_physical_syntax(fragment, "share fragment")
-    reject_dynamic_sources(fragment, "share fragment")
-    assert_unique_sections(fragment, "share fragment")
-
-    sections = list(SECTION_PATTERN.finditer(fragment))
-    if (
-        len(sections) != 1
-        or sections[0].group("name").strip().casefold() != TARGET_SECTION.casefold()
-    ):
-        raise SystemExit(
-            f"Share fragment must define exactly one [{TARGET_SECTION}] section"
-        )
-
-    if assignment_matches_any(fragment, GLOBAL_MANAGED_OPTIONS):
-        raise SystemExit("Share fragment may not override managed global Samba policy")
-
-    body = sections[0].group("body")
+def validate_managed_section(
+    section: str,
+    body: str,
+    restricted_users: tuple[str, ...],
+) -> None:
     assignments = list(ASSIGNMENT_PATTERN.finditer(body))
     assignment_lines = {body.count("\n", 0, match.start()) + 1 for match in assignments}
     for line_number, line in enumerate(body.splitlines(), start=1):
@@ -260,7 +254,7 @@ def validate_fragment(fragment: str, restricted_users: tuple[str, ...]) -> None:
             and line_number not in assignment_lines
         ):
             raise SystemExit(
-                f"[{TARGET_SECTION}] contains unsupported active syntax on "
+                f"[{section}] contains unsupported active syntax on "
                 f"body line {line_number}"
             )
 
@@ -270,33 +264,36 @@ def validate_fragment(fragment: str, restricted_users: tuple[str, ...]) -> None:
         name = normalize_option_name(assignment.group("name"))
         if name not in allowed:
             raise SystemExit(
-                f"[{TARGET_SECTION}] option "
+                f"[{section}] option "
                 f"'{assignment.group('name').strip()}' is not allowed"
             )
         counts[name] = counts.get(name, 0) + 1
     if set(counts) != allowed or any(count != 1 for count in counts.values()):
         raise SystemExit(
-            f"[{TARGET_SECTION}] must contain each managed option exactly once"
+            f"[{section}] must contain each managed option exactly once"
         )
 
-    if require_single_option(body, "path", TARGET_SECTION) != EXPECTED_PATH:
-        raise SystemExit(f"[{TARGET_SECTION}] path must be {EXPECTED_PATH}")
-    if require_single_option(body, "force user", TARGET_SECTION) != EXPECTED_FORCE_USER:
-        raise SystemExit(f"[{TARGET_SECTION}] force user must be {EXPECTED_FORCE_USER}")
+    expected = MANAGED_SHARES[section]
+    expected_path = expected["path"]
+    expected_preexec = expected["preexec"]
+    if require_single_option(body, "path", section) != expected_path:
+        raise SystemExit(f"[{section}] path must be {expected_path}")
+    if require_single_option(body, "force user", section) != EXPECTED_FORCE_USER:
+        raise SystemExit(f"[{section}] force user must be {EXPECTED_FORCE_USER}")
 
     expected_valid_users = " ".join((EXPECTED_FORCE_USER, *restricted_users))
-    valid_users = require_single_option(body, "valid users", TARGET_SECTION)
+    valid_users = require_single_option(body, "valid users", section)
     if valid_users != expected_valid_users:
         raise SystemExit(
-            f"[{TARGET_SECTION}] valid users must contain only "
+            f"[{section}] valid users must contain only "
             f"{expected_valid_users}"
         )
     invalid_matches = assignment_matches(body, "invalid users")
     if invalid_matches[0].group("value").strip(" \t"):
-        raise SystemExit(f"[{TARGET_SECTION}] invalid users must remain empty")
+        raise SystemExit(f"[{section}] invalid users must remain empty")
     admin_matches = assignment_matches(body, "admin users")
     if admin_matches[0].group("value").strip(" \t"):
-        raise SystemExit(f"[{TARGET_SECTION}] admin users must remain empty")
+        raise SystemExit(f"[{section}] admin users must remain empty")
 
     required_values = {
         "guest ok": "no",
@@ -329,20 +326,45 @@ def validate_fragment(fragment: str, restricted_users: tuple[str, ...]) -> None:
         "root preexec close": "yes",
     }
     for option, expected in required_values.items():
-        actual = require_single_option(body, option, TARGET_SECTION)
+        actual = require_single_option(body, option, section)
         if actual.casefold() != expected:
             raise SystemExit(
-                f"[{TARGET_SECTION}] {option} must be {expected}, found {actual}"
+                f"[{section}] {option} must be {expected}, found {actual}"
             )
     encryption = require_single_option_alias(
-        body, ("smb encrypt", "server smb encrypt"), TARGET_SECTION
+        body, ("smb encrypt", "server smb encrypt"), section
     )
     if encryption.casefold() != "required":
-        raise SystemExit(f"[{TARGET_SECTION}] SMB encryption must be required")
-    if require_single_option(body, "root preexec", TARGET_SECTION) != EXPECTED_PREEXEC:
+        raise SystemExit(f"[{section}] SMB encryption must be required")
+    if require_single_option(body, "root preexec", section) != expected_preexec:
         raise SystemExit(
-            f"[{TARGET_SECTION}] root preexec is not the fixed mount guard"
+            f"[{section}] root preexec is not the fixed mount guard"
         )
+
+
+def validate_fragment(fragment: str, restricted_users: tuple[str, ...]) -> None:
+    validate_physical_syntax(fragment, "share fragment")
+    reject_dynamic_sources(fragment, "share fragment")
+    assert_unique_sections(fragment, "share fragment")
+
+    sections = list(SECTION_PATTERN.finditer(fragment))
+    expected_keys = {normalize_section_key(name) for name in MANAGED_SHARES}
+    actual_keys = {
+        normalize_section_key(match.group("name")) for match in sections
+    }
+    if len(sections) != len(MANAGED_SHARES) or actual_keys != expected_keys:
+        names = ", ".join(f"[{name}]" for name in MANAGED_SHARES)
+        raise SystemExit(f"Share fragment must define exactly {names}")
+
+    if assignment_matches_any(fragment, GLOBAL_MANAGED_OPTIONS):
+        raise SystemExit("Share fragment may not override managed global Samba policy")
+
+    canonical = {
+        normalize_section_key(name): name for name in MANAGED_SHARES
+    }
+    for match in sections:
+        section = canonical[normalize_section_key(match.group("name"))]
+        validate_managed_section(section, match.group("body"), restricted_users)
 
 
 def ensure_section_list_member(
@@ -427,12 +449,15 @@ def enforce_global_policy(text: str) -> str:
 
 
 def remove_managed_share_sections(text: str) -> str:
-    pattern = re.compile(
-        r"(?ims)^(?:[ \t]*# EdSys Share:[^\n]*\n(?:[ \t]*\n)*)*"
-        r"[ \t]*\[EdSys-Share\][ \t]*\n.*?"
-        r"(?=^[ \t]*\[[^\n\]]+\][ \t]*\n|\Z)"
-    )
-    return pattern.sub("", text)
+    for section in MANAGED_SHARES:
+        comment = re.escape(section.replace("-", " "))
+        pattern = re.compile(
+            rf"(?ims)^(?:[ \t]*# {comment}:[^\n]*\n(?:[ \t]*\n)*)*"
+            rf"[ \t]*\[{re.escape(section)}\][ \t]*\n.*?"
+            r"(?=^[ \t]*\[[^\n\]]+\][ \t]*\n|\Z)"
+        )
+        text = pattern.sub("", text)
+    return text
 
 
 def render(base: str, fragment: str, restricted_users: tuple[str, ...]) -> str:
@@ -454,8 +479,9 @@ def render(base: str, fragment: str, restricted_users: tuple[str, ...]) -> str:
         "\n",
     )
     text = remove_managed_share_sections(text)
-    if section_matches(text, TARGET_SECTION):
-        raise SystemExit(f"Unable to remove every stale [{TARGET_SECTION}] section")
+    for section in MANAGED_SHARES:
+        if section_matches(text, section):
+            raise SystemExit(f"Unable to remove every stale [{section}] section")
     assert_unique_sections(text)
 
     section_names = [
@@ -501,15 +527,18 @@ def validate_effective_config(path: Path, restricted_users: tuple[str, ...]) -> 
         (name for name in section_names if normalize_section_key(name) == "global"),
         None,
     )
-    target_name = next(
-        (
-            name
-            for name in section_names
-            if name.casefold() == TARGET_SECTION.casefold()
-        ),
-        None,
-    )
-    if global_name is None or target_name is None:
+    target_names = {
+        canonical: next(
+            (
+                name
+                for name in section_names
+                if normalize_section_key(name) == normalize_section_key(canonical)
+            ),
+            None,
+        )
+        for canonical in MANAGED_SHARES
+    }
+    if global_name is None or any(name is None for name in target_names.values()):
         raise SystemExit("Effective Samba configuration is missing a managed section")
 
     def query(section: str, option: str) -> str:
@@ -557,23 +586,7 @@ def validate_effective_config(path: Path, restricted_users: tuple[str, ...]) -> 
                 f"Effective [global] {option} is {actual!r}, expected {expected!r}"
             )
 
-    if query(target_name, "path") != EXPECTED_PATH:
-        raise SystemExit(f"Effective [{TARGET_SECTION}] path is unsafe")
-    if query(target_name, "force user") != EXPECTED_FORCE_USER:
-        raise SystemExit(f"Effective [{TARGET_SECTION}] force user is unsafe")
-    expected_valid_users = " ".join((EXPECTED_FORCE_USER, *restricted_users))
-    valid_users = query(target_name, "valid users")
-    if valid_users != expected_valid_users:
-        raise SystemExit(
-            f"Effective [{TARGET_SECTION}] valid users must contain only "
-            f"{expected_valid_users}"
-        )
-    if query(target_name, "invalid users"):
-        raise SystemExit(f"Effective [{TARGET_SECTION}] invalid users must be empty")
-    encryption = query(target_name, "server smb encrypt")
-    if encryption.casefold() != "required":
-        raise SystemExit(f"Effective [{TARGET_SECTION}] does not require encryption")
-    expected_target = {
+    expected_common = {
         "guest ok": "No",
         "guest only": "No",
         "available": "Yes",
@@ -590,7 +603,6 @@ def validate_effective_config(path: Path, restricted_users: tuple[str, ...]) -> 
         "read only": "No",
         "follow symlinks": "No",
         "wide links": "No",
-        "root preexec": EXPECTED_PREEXEC,
         "root preexec close": "Yes",
         "create mask": "0660",
         "force create mode": "0660",
@@ -607,16 +619,40 @@ def validate_effective_config(path: Path, restricted_users: tuple[str, ...]) -> 
         "postexec": "",
         "root postexec": "",
     }
-    for option, expected in expected_target.items():
-        actual = query(target_name, option)
-        if actual.casefold() != expected.casefold():
+    expected_valid_users = " ".join((EXPECTED_FORCE_USER, *restricted_users))
+    for canonical, settings in MANAGED_SHARES.items():
+        target_name = target_names[canonical]
+        assert target_name is not None
+        if query(target_name, "path") != settings["path"]:
+            raise SystemExit(f"Effective [{canonical}] path is unsafe")
+        if query(target_name, "force user") != EXPECTED_FORCE_USER:
+            raise SystemExit(f"Effective [{canonical}] force user is unsafe")
+        valid_users = query(target_name, "valid users")
+        if valid_users != expected_valid_users:
             raise SystemExit(
-                f"Effective [{TARGET_SECTION}] {option} is {actual!r}, "
-                f"expected {expected!r}"
+                f"Effective [{canonical}] valid users must contain only "
+                f"{expected_valid_users}"
             )
+        if query(target_name, "invalid users"):
+            raise SystemExit(f"Effective [{canonical}] invalid users must be empty")
+        encryption = query(target_name, "server smb encrypt")
+        if encryption.casefold() != "required":
+            raise SystemExit(f"Effective [{canonical}] does not require encryption")
+        expected_target = {
+            **expected_common,
+            "root preexec": settings["preexec"],
+        }
+        for option, expected in expected_target.items():
+            actual = query(target_name, option)
+            if actual.casefold() != expected.casefold():
+                raise SystemExit(
+                    f"Effective [{canonical}] {option} is {actual!r}, "
+                    f"expected {expected!r}"
+                )
 
+    managed_keys = {normalize_section_key(name) for name in MANAGED_SHARES}
     for name in section_names:
-        if normalize_section_key(name) in {"global", TARGET_SECTION.casefold()}:
+        if normalize_section_key(name) == "global" or normalize_section_key(name) in managed_keys:
             continue
         invalid_users = query(name, "invalid users")
         for restricted_user in restricted_users:

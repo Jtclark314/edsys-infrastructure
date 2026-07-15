@@ -10,7 +10,14 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $stateDirectory = Join-Path $env:LOCALAPPDATA 'EdSys'
-$statePath = Join-Path $stateDirectory 'EdSys-Share-Q-status.json'
+$stateFile = if ($LocalPath -eq 'Q:' -and
+    $RemotePath -eq '\\9950x.taile832fe.ts.net\EdSys-Share') {
+    'EdSys-Share-Q-status.json'
+}
+else {
+    'Foothills-Inbox-{0}-status.json' -f $LocalPath.TrimEnd(':')
+}
+$statePath = Join-Path $stateDirectory $stateFile
 New-Item -ItemType Directory -Path $stateDirectory -Force | Out-Null
 
 function Write-EdSysShareState {

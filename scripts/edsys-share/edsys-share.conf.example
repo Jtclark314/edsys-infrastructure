@@ -1,6 +1,9 @@
 # Runtime paths
 EDSYS_SHARE_SOURCE=/mnt/ai-store/edsys-share
 EDSYS_SHARE_TARGET=/EdSys-Share
+FOOTHILLS_INBOX_SOURCE=/mnt/ai-store/foothills-project/00-inbox
+FOOTHILLS_INBOX_TARGET=/Foothills-Inbox
+FOOTHILLS_PROJECT_INBOX_TARGET=/home/jeremy/projects/foothills/00-inbox
 EDSYS_SHARE_STATUS_DIR=/var/lib/edsys-share
 EDSYS_SHARE_REPORT_DIR=/srv/edsys-backup/reports/edsys-share
 EDSYS_SHARE_CACHE_DIR=/var/cache/edsys-share/rclone

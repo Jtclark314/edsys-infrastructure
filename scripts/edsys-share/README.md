@@ -10,12 +10,22 @@ templates.
 - Backing storage: `/mnt/ai-store/edsys-share`
 - Canonical path: `/EdSys-Share` (persistent bind mount)
 - Samba share: `EdSys-Share`
+- Foothills Inbox backing storage: `/mnt/ai-store/foothills-project/00-inbox`
+- Foothills Inbox Samba path: `/Foothills-Inbox`
+- Foothills project path: `/home/jeremy/projects/foothills/00-inbox`
+- Foothills Inbox Samba share: `Foothills-Inbox`
 - Tailnet listener: a dedicated systemd socket on the 9950x Tailnet IP,
   forwarded by `systemd-socket-proxyd` to Samba loopback
 - Tailnet client restriction: dedicated nftables base chain generated from
   `EDSYS_SHARE_TAILNET_CLIENTS`
 - Intended Drive mirror after enablement: `edsys-gdrive:EdSys Share`
 - Intended version recovery after enablement: `edsys-gdrive:EdSys Share Recovery/<run-id>`
+
+The Foothills Inbox source is deliberately outside `/EdSys-Share`. It is bind
+mounted at both the root-level Samba path and the Foothills project inbox, so
+Windows and Codex see the same files without a copy or move. The EdSys Share
+Google Drive sync only reads `/EdSys-Share`; it does not include Foothills
+Inbox.
 
 Samba remains bound to `lo enp7s0`. Samba 4.19 does not reliably bind a
 point-to-point/non-broadcast Tailscale interface while `bind interfaces only`
@@ -38,8 +48,9 @@ Validate source before installation with:
 scripts/edsys-share/test-edsys-share.sh
 ```
 
-The installer backs up `/etc/fstab` and `/etc/samba/smb.conf`, creates the bind
-mount and both mount guards, creates or validates the locked, no-login POSIX
+The installer backs up `/etc/fstab` and `/etc/samba/smb.conf`, creates the
+EdSys Share bind plus both Foothills Inbox binds and their mount guards, creates
+or validates the locked, no-login POSIX
 identities `edsys-share-nimo` and `edsys-share-dell`, validates the full Samba candidate with `testparm`,
 and installs all systemd units. The renderer denies that restricted identity
 from every other statically configured Samba service; disables registry,
@@ -134,6 +145,19 @@ New-SmbMapping -LocalPath 'Q:' `
 The `/pass` switch has no value on purpose and prompts without displaying or
 recording the password in command history.
 
+Map Foothills Inbox with the same saved server credential. These examples use
+`R:`; choose another unused drive letter if needed:
+
+```powershell
+New-SmbMapping -LocalPath 'R:' `
+  -RemotePath '\\9950x.taile832fe.ts.net\Foothills-Inbox' `
+  -Persistent $true -RequireIntegrity $true -RequirePrivacy $true
+```
+
+The share name appears as **Foothills-Inbox** in Explorer. Files written there
+land directly in `/home/jeremy/projects/foothills/00-inbox` on `9950x` and are
+not part of the EdSys Share Google Drive mirror.
+
 For work-laptop profile `THOMPSON\jclark` only:
 
 ```powershell
@@ -153,7 +177,12 @@ remains in Windows Credential Manager; no password is stored in either script.
 ```powershell
 cmdkey /add:9950x.taile832fe.ts.net /user:9950x\edsys-share-nimo /pass
 & .\windows\Install-EdSysShareReconnect.ps1
+& .\windows\Install-FoothillsInboxReconnect.ps1 -LocalPath 'R:'
 ```
+
+The second user-level reconnect task waits for the same encrypted SMB endpoint
+and recreates the Foothills Inbox mapping after logon without storing a password
+in the script.
 
 Basecamp continues to authenticate as `9950x\jeremy`. The managed work-laptop
 profile uses dedicated SMB-only identity `9950x\edsys-share-dell`. Samba forces
@@ -194,8 +223,10 @@ This bounded path must not change Nimo/Basecamp credentials or mappings.
 
 ## Full Rollback
 
-1. In each affected normal Windows profile, remove `Q:` with
-   `Remove-SmbMapping -LocalPath 'Q:' -Force -UpdateProfile`. Delete the saved
+1. In each affected normal Windows profile, remove `Q:` and the selected
+   Foothills Inbox drive (the examples use `R:`) with
+   `Remove-SmbMapping -LocalPath 'Q:' -Force -UpdateProfile` and
+   `Remove-SmbMapping -LocalPath 'R:' -Force -UpdateProfile`. Delete the saved
    FQDN credential only if that profile has no other `9950x` mapping using it;
    preserve the shared Nimo/Basecamp `jeremy` credential. The dedicated Dell
    entry can be removed with `cmdkey /delete:9950x.taile832fe.ts.net`.
@@ -206,8 +237,9 @@ This bounded path must not change Nimo/Basecamp credentials or mappings.
 4. Remove the managed EdSys Share block from the local `smbd` AppArmor file,
    restore its backup if applicable, remove the dedicated preexec profile, and
    reload AppArmor.
-5. Unmount `/EdSys-Share`, then restore the timestamped `/etc/fstab` backup and
-   run `systemctl daemon-reload`.
+5. Unmount `/EdSys-Share`, `/Foothills-Inbox`, and
+   `/home/jeremy/projects/foothills/00-inbox`; then restore the timestamped
+   `/etc/fstab` backup and run `systemctl daemon-reload`.
 6. Disable/remove the `edsys-share-dell` Samba verifier before removing its
    locked POSIX identity. Do not change the shared Nimo/Basecamp `jeremy`
    credential.

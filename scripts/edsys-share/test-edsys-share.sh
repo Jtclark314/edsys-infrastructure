@@ -8,6 +8,7 @@ trap 'rm -rf "${tmp}"' EXIT
 scripts=(
   render-samba-config.py
   edsys-share-mount-check
+  foothills-inbox-mount-check
   edsys-share-tailnet-guard
   edsys-share-gdrive-sync
   edsys-share-gdrive-verify
@@ -45,6 +46,10 @@ if command -v pwsh >/dev/null; then
 fi
 cc -std=c11 -O2 -Wall -Wextra -Werror "${SCRIPT_DIR}/edsys-share-mount-check-smb.c" -o "${tmp}/edsys-share-mount-check-smb"
 "${tmp}/edsys-share-mount-check-smb"
+cc -std=c11 -O2 -Wall -Wextra -Werror "${SCRIPT_DIR}/foothills-inbox-mount-check-smb.c" -o "${tmp}/foothills-inbox-mount-check-smb"
+if mountpoint -q /Foothills-Inbox; then
+  "${tmp}/foothills-inbox-mount-check-smb"
+fi
 if command -v shellcheck >/dev/null; then
   for script in "${scripts[@]}"; do
     [[ "${script}" == *.py ]] || shellcheck "${SCRIPT_DIR}/${script}"
@@ -115,6 +120,14 @@ cat >"${tmp}/smb.conf" <<EOF
 [eDsYs-ShArE]
    path = /tmp/stale-two
    write list = root
+
+[Foothills-Inbox]
+   path = /tmp/stale-inbox-one
+   admin users = root
+
+[fOoThIlLs-InBoX]
+   path = /tmp/stale-inbox-two
+   write list = root
 EOF
 "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/smb.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/rendered-smb.conf" \
@@ -170,8 +183,9 @@ sections = re.findall(
 )
 names = [name.casefold() for name, _ in sections]
 assert names.count("edsys-share") == 1
+assert names.count("foothills-inbox") == 1
 for name, body in sections:
-    if name.casefold() not in {"global", "edsys-share"}:
+    if name.casefold() not in {"global", "edsys-share", "foothills-inbox"}:
         assert re.search(
             r"(?mi)^\s*invalid users\s*=.*\bedsys-share-dell\b", body
         ), name
@@ -202,7 +216,7 @@ sections = re.findall(
     text,
 )
 for name, body in sections:
-    if name.casefold() not in {"global", "edsys-share"}:
+    if name.casefold() not in {"global", "edsys-share", "foothills-inbox"}:
         assert re.search(
             r"(?mi)^\s*invalid users\s*=.*\bedsys-share-dell\b", body
         ), name
@@ -345,8 +359,10 @@ EOF
 "${SCRIPT_DIR}/render-samba-config.py" \
   "${tmp}/global-inheritance.conf" "${SCRIPT_DIR}/samba-share.conf" "${tmp}/global-inheritance-render.conf" \
   --restricted-user edsys-share-nimo --restricted-user edsys-share-dell
-for reset_option in 'admin users' 'force group' 'read list'; do
-  [[ -z "$(testparm -s --section-name=EdSys-Share --parameter-name="${reset_option}" "${tmp}/global-inheritance-render.conf" 2>/dev/null)" ]]
+for managed_share in EdSys-Share Foothills-Inbox; do
+  for reset_option in 'admin users' 'force group' 'read list'; do
+    [[ -z "$(testparm -s --section-name="${managed_share}" --parameter-name="${reset_option}" "${tmp}/global-inheritance-render.conf" 2>/dev/null)" ]]
+  done
 done
 
 cat >"${tmp}/global-synonym.conf" <<EOF
@@ -472,6 +488,8 @@ if rg -n -i 'tusd|tcp 3045|CourierMedia|courier-reader|edsys-courier' \
 fi
 
 grep -Fq 'path = /EdSys-Share' "${SCRIPT_DIR}/samba-share.conf"
+grep -Fq 'path = /Foothills-Inbox' "${SCRIPT_DIR}/samba-share.conf"
+grep -Fq 'FOOTHILLS_INBOX_SOURCE=/mnt/ai-store/foothills-project/00-inbox' "${SCRIPT_DIR}/edsys-share.conf.example"
 grep -Fq '100.84.178.87' "${SCRIPT_DIR}/edsys-share.conf.example"
 grep -Fq 'ListenStream=@TAILNET_LISTEN_IP@:445' "${SCRIPT_DIR}/systemd/edsys-share-tailnet-smb.socket.in"
-echo "EdSys Share source validation passed."
+echo "EdSys Share and Foothills Inbox source validation passed."

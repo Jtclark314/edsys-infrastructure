@@ -2,4 +2,6 @@
   /usr/bin/dash Px -> edsys-share-smb-preexec,
   /EdSys-Share/ rw,
   /EdSys-Share/** rwkl,
+  /Foothills-Inbox/ rw,
+  /Foothills-Inbox/** rwkl,
 # END EDSYS SHARE MANAGED PREEXEC
