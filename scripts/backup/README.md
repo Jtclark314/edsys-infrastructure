@@ -24,6 +24,10 @@ As of the 2026-07-13 Remotion hardening pass, the default 9950x include set also
 - `install-9950x.sh` creates directories, installs templates, and installs systemd units without enabling the timer.
 - `edsys-init-restic.sh` validates the `rclone` remote and initializes the encrypted restic repository.
 - `edsys-backup.sh` runs collection, backup, retention, and report generation.
+- The backup removes only restic-confirmed stale locks before starting and waits
+  up to `RESTIC_LOCK_RETRY` (five minutes by default) for legitimate repository
+  activity to finish. Status-only queries use `--no-lock` so an interrupted
+  inspection cannot block the next scheduled backup.
 - `edsys-collect-remotes.sh` gathers selected read-only remote config exports into staging.
 - `edsys-restic-check.sh` runs a repository health check.
 - `edsys-restore-test.sh` performs a small restore test from the latest snapshot.

@@ -29,8 +29,10 @@ echo
 
 echo "## Latest Local Snapshot"
 if [[ -r "${RESTIC_PASSWORD_FILE}" && -d "${RESTIC_REPOSITORY}" ]]; then
-  restic --repo "${RESTIC_REPOSITORY}" --password-file "${RESTIC_PASSWORD_FILE}" snapshots --latest 3 || true
-  restic --repo "${RESTIC_REPOSITORY}" --password-file "${RESTIC_PASSWORD_FILE}" stats latest || true
+  # These are observational queries. Avoid creating a repository lock so an
+  # interrupted status command cannot block the next scheduled backup.
+  restic --no-lock --repo "${RESTIC_REPOSITORY}" --password-file "${RESTIC_PASSWORD_FILE}" snapshots --latest 3 || true
+  restic --no-lock --repo "${RESTIC_REPOSITORY}" --password-file "${RESTIC_PASSWORD_FILE}" stats latest || true
 else
   echo "Local restic repo or password file missing."
 fi

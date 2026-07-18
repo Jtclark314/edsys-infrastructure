@@ -16,6 +16,7 @@ RCLONE_OFFSITE_DEST="edsys-gdrive:EdSys Backups/restic/edsys-critical-v3"
 RESTIC_REPOSITORY=/srv/edsys-backup/restic-repo/edsys-critical
 RESTIC_PASSWORD_FILE=/etc/edsys-backup/restic-password
 RESTIC_CACHE_DIR=/var/cache/edsys-backup/restic
+RESTIC_LOCK_RETRY=5m
 
 INCLUDE_FILE=/etc/edsys-backup/includes.txt
 EXCLUDE_FILE=/etc/edsys-backup/excludes.txt

@@ -13,6 +13,7 @@ fi
 : "${RESTIC_REPOSITORY:=/srv/edsys-backup/restic-repo/edsys-critical}"
 : "${RESTIC_PASSWORD_FILE:=/etc/edsys-backup/restic-password}"
 : "${RESTIC_CACHE_DIR:=/var/cache/edsys-backup/restic}"
+: "${RESTIC_LOCK_RETRY:=5m}"
 : "${RESTORE_TEST_DIR:=/srv/edsys-backup/restore-tests}"
 : "${REPORT_DIR:=/srv/edsys-backup/reports}"
 
@@ -23,7 +24,7 @@ TARGET="${RESTORE_TEST_DIR}/${RUN_ID}"
 REPORT="${REPORT_DIR}/restore-test-${RUN_ID}.md"
 mkdir -p "${TARGET}" "${REPORT_DIR}"
 
-restic restore latest --target "${TARGET}" --include "/srv/edsys/EdSys-Master/data" --include "/srv/ssd1/docker/stacks/factorio/data/config" --include "/srv/homepage/config" >/tmp/edsys-restore-test.out 2>&1
+restic --retry-lock "${RESTIC_LOCK_RETRY}" restore latest --target "${TARGET}" --include "/srv/edsys/EdSys-Master/data" --include "/srv/ssd1/docker/stacks/factorio/data/config" --include "/srv/homepage/config" >/tmp/edsys-restore-test.out 2>&1
 
 {
   echo "# EdSys Restore Test ${RUN_ID}"

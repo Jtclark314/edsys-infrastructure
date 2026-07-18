@@ -17,6 +17,7 @@ source "${CONFIG_FILE}"
 : "${RESTIC_REPOSITORY:=/srv/edsys-backup/restic-repo/edsys-critical}"
 : "${RESTIC_PASSWORD_FILE:=/etc/edsys-backup/restic-password}"
 : "${RESTIC_CACHE_DIR:=/var/cache/edsys-backup/restic}"
+: "${RESTIC_LOCK_RETRY:=5m}"
 : "${INCLUDE_FILE:=/etc/edsys-backup/includes.txt}"
 : "${EXCLUDE_FILE:=/etc/edsys-backup/excludes.txt}"
 : "${KEEP_DAILY:=30}"
@@ -77,10 +78,6 @@ command -v jq >/dev/null || fail "jq is not installed"
 [[ -r "${INCLUDE_FILE}" ]] || fail "INCLUDE_FILE is missing or unreadable"
 [[ -r "${EXCLUDE_FILE}" ]] || fail "EXCLUDE_FILE is missing or unreadable"
 
-if ! restic snapshots >/dev/null 2>&1; then
-  restic init 2>&1 | tee -a "${LOG_FILE}"
-fi
-
 {
   echo "EdSys local backup run ${RUN_ID}"
   echo "Host: ${HOSTNAME_SHORT}"
@@ -88,6 +85,16 @@ fi
   echo "Repository: ${RESTIC_REPOSITORY}"
   echo "Offsite sync: not run by this script"
 } | tee "${LOG_FILE}"
+
+if [[ -e "${RESTIC_REPOSITORY}/config" ]]; then
+  # Interrupted read-only inspections can leave a stale restic lock. The
+  # unlock command removes stale locks only; it leaves live locks untouched.
+  restic unlock 2>&1 | tee -a "${LOG_FILE}" || fail "restic stale-lock cleanup failed"
+  restic --retry-lock "${RESTIC_LOCK_RETRY}" snapshots >/dev/null 2>&1 \
+    || fail "existing restic repository is inaccessible or remains locked"
+else
+  restic init 2>&1 | tee -a "${LOG_FILE}" || fail "restic repository initialization failed"
+fi
 
 if [[ "${RUN_COLLECTION}" == "true" && "${REMOTE_COLLECTION_ENABLED}" == "true" && -x "${BACKUP_ROOT}/scripts/edsys-collect-remotes.sh" ]]; then
   "${BACKUP_ROOT}/scripts/edsys-collect-remotes.sh" "${RUN_ID}" | tee -a "${LOG_FILE}" || true
@@ -119,7 +126,7 @@ if [[ "${DRY_RUN}" == "true" ]]; then
 fi
 
 set +e
-restic "${RESTIC_ARGS[@]}" 2>&1 | tee -a "${LOG_FILE}"
+restic --retry-lock "${RESTIC_LOCK_RETRY}" "${RESTIC_ARGS[@]}" 2>&1 | tee -a "${LOG_FILE}"
 BACKUP_STATUS="${PIPESTATUS[0]}"
 set -e
 
@@ -129,8 +136,8 @@ fi
 
 SNAPSHOT_ID=""
 if [[ "${DRY_RUN}" != "true" ]]; then
-  SNAPSHOT_ID="$(restic snapshots --tag "${RUN_ID}" --json | jq -r 'if length > 0 then (max_by(.time).short_id // max_by(.time).id // "") else "" end')"
-  restic forget --keep-daily "${KEEP_DAILY}" --keep-weekly "${KEEP_WEEKLY}" --keep-monthly "${KEEP_MONTHLY}" --prune 2>&1 | tee -a "${LOG_FILE}"
+  SNAPSHOT_ID="$(restic --retry-lock "${RESTIC_LOCK_RETRY}" snapshots --tag "${RUN_ID}" --json | jq -r 'if length > 0 then (max_by(.time).short_id // max_by(.time).id // "") else "" end')"
+  restic --retry-lock "${RESTIC_LOCK_RETRY}" forget --keep-daily "${KEEP_DAILY}" --keep-weekly "${KEEP_WEEKLY}" --keep-monthly "${KEEP_MONTHLY}" --prune 2>&1 | tee -a "${LOG_FILE}"
 fi
 
 MISSING_COUNT="$(wc -l < "${MISSING_INCLUDE_FILE}" | tr -d ' ')"

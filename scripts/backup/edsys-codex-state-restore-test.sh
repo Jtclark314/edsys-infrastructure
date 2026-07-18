@@ -12,6 +12,7 @@ fi
 : "${RESTIC_REPOSITORY:=/srv/edsys-backup/restic-repo/edsys-critical}"
 : "${RESTIC_PASSWORD_FILE:=/etc/edsys-backup/restic-password}"
 : "${RESTIC_CACHE_DIR:=/var/cache/edsys-backup/restic}"
+: "${RESTIC_LOCK_RETRY:=5m}"
 : "${RESTORE_TEST_DIR:=${BACKUP_ROOT}/restore-tests}"
 : "${REPORT_DIR:=${BACKUP_ROOT}/reports}"
 : "${CODEX_RESTORE_KEEP_RUNS:=3}"
@@ -264,8 +265,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-SNAPSHOT_ID="$(restic snapshots --tag edsys-critical --json | jq -er 'max_by(.time).id')"
-restic restore "${SNAPSHOT_ID}" \
+SNAPSHOT_ID="$(restic --retry-lock "${RESTIC_LOCK_RETRY}" snapshots --tag edsys-critical --json | jq -er 'max_by(.time).id')"
+restic --retry-lock "${RESTIC_LOCK_RETRY}" restore "${SNAPSHOT_ID}" \
   --target "${INCOMING}" \
   --include "/srv/edsys-backup/staging/codex-state/current"
 

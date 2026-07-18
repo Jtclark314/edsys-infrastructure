@@ -14,6 +14,7 @@ fi
 : "${RCLONE_OFFSITE_DEST:=${RCLONE_REMOTE}:${DRIVE_BACKUP_ROOT}/restic/edsys-critical-v3}"
 : "${RESTIC_PASSWORD_FILE:=/etc/edsys-backup/restic-password}"
 : "${RESTIC_CACHE_DIR:=/var/cache/edsys-backup/restic}"
+: "${RESTIC_LOCK_RETRY:=5m}"
 
 export RCLONE_CONFIG RESTIC_REPOSITORY RESTIC_PASSWORD_FILE RESTIC_CACHE_DIR
 mkdir -p "${RESTIC_REPOSITORY}" "${RESTIC_CACHE_DIR}"
@@ -31,7 +32,9 @@ else
   echo "rclone remote '${RCLONE_REMOTE}:' is not configured; skipping Google Drive folder setup."
 fi
 
-if restic snapshots >/dev/null 2>&1; then
+if [[ -e "${RESTIC_REPOSITORY}/config" ]]; then
+  restic unlock
+  restic --retry-lock "${RESTIC_LOCK_RETRY}" snapshots >/dev/null
   echo "Restic repository already initialized: ${RESTIC_REPOSITORY}"
 else
   restic init

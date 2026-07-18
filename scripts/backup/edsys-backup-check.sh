@@ -16,6 +16,7 @@ source "${CONFIG_FILE}"
 : "${RESTIC_REPOSITORY:=/srv/edsys-backup/restic-repo/edsys-critical}"
 : "${RESTIC_PASSWORD_FILE:=/etc/edsys-backup/restic-password}"
 : "${RESTIC_CACHE_DIR:=/var/cache/edsys-backup/restic}"
+: "${RESTIC_LOCK_RETRY:=5m}"
 : "${REPORT_DIR:=/srv/edsys-backup/reports}"
 
 READ_DATA_SUBSET=""
@@ -39,7 +40,7 @@ if [[ -n "${READ_DATA_SUBSET}" ]]; then
   RESTIC_ARGS+=("--read-data-subset=${READ_DATA_SUBSET}")
 fi
 
-restic "${RESTIC_ARGS[@]}" 2>&1 | tee "${LOG_FILE}"
+restic --retry-lock "${RESTIC_LOCK_RETRY}" "${RESTIC_ARGS[@]}" 2>&1 | tee "${LOG_FILE}"
 
 if [[ "${CHECK_REMOTE}" == "true" ]]; then
   echo "Remote structure for ${RCLONE_OFFSITE_DEST}:"
