@@ -57,6 +57,11 @@ The daemon polls every two seconds. In `auto` mode:
 
 1. If the SAB queue or post-processing has work, qBittorrent is quiesced and
    SAB is released.
+   When `pause_on_post_processing=1` automatically holds SAB's download queue
+   during an active post-processing job, the controller treats that as a valid
+   SAB-active state. It leaves the automatic queue hold intact, keeps
+   qBittorrent quiesced, and does not require the download queue to resume until
+   post-processing finishes.
 2. When SAB becomes empty, SAB keeps control for a continuous 60-second idle
    grace period. This avoids rapid switching between download and processing
    phases.

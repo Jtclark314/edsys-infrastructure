@@ -379,3 +379,53 @@ def test_sab_pause_proof_uses_command_ack_instance_and_zero_pp_work(tmp_path):
 
     active_pp = MODULE.SabSnapshot(True, True, 0, 1, True)
     assert not active_pp.fully_paused
+
+
+def test_sab_resume_accepts_automatic_queue_hold_during_post_processing(tmp_path):
+    cfg = config(tmp_path)
+    cfg.sab_config.write_text("[misc]\napi_key = private-value\n", encoding="utf-8")
+    modes = []
+
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            self.close()
+
+    def opener(request, timeout):
+        assert timeout == cfg.http_timeout_seconds
+        mode = parse_qs(urlparse(request.full_url).query)["mode"][0]
+        modes.append(mode)
+        if mode == "queue":
+            payload = {
+                "queue": {
+                    # pause_on_post_processing intentionally holds downloads.
+                    "paused": True,
+                    "noofslots": 7,
+                    "noofslots_total": 7,
+                    "slots": [],
+                }
+            }
+        elif mode == "history":
+            payload = {"history": {"ppslots": 1}}
+        elif mode == "resume_pp":
+            payload = {"status": True}
+        elif mode == "resume":
+            raise AssertionError("must not fight SAB's post-processing queue hold")
+        else:
+            raise AssertionError(f"unexpected API mode {mode}")
+        return Response(json.dumps(payload).encode())
+
+    def runner(_arguments, **_kwargs):
+        return subprocess.CompletedProcess([], 0, "started-at|0|true\n", "")
+
+    client = MODULE.SabClient(cfg, opener=opener, runner=runner, sleeper=lambda _: None)
+    resumed = client.resume()
+
+    assert resumed.queue_paused is True
+    assert resumed.post_processing_count == 1
+    assert resumed.post_processing_paused is False
+    assert resumed.post_processing_control_confirmed
+    assert "resume_pp" in modes
+    assert "resume" not in modes

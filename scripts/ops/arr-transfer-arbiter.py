@@ -392,8 +392,17 @@ class SabClient:
         while time.monotonic() < deadline:
             if current is None:
                 current = self.snapshot()
+            # With pause_on_post_processing enabled, SAB intentionally reports
+            # its download queue paused while an active post-processing job
+            # runs.  That is a valid SAB-active state: post-processing is the
+            # current transfer phase and qBittorrent must remain quiesced.  Do
+            # not fight SAB's automatic queue hold or wait for it to clear
+            # before confirming the active handoff.
+            queue_target_reached = current.queue_paused is paused
+            if not paused and current.post_processing_count > 0:
+                queue_target_reached = True
             if (
-                current.queue_paused is paused
+                queue_target_reached
                 and current.post_processing_control_confirmed
                 and current.post_processing_paused is paused
                 and (not paused or current.post_processing_count == 0)
@@ -411,7 +420,7 @@ class SabClient:
             else:
                 if not post_processing_known_target:
                     self._set_post_processing_state(False)
-                if current.queue_paused:
+                if current.queue_paused and current.post_processing_count == 0:
                     self._command("resume")
             self.sleeper(0.5)
             current = None
