@@ -6,6 +6,8 @@ Status: helper scripts for local EdSys operations. Prefer report-only behavior u
 
 - `edsys-container-recovery.py` - manifest-driven, health-gated Docker recovery and audit.
 - `arr-transfer-arbiter.py` - fail-closed, SAB-priority mutual exclusion for SABnzbd and qBittorrent. It verifies every pause handoff, persists operator modes and latched faults, and never logs job names or API material.
+- `deploy-netdata-compute.sh` - rollback-safe installer for the five-node `edsys-compute` Netdata Parent/Child topology. It keeps the runtime stream key and Cloud material outside Git.
+- `verify-netdata-compute.py` - strict local-API acceptance check for the exact five reachable nodes, shared group label, and four receiving streams.
 - `install-arr-transfer-arbiter.sh` - root-only installer for the arbiter, systemd watchdog service, health timer, SAB boot-pause settings, and qBittorrent `restart: "no"` posture. Replaced live files are backed up privately before mutation.
 - `install-container-recovery.sh` - validated installer for the recovery manifest, systemd units, Docker drop-in, and deterministic host-shutdown posture with live restore disabled.
 - `docker-cleanup-report.sh` - prints Docker disk/reclaimable/exited-container/unused-volume candidates without pruning or deleting anything.
