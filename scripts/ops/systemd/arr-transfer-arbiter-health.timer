@@ -1,0 +1,12 @@
+[Unit]
+Description=Check ARR transfer arbiter health every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=5s
+Persistent=true
+Unit=arr-transfer-arbiter-health.service
+
+[Install]
+WantedBy=timers.target

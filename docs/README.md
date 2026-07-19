@@ -24,6 +24,7 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `../scripts/ops/README.md` - operations/report helpers.
 - `CONTAINER_RECOVERY.md` - ordered 9950x Docker recovery architecture and operations.
 - `REBOOT_ACCEPTANCE.md` - one-shot full-host reboot recovery and acceptance gate.
+- `ARR_TRANSFER_ARBITER.md` - fail-closed SABnzbd/qBittorrent mutual exclusion and operator controls.
 
 ## Rule
 

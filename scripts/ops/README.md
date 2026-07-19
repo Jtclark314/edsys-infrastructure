@@ -5,6 +5,8 @@ Status: helper scripts for local EdSys operations. Prefer report-only behavior u
 ## Scripts
 
 - `edsys-container-recovery.py` - manifest-driven, health-gated Docker recovery and audit.
+- `arr-transfer-arbiter.py` - fail-closed, SAB-priority mutual exclusion for SABnzbd and qBittorrent. It verifies every pause handoff, persists operator modes and latched faults, and never logs job names or API material.
+- `install-arr-transfer-arbiter.sh` - root-only installer for the arbiter, systemd watchdog service, health timer, SAB boot-pause settings, and qBittorrent `restart: "no"` posture. Replaced live files are backed up privately before mutation.
 - `install-container-recovery.sh` - validated installer for the recovery manifest, systemd units, Docker drop-in, and deterministic host-shutdown posture with live restore disabled.
 - `docker-cleanup-report.sh` - prints Docker disk/reclaimable/exited-container/unused-volume candidates without pruning or deleting anything.
 - `edsys-healthchecks-ping.sh` - generic systemd `ExecStartPost` ping helper. It reads `HC_PING_URL` from a private environment file and prints no ping URLs.
@@ -65,6 +67,9 @@ recorded timer state. Never remove runtime reports or the private credential as
 part of a source-definition rollback.
 
 Review scripts before running and keep runtime output outside the repo unless it has been sanitized.
+
+The ARR transfer controller contract, maintenance modes, and fault-reset order
+are documented in [`docs/ARR_TRANSFER_ARBITER.md`](../../docs/ARR_TRANSFER_ARBITER.md).
 
 ## Tests
 

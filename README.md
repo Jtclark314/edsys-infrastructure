@@ -13,6 +13,7 @@ This repo should describe how services are deployed, but it must not contain liv
 - [Docker Compose standard](docs/DOCKER_COMPOSE_STANDARD.md)
 - [Config template standard](docs/CONFIG_TEMPLATE_STANDARD.md)
 - [9950x full-host reboot acceptance](docs/REBOOT_ACCEPTANCE.md)
+- [ARR transfer arbiter](docs/ARR_TRANSFER_ARBITER.md)
 
 ## Folder Map
 

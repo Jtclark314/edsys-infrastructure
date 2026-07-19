@@ -1,0 +1,60 @@
+[Unit]
+Description=Fail-closed SABnzbd and qBittorrent transfer arbiter
+Documentation=file:///usr/local/share/doc/arr-transfer-arbiter/README.md
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+RequiresMountsFor=/opt/arr-vpn /srv/downloads /srv/ssd1/docker/appdata/sabnzbd
+AssertPathExists=/opt/arr-vpn/docker-compose.yml
+AssertPathExists=/srv/ssd1/docker/appdata/sabnzbd/sabnzbd.ini
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=notify
+NotifyAccess=main
+EnvironmentFile=-/etc/default/arr-transfer-arbiter
+ExecStart=/usr/local/sbin/arr-transfer-arbiter run
+ExecStopPost=/usr/local/sbin/arr-transfer-arbiter fail-safe
+Restart=always
+RestartSec=3
+WatchdogSec=30
+TimeoutStartSec=90
+TimeoutStopSec=90
+RuntimeDirectory=arr-transfer-arbiter
+RuntimeDirectoryMode=0700
+StateDirectory=arr-transfer-arbiter
+StateDirectoryMode=0700
+UMask=0077
+
+# The controller needs only loopback HTTP, the Docker Unix socket, read access
+# to the owner-only SAB config, and its systemd-managed runtime/state paths.
+User=root
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+[Install]
+WantedBy=multi-user.target

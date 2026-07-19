@@ -1,0 +1,13 @@
+[Unit]
+Description=Verify ARR transfer arbiter is healthy
+After=arr-transfer-arbiter.service
+Requires=arr-transfer-arbiter.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/arr-transfer-arbiter status --check
+User=root
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
