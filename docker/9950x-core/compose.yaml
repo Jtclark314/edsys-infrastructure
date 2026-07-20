@@ -19,6 +19,13 @@ services:
     env_file:
       - path: /etc/edsys-container-recovery/env/plex.env
         required: false
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     ports:
       - "32400:32400"
     volumes:
