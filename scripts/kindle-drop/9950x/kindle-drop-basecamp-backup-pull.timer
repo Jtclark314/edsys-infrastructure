@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly Basecamp Kindle Drop backup pull
+
+[Timer]
+OnCalendar=*-*-* 03:05:00 America/New_York
+Persistent=true
+RandomizedDelaySec=5m
+Unit=kindle-drop-basecamp-backup-pull.service
+
+[Install]
+WantedBy=timers.target

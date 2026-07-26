@@ -1,0 +1,16 @@
+{
+  "share_root": "C:\\EdSys\\KindleDrop\\share",
+  "state_root": "C:\\ProgramData\\EdSys\\KindleDrop",
+  "private_blob_path": "C:\\ProgramData\\EdSys\\KindleDrop\\private\\gmail-private.dpapi",
+  "listen_ip": "100.120.155.81",
+  "listen_port": 8094,
+  "automatic_limit_bytes": 18874368,
+  "web_limit_bytes": 209715200,
+  "stable_seconds": 10,
+  "poll_seconds": 5,
+  "gmail_poll_seconds": 120,
+  "gmail_health_seconds": 300,
+  "max_send_attempts": 8,
+  "max_pages": 8000,
+  "return_download_limit_bytes": 209715200
+}

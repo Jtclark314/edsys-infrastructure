@@ -1,0 +1,10 @@
+[Unit]
+Description=Pull and verify Basecamp Kindle Drop backups
+After=network-online.target tailscaled.service
+Wants=network-online.target
+RequiresMountsFor=/mnt/ai-store
+
+[Service]
+Type=oneshot
+ExecStart=/home/jeremy/bin/kindle-drop-basecamp-backup-pull
+Nice=10
