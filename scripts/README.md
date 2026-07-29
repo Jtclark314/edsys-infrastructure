@@ -15,7 +15,9 @@ Scripts should:
 ## Subfolders
 
 - `audit/` - read-only host/network/service audit collectors.
-- `backup/` - restic/rclone backup tooling for 9950x.
+- `backup/` - Restic/rclone backup tooling for 9950x, including the unified
+  Basecamp Foothills application/service stage, off-host verification, Drive
+  parity monitoring, and isolated recovery tests.
 - `deploy/` - deployment preparation helpers such as the 9950x workhorse bootstrap.
 - `network/` - exact-address exposure helpers, including the FreeBind AI Tailnet socket proxy.
 - `ops/` - operational helpers and report-only scripts.

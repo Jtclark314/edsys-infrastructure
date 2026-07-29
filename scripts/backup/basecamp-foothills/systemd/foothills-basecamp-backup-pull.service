@@ -1,0 +1,28 @@
+[Unit]
+Description=Pull and verify all critical Basecamp app and service backups
+Wants=network-online.target
+After=network-online.target tailscaled.service
+RequiresMountsFor=/mnt/ai-store
+
+[Service]
+Type=oneshot
+User=jeremy
+Group=jeremy
+UMask=0077
+ExecStart=/usr/local/libexec/basecamp-foothills-backup-pull
+TimeoutStartSec=2h
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/mnt/ai-store/foothills-basecamp-offsite
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

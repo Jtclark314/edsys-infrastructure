@@ -60,6 +60,11 @@ checks = [
     ("edsys-restore-test", "EdSys monthly restore test", 45 * 24, 24),
     ("edsys-offsite-sync", "EdSys offsite sync placeholder", 8 * 24, 24),
     ("edsys-share-gdrive", "EdSys Share Google Drive mirror", 1, 1),
+    ("foothills-basecamp-backup-pull", "Foothills Basecamp off-host backup pull", 30, 4),
+    ("foothills-basecamp-backup-verify", "Foothills Basecamp backup integrity", 8, 3),
+    ("edsys-gdrive-auth-check", "EdSys Google Drive authorization and parity", 8, 2),
+    ("foothills-restic-restore-test", "Foothills local encrypted restore test", 8 * 24, 24),
+    ("foothills-restic-offsite-restore-test", "Foothills Google Drive restore test", 8 * 24, 24),
 ]
 for slug, name, timeout_hours, grace_hours in checks:
     check, _ = Check.objects.get_or_create(
@@ -100,6 +105,11 @@ declare -A SYSTEMD_SERVICES=(
   [edsys-git-sync]=edsys-git-sync
   [edsys-restore-test]=edsys-restore-test
   [edsys-offsite-sync]=edsys-offsite-sync
+  [foothills-basecamp-backup-pull]=foothills-basecamp-backup-pull
+  [foothills-basecamp-backup-verify]=foothills-basecamp-backup-verify
+  [edsys-gdrive-auth-check]=edsys-gdrive-auth-check
+  [foothills-restic-restore-test]=foothills-restic-restore-test
+  [foothills-restic-offsite-restore-test]=foothills-restic-offsite-restore-test
 )
 
 for slug in "${!SYSTEMD_SERVICES[@]}"; do

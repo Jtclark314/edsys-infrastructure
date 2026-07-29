@@ -107,6 +107,15 @@ install -m 0755 "${SCRIPT_DIR}/edsys-restic-check.sh" /srv/edsys-backup/scripts/
 install -m 0755 "${SCRIPT_DIR}/edsys-restore-test.sh" /srv/edsys-backup/scripts/edsys-restore-test.sh
 install -m 0755 "${SCRIPT_DIR}/edsys-codex-state-stage.py" /srv/edsys-backup/scripts/edsys-codex-state-stage.py
 install -m 0755 "${SCRIPT_DIR}/edsys-codex-state-restore-test.sh" /srv/edsys-backup/scripts/edsys-codex-state-restore-test.sh
+install -m 0755 "${SCRIPT_DIR}/basecamp-foothills/basecamp_foothills_pull.py" /usr/local/libexec/basecamp-foothills-backup-pull
+install -m 0755 "${SCRIPT_DIR}/basecamp-foothills/foothills_project_catalog_stage.py" /usr/local/libexec/foothills-project-catalog-stage
+install -m 0755 "${SCRIPT_DIR}/basecamp-foothills/edsys_gdrive_auth_check.sh" /usr/local/libexec/edsys-gdrive-auth-check
+install -m 0755 "${SCRIPT_DIR}/basecamp-foothills/foothills_restic_restore_test.py" /usr/local/libexec/foothills-restic-restore-test
+
+install -d -m 0700 -o jeremy -g jeremy /mnt/ai-store/foothills-basecamp-offsite
+install -d -m 0700 -o root -g root /srv/edsys-backup/staging/foothills-project
+install -d -m 0700 -o root -g root /srv/edsys-backup/restore-tests/foothills
+install -d -m 0700 -o root -g root /srv/edsys-backup/restore-tests/foothills-offsite
 
 if [[ ! -f /etc/edsys-backup/edsys-backup.conf ]]; then
   install -m 0600 "${SCRIPT_DIR}/edsys-backup.conf.example" /etc/edsys-backup/edsys-backup.conf
@@ -129,6 +138,18 @@ ensure_exact_selection_line \
   /etc/edsys-backup/includes.txt \
   /srv/edsys-backup/staging \
   "SQLite-consistent backup staging is part of the critical backup set."
+ensure_exact_selection_line \
+  /etc/edsys-backup/includes.txt \
+  /mnt/ai-store/foothills-project \
+  "The canonical Foothills project tree is part of the critical backup set."
+ensure_exact_selection_line \
+  /etc/edsys-backup/includes.txt \
+  /mnt/ai-store/foothills-basecamp-offsite \
+  "The verified all-application Basecamp recovery stage is part of the critical backup set."
+ensure_exact_selection_line \
+  /etc/edsys-backup/includes.txt \
+  /mnt/ai-store/foothills-unit-selections-basecamp-backups \
+  "The historical Unit Selections Basecamp backup mirror remains protected."
 ensure_exact_selection_line \
   /etc/edsys-backup/excludes.txt \
   '/home/jeremy/.codex/*.sqlite*' \
@@ -163,7 +184,26 @@ install -m 0644 "${SCRIPT_DIR}/systemd/edsys-codex-state-stage.service" /etc/sys
 install -m 0644 "${SCRIPT_DIR}/systemd/edsys-codex-state-stage.timer" /etc/systemd/system/edsys-codex-state-stage.timer
 install -m 0644 "${SCRIPT_DIR}/systemd/edsys-codex-state-restore-test.service" /etc/systemd/system/edsys-codex-state-restore-test.service
 install -m 0644 "${SCRIPT_DIR}/systemd/edsys-codex-state-restore-test.timer" /etc/systemd/system/edsys-codex-state-restore-test.timer
+install -d -m 0755 /etc/systemd/system/edsys-backup.service.d
+install -m 0644 "${SCRIPT_DIR}/basecamp-foothills/systemd/edsys-backup-basecamp.conf" /etc/systemd/system/edsys-backup.service.d/30-basecamp-foothills.conf
+install -m 0644 "${SCRIPT_DIR}/basecamp-foothills/systemd/foothills-basecamp-backup-pull.service" /etc/systemd/system/foothills-basecamp-backup-pull.service
+install -m 0644 "${SCRIPT_DIR}/basecamp-foothills/systemd/foothills-basecamp-backup-pull.timer" /etc/systemd/system/foothills-basecamp-backup-pull.timer
+install -m 0644 "${SCRIPT_DIR}/basecamp-foothills/systemd/foothills-basecamp-backup-verify.service" /etc/systemd/system/foothills-basecamp-backup-verify.service
+install -m 0644 "${SCRIPT_DIR}/basecamp-foothills/systemd/foothills-basecamp-backup-verify.timer" /etc/systemd/system/foothills-basecamp-backup-verify.timer
+install -m 0644 "${SCRIPT_DIR}/basecamp-foothills/systemd/foothills-project-catalog-stage.service" /etc/systemd/system/foothills-project-catalog-stage.service
+install -m 0644 "${SCRIPT_DIR}/basecamp-foothills/systemd/edsys-gdrive-auth-check.service" /etc/systemd/system/edsys-gdrive-auth-check.service
+install -m 0644 "${SCRIPT_DIR}/basecamp-foothills/systemd/edsys-gdrive-auth-check.timer" /etc/systemd/system/edsys-gdrive-auth-check.timer
+install -m 0644 "${SCRIPT_DIR}/basecamp-foothills/systemd/foothills-restic-restore-test.service" /etc/systemd/system/foothills-restic-restore-test.service
+install -m 0644 "${SCRIPT_DIR}/basecamp-foothills/systemd/foothills-restic-restore-test.timer" /etc/systemd/system/foothills-restic-restore-test.timer
+install -m 0644 "${SCRIPT_DIR}/basecamp-foothills/systemd/foothills-restic-offsite-restore-test.service" /etc/systemd/system/foothills-restic-offsite-restore-test.service
+install -m 0644 "${SCRIPT_DIR}/basecamp-foothills/systemd/foothills-restic-offsite-restore-test.timer" /etc/systemd/system/foothills-restic-offsite-restore-test.timer
 systemctl daemon-reload
+
+systemctl enable foothills-basecamp-backup-pull.timer
+systemctl enable foothills-basecamp-backup-verify.timer
+systemctl enable edsys-gdrive-auth-check.timer
+systemctl enable foothills-restic-restore-test.timer
+systemctl enable foothills-restic-offsite-restore-test.timer
 
 echo "Installed EdSys backup framework."
 echo "Next: configure a custom Google OAuth client, then run sudo rclone --config /etc/edsys-backup/rclone.conf config"

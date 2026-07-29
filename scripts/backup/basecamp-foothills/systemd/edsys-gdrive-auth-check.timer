@@ -1,0 +1,11 @@
+[Unit]
+Description=Verify Google Drive backup authentication and snapshot parity
+
+[Timer]
+OnCalendar=*-*-* 06:45:00 America/New_York
+Persistent=true
+RandomizedDelaySec=10m
+Unit=edsys-gdrive-auth-check.service
+
+[Install]
+WantedBy=timers.target

@@ -19,6 +19,17 @@ The scripts are designed to protect critical service state first. They exclude r
 
 As of the 2026-07-13 Remotion hardening pass, the default 9950x include set also protects the operator repos under `/home/jeremy/code`, selected shell/Codex hub state, `/opt/edsys-workhorse` runtime state, and durable Remotion deliverables under `/mnt/ai-store/remotion/outputs`. Replaceable Remotion browser caches/temp data, Codex package caches, and Loki/renovate cache-heavy paths remain excluded.
 
+The Basecamp Foothills extension under `basecamp-foothills/` creates one
+private, manifest-verified recovery stage for all critical Basecamp
+applications and host service configuration. It transfers that stage before
+Restic, protects the canonical Foothills project tree and existing Unit
+Selections history, checks Google authorization and exact latest-snapshot
+parity, and performs a weekly isolated representative restore. See
+[`basecamp-foothills/README.md`](basecamp-foothills/README.md).
+The separate weekly direct-offsite restore uses the Google Drive Restic
+backend rather than the local repository, so remote readability is proved
+instead of inferred from upload parity.
+
 ## Files
 
 - `install-9950x.sh` creates directories, installs templates, and installs systemd units without enabling the timer.
@@ -71,6 +82,9 @@ Do this before running a full offsite sync. The active 9950x setup completed the
 2. Create a project named `EdSys Backup Rclone`.
 3. Enable the Google Drive API.
 4. Configure the OAuth consent screen.
+   Publish the internal/personal app to **Production** after the owner-only
+   consent review. Google testing-mode refresh tokens can expire after seven
+   days and are not acceptable for unattended backups.
 5. Create an OAuth Client ID.
 6. Choose application type `Desktop app`.
 7. Copy the generated Client ID and Client Secret.
@@ -95,6 +109,7 @@ Then verify:
 ```bash
 sudo RCLONE_CONFIG=/etc/edsys-backup/rclone.conf rclone about edsys-gdrive:
 sudo /srv/edsys-backup/scripts/edsys-backup-status.sh
+sudo /usr/local/libexec/edsys-gdrive-auth-check --auth-only
 ```
 
 Do not paste the client secret, rclone token, refresh token, or config contents into public logs or Git.

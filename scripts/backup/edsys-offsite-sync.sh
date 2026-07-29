@@ -147,6 +147,44 @@ if [[ "${SYNC_STATUS}" -ne 0 ]]; then
   fail "rclone offsite sync failed with exit code ${SYNC_STATUS}"
 fi
 
+LOCAL_COUNT=0
+LOCAL_BYTES=0
+REMOTE_COUNT=0
+REMOTE_BYTES=0
+LATEST_SNAPSHOT=""
+if [[ "${DRY_RUN}" != "true" ]]; then
+  LOCAL_SIZE="$(
+    "${RCLONE_BIN}" size --json --config "${RCLONE_CONFIG}" \
+      --exclude "locks/**" "${RESTIC_REPOSITORY}"
+  )" || fail "could not measure the local restic repository after sync"
+  REMOTE_SIZE="$(
+    "${RCLONE_BIN}" size --json --config "${RCLONE_CONFIG}" \
+      --exclude "locks/**" "${RCLONE_OFFSITE_DEST}"
+  )" || fail "could not measure the Google Drive restic repository after sync"
+  LOCAL_COUNT="$(jq -r '.count' <<<"${LOCAL_SIZE}")"
+  LOCAL_BYTES="$(jq -r '.bytes' <<<"${LOCAL_SIZE}")"
+  REMOTE_COUNT="$(jq -r '.count' <<<"${REMOTE_SIZE}")"
+  REMOTE_BYTES="$(jq -r '.bytes' <<<"${REMOTE_SIZE}")"
+  if [[ "${LOCAL_COUNT}" -ne "${REMOTE_COUNT}" || "${LOCAL_BYTES}" -ne "${REMOTE_BYTES}" ]]; then
+    fail "Google Drive mirror count/byte parity failed: local=${LOCAL_COUNT}/${LOCAL_BYTES} remote=${REMOTE_COUNT}/${REMOTE_BYTES}"
+  fi
+
+  LATEST_SNAPSHOT="$(
+    restic --no-lock --repo "${RESTIC_REPOSITORY}" \
+      --password-file "${RESTIC_PASSWORD_FILE}" snapshots --json |
+      jq -r 'if length > 0 then max_by(.time).id else empty end'
+  )"
+  [[ "${LATEST_SNAPSHOT}" =~ ^[0-9a-f]{64}$ ]] \
+    || fail "no current local restic snapshot was found after sync"
+  REMOTE_SNAPSHOT_COUNT="$(
+    "${RCLONE_BIN}" lsf --config "${RCLONE_CONFIG}" \
+      "${RCLONE_OFFSITE_DEST}/snapshots" --files-only |
+      grep -Fxc "${LATEST_SNAPSHOT}" || true
+  )"
+  [[ "${REMOTE_SNAPSHOT_COUNT}" -eq 1 ]] \
+    || fail "the exact latest local restic snapshot is absent from Google Drive"
+fi
+
 jq -n \
   --arg status "success" \
   --arg run_id "${RUN_ID}" \
@@ -154,8 +192,13 @@ jq -n \
   --arg destination "${RCLONE_OFFSITE_DEST}" \
   --arg log_file "${LOG_FILE}" \
   --arg timestamp "$(date -Is)" \
+  --arg latest_snapshot "${LATEST_SNAPSHOT}" \
   --argjson dry_run "${DRY_RUN}" \
-  '{status:$status,run_id:$run_id,mode:$mode,destination:$destination,log_file:$log_file,timestamp:$timestamp,dry_run:$dry_run}' \
+  --argjson local_count "${LOCAL_COUNT}" \
+  --argjson local_bytes "${LOCAL_BYTES}" \
+  --argjson remote_count "${REMOTE_COUNT}" \
+  --argjson remote_bytes "${REMOTE_BYTES}" \
+  '{status:$status,run_id:$run_id,mode:$mode,destination:$destination,log_file:$log_file,timestamp:$timestamp,dry_run:$dry_run,latest_snapshot:$latest_snapshot,local_count:$local_count,local_bytes:$local_bytes,remote_count:$remote_count,remote_bytes:$remote_bytes}' \
   | tee "${STATUS_JSON}" >/dev/null
 
 echo "Offsite sync completed: ${LOG_FILE}"

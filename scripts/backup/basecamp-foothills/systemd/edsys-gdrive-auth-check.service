@@ -1,0 +1,17 @@
+[Unit]
+Description=Verify Google Drive backup authentication and snapshot parity
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/edsys-gdrive-auth-check
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/edsys-backup
+
+[Install]
+WantedBy=multi-user.target

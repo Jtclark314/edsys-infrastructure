@@ -1,0 +1,11 @@
+[Unit]
+Description=Pull verified Basecamp app and service backups before Restic
+
+[Timer]
+OnCalendar=*-*-* 01:50:00 America/New_York
+Persistent=true
+RandomizedDelaySec=5m
+Unit=foothills-basecamp-backup-pull.service
+
+[Install]
+WantedBy=timers.target

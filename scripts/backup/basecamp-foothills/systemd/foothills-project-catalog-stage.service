@@ -1,0 +1,16 @@
+[Unit]
+Description=Stage SQLite-consistent Foothills project catalogs for Restic
+RequiresMountsFor=/mnt/ai-store
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/foothills-project-catalog-stage
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/edsys-backup/staging/foothills-project
+
+[Install]
+WantedBy=multi-user.target

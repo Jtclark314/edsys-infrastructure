@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically revalidate the Basecamp off-host recovery stage
+
+[Timer]
+OnCalendar=*-*-* 06,12,18:30:00 America/New_York
+Persistent=true
+RandomizedDelaySec=10m
+Unit=foothills-basecamp-backup-verify.service
+
+[Install]
+WantedBy=timers.target

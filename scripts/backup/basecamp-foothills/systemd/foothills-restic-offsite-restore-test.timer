@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Foothills Google Drive recovery restore test weekly
+
+[Timer]
+OnCalendar=Sun *-*-* 08:30:00 America/New_York
+Persistent=true
+RandomizedDelaySec=30m
+Unit=foothills-restic-offsite-restore-test.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,26 @@
+[Unit]
+Description=Restore-test representative Foothills artifacts directly from Google Drive
+Wants=network-online.target
+After=network-online.target edsys-offsite-sync.service
+
+[Service]
+Type=oneshot
+Environment=RCLONE_CONFIG=/etc/edsys-backup/rclone.conf
+ExecStart=/usr/local/libexec/foothills-restic-restore-test --repository "rclone:edsys-gdrive:EdSys Backups/restic/edsys-critical-v3" --status-file /var/lib/edsys-backup/foothills-offsite-restore-test-status.json --work-root /srv/edsys-backup/restore-tests/foothills-offsite
+UMask=0077
+TimeoutStartSec=2h
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/edsys-backup/rclone.conf /etc/edsys-backup/restic-password
+ReadWritePaths=/srv/edsys-backup/restore-tests/foothills-offsite /var/lib/edsys-backup
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+[Unit]
+Description=Restore-test representative Foothills Basecamp and project artifacts
+After=edsys-backup.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/foothills-restic-restore-test
+UMask=0077
+TimeoutStartSec=2h
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/edsys-backup/restore-tests/foothills /var/lib/edsys-backup
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

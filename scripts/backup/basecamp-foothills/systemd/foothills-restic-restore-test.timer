@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Foothills recovery restore test weekly
+
+[Timer]
+OnCalendar=Sun *-*-* 07:30:00 America/New_York
+Persistent=true
+RandomizedDelaySec=30m
+Unit=foothills-restic-restore-test.service
+
+[Install]
+WantedBy=timers.target

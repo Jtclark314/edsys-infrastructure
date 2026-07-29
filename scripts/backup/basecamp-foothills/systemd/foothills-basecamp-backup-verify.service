@@ -1,0 +1,20 @@
+[Unit]
+Description=Verify Basecamp off-host recovery stage freshness and integrity
+RequiresMountsFor=/mnt/ai-store
+
+[Service]
+Type=oneshot
+User=jeremy
+Group=jeremy
+UMask=0077
+ExecStart=/usr/local/libexec/basecamp-foothills-backup-pull --verify-only --max-age-hours 30
+TimeoutStartSec=2h
+Nice=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/mnt/ai-store/foothills-basecamp-offsite
+
+[Install]
+WantedBy=multi-user.target
