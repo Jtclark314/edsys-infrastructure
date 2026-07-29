@@ -91,6 +91,7 @@ rollback_configs() {
     echo "Deployment failed; restoring the pre-change Netdata configuration." >&2
     restore_local_file /etc/netdata/netdata.conf netdata.conf || true
     restore_local_file /etc/netdata/stream.conf stream.conf || true
+    restore_local_file /etc/netdata/go.d/docker.conf docker.conf || true
     restore_local_file /etc/netdata/edsys-compute-stream.key stream.key || true
     systemctl restart netdata || true
     for child in "${children[@]}"; do
@@ -123,6 +124,7 @@ install -d -m 0700 "$parent_backup"
 for item in \
   "/etc/netdata/netdata.conf:netdata.conf" \
   "/etc/netdata/stream.conf:stream.conf" \
+  "/etc/netdata/go.d/docker.conf:docker.conf" \
   "/etc/netdata/edsys-compute-stream.key:stream.key"; do
   target="${item%%:*}"
   label="${item##*:}"
@@ -212,9 +214,24 @@ cat >"${tmpdir}/parent-stream.conf" <<EOF
     enable replication = yes
     replication period = 1d
 EOF
+cat >"${tmpdir}/parent-docker.conf" <<'EOF'
+# Managed by EdSys deploy-netdata-compute.sh.
+#
+# The 9950x image inventory makes the stock one-second Docker collector cadence
+# spend roughly one full CPU core walking image metadata. Ten seconds preserves
+# Docker charts while materially reducing dockerd overhead.
+jobs:
+  - name: local
+    address: 'unix:///var/run/docker.sock'
+    timeout: 2
+    update_every: 10
+    collect_container_size: no
+EOF
+config_mutated=1
 install -m 0644 -o root -g root "${tmpdir}/parent-netdata.conf" /etc/netdata/netdata.conf
 install -m 0600 -o root -g root "${tmpdir}/parent-stream.conf" /etc/netdata/stream.conf
-config_mutated=1
+install -d -m 0755 /etc/netdata/go.d
+install -m 0644 -o root -g root "${tmpdir}/parent-docker.conf" /etc/netdata/go.d/docker.conf
 
 systemctl restart netdata
 for _ in {1..30}; do

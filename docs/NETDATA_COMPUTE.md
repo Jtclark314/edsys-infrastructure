@@ -37,13 +37,21 @@ The installer:
 3. Aligns the four Debian 13 Proxmox hosts to the signed Netdata edge APT
    repository already used by `9950x` and `pve-node0`.
 4. Configures exact hostnames and the shared `edsys-compute` label.
-5. Restarts the Parent first and each Child individually.
-6. Requires the exact five-node online topology before reporting success.
+5. Sets the Parent's Docker collector to a 10-second cadence while retaining
+   Docker service discovery and Docker/cgroup charts.
+6. Restarts the Parent first and each Child individually.
+7. Requires the exact five-node online topology before reporting success.
 
 If configuration deployment fails, the script restores the prior
-`netdata.conf` and `stream.conf` files and restarts Netdata. Package installation
-is not automatically reversed; that avoids destructive package removal on a
-Proxmox host.
+`netdata.conf`, `stream.conf`, and Parent `go.d/docker.conf` files and restarts
+Netdata. Package installation is not automatically reversed; that avoids
+destructive package removal on a Proxmox host.
+
+The 2026-07-28 host performance sweep found that the stock one-second Docker
+collector cadence made `dockerd` average 112.1% CPU while walking the 9950x's
+160-image inventory. The Parent now collects the Docker job every 10 seconds.
+A 30-second post-change sample averaged 13.8% `dockerd` CPU, and the exact
+five-node topology passed again after the controlled Parent restart.
 
 ## Verification
 
