@@ -50,6 +50,11 @@ data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 # path; live restore remains deliberately disabled for host-shutdown safety.
 data["live-restore"] = False
 data["shutdown-timeout"] = 120
+# Keep future containers on the broadly compatible json-file driver while
+# bounding per-container disk use. Existing containers retain their current
+# logging configuration until they are recreated.
+data["log-driver"] = "json-file"
+data["log-opts"] = {"max-size": "50m", "max-file": "3"}
 tmp = path.with_suffix(".tmp")
 tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 os.chmod(tmp, 0o644)

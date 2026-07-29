@@ -35,9 +35,12 @@ sudo /usr/local/sbin/edsys-container-recovery recover --dry-run --force
 sudo /usr/local/sbin/edsys-container-recovery audit
 ```
 
-The installer validates `daemon.json`, enables Docker live restore with a
-daemon reload, installs the recovery/audit units, and enables the audit timer.
-It does not restart Docker or recreate containers.
+The installer validates `daemon.json`, deliberately disables Docker live
+restore for shutdown safety, sets bounded `json-file` defaults (`50m` with
+three retained files) for newly created containers, reloads the daemon,
+installs the recovery/audit units, and enables the audit timer. It does not
+restart Docker or recreate containers; existing containers keep their current
+logging configuration until they are recreated.
 
 ## Maintenance
 
