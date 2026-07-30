@@ -14,11 +14,11 @@ readonly ZOEKT_IMAGE="ghcr.io/sourcegraph/zoekt@sha256:0bf4af966897c2fd493e2b082
 readonly INFINITY_IMAGE="docker.io/michaelf34/infinity@sha256:11e8b3921b9f1a58965afaad4a844c435c9807cbc82c51e47cb147b7d977fc88"
 
 log() {
-  printf '%s %s\\n' "$(date --utc +%Y-%m-%dT%H:%M:%SZ)" "$*"
+  printf '%s %s\n' "$(date --utc +%Y-%m-%dT%H:%M:%SZ)" "$*"
 }
 
 fail() {
-  printf 'ERROR: %s\\n' "$*" >&2
+  printf 'ERROR: %s\n' "$*" >&2
   exit 1
 }
 
@@ -149,7 +149,7 @@ docker exec -i edsys-code-intelligence-mcp \
 listeners="$(ss -H -ltn "sport = :${MCP_PORT}")"
 [[ -n "${listeners}" ]] || fail "MCP loopback listener is missing."
 if grep -Evq "127\\.0\\.0\\.1:${MCP_PORT}[[:space:]]" <<<"${listeners}"; then
-  printf '%s\\n' "${listeners}" >&2
+  printf '%s\n' "${listeners}" >&2
   fail "MCP port is bound beyond IPv4 loopback."
 fi
 

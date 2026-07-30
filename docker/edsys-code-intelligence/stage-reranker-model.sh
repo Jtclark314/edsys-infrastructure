@@ -18,12 +18,12 @@ readonly -a REQUIRED_FILES=(
 )
 
 if [[ ${EUID} -ne 0 ]]; then
-  printf 'Run this script with sudo so it can provision AI Store state.\\n' >&2
+  printf 'Run this script with sudo so it can provision AI Store state.\n' >&2
   exit 1
 fi
 
 if [[ ! -x "${HF_BIN}" ]]; then
-  printf 'The Hugging Face hf CLI is required. Install the pinned CLI before continuing.\\n' >&2
+  printf 'The Hugging Face hf CLI is required. Install the pinned CLI before continuing.\n' >&2
   exit 1
 fi
 
@@ -34,7 +34,7 @@ for relative in "${REQUIRED_FILES[@]}"; do
   [[ -f "${MODEL_ROOT}/${relative}" ]] || need_stage=true
 done
 if [[ "${need_stage}" == true ]] \
-  || ! printf '%s  %s\\n' "${ONNX_SHA256}" "${MODEL_ROOT}/${ONNX_RELATIVE}" | sha256sum --check --status; then
+  || ! printf '%s  %s\n' "${ONNX_SHA256}" "${MODEL_ROOT}/${ONNX_RELATIVE}" | sha256sum --check --status; then
   "${HF_BIN}" download "${MODEL_REPO}" \
     "${REQUIRED_FILES[@]}" \
     --revision "${MODEL_REVISION}" \
@@ -43,11 +43,11 @@ fi
 
 for relative in "${REQUIRED_FILES[@]}"; do
   [[ -f "${MODEL_ROOT}/${relative}" ]] || {
-    printf 'Required model file is missing after staging: %s\\n' "${relative}" >&2
+    printf 'Required model file is missing after staging: %s\n' "${relative}" >&2
     exit 1
   }
 done
-printf '%s  %s\\n' "${ONNX_SHA256}" "${MODEL_ROOT}/${ONNX_RELATIVE}" \
+printf '%s  %s\n' "${ONNX_SHA256}" "${MODEL_ROOT}/${ONNX_RELATIVE}" \
   | sha256sum --check
 chmod -R a+rX "${MODEL_ROOT}"
 
@@ -72,4 +72,4 @@ path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding=
 path.chmod(0o644)
 PY
 
-printf 'Pinned CPU reranker model is ready at %s\\n' "${MODEL_ROOT}"
+printf 'Pinned CPU reranker model is ready at %s\n' "${MODEL_ROOT}"
