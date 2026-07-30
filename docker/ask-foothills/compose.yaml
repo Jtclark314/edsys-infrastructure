@@ -19,7 +19,8 @@ services:
       FOOTHILLS_QUERY_MODEL: foothills-query-best
       ASK_FOOTHILLS_DEV_AUTH: "false"
     ports:
-      - "${ASK_FOOTHILLS_BIND_ADDRESS:-192.168.50.50}:3036:3036"
+      - "${ASK_FOOTHILLS_LAN_BIND_ADDRESS:-192.168.50.50}:3036:3036"
+      - "${ASK_FOOTHILLS_TAILNET_BIND_ADDRESS:-100.87.137.47}:3036:3036"
     volumes:
       - ${FOOTHILLS_PROJECT_ROOT:-/home/jeremy/projects/foothills}:/srv/foothills/project:ro
       - ${ASK_FOOTHILLS_AUDIT_DIR:-/var/lib/ask-foothills}:/var/lib/ask-foothills:rw
