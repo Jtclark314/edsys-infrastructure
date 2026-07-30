@@ -1,0 +1,28 @@
+name: edsys-code-intelligence
+description: Private committed-code search, CPU reranking, and local review MCP tools for Codex
+host: 9950x
+runtime: Docker Compose plus systemd index timers
+ports:
+  - "127.0.0.1:6071 -> MCP Streamable HTTP /mcp and health endpoints"
+volumes:
+  - "/mnt/ai-store/codex-intelligence/zoekt -> regenerable Zoekt shards"
+  - "/mnt/ai-store/codex-intelligence/state -> generated index status"
+  - "/mnt/ai-store/codex-intelligence/models/ms-marco-MiniLM-L6-v2-c5ee24cb -> pinned CPU reranker model"
+environment:
+  - "No live .env or credentials required"
+  - "Optional non-secret path and port overrides are documented in .env.example"
+secrets_required: false
+backup:
+  required: false
+  reason: Indexes and staged public model files are reproducible from committed repositories and pinned source revisions
+monitoring:
+  - "Docker healthchecks for Zoekt, Infinity, and MCP"
+  - "systemctl status edsys-code-intelligence-index.timer"
+  - "systemctl status edsys-code-intelligence-full-index.timer"
+  - "curl http://127.0.0.1:6071/ready"
+restore_notes:
+  - Re-stage the pinned reranker model with stage-reranker-model.sh
+  - Run install-9950x.sh to rebuild the app image and regenerate the index
+  - Do not restore old shards across incompatible Zoekt image revisions
+owner: EdSys
+last_verified: "2026-07-29"

@@ -1,0 +1,13 @@
+[Unit]
+Description=Refresh the EdSys committed-code index every five minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=30s
+RandomizedDelaySec=30s
+Persistent=true
+Unit=edsys-code-intelligence-index.service
+
+[Install]
+WantedBy=timers.target

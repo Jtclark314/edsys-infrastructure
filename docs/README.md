@@ -17,6 +17,7 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `../docker/homepage-workhorse/README.md` - second Homepage instance for the Workhorse/AI/Programming/Codex dashboard.
 - `../docker/edsys-ai-portal/README.md` - private LiteLLM-backed EdSys operator UI.
 - `../docker/edsys-control-api/README.md` - read-only API and dashboard over the EdSys-Master source-of-truth YAML.
+- `../docker/edsys-code-intelligence/README.md` - hardened, loopback-only committed-code search, CPU reranking, local review MCP, and guarded index timers for Codex.
 - `../scripts/backup/README.md` - Google Drive offsite backup tooling using `9950x`, `restic`, and `rclone`.
 - `../scripts/security/README.md` - fail-closed 9950x SSH source/interface guard and capability-preserving forwarding policy.
 - `../scripts/network/README.md` - FreeBind systemd socket proxy for exact-address Tailnet AI access without Docker boot dependency on `tailscale0`.

@@ -1,0 +1,203 @@
+name: edsys-code-intelligence
+
+x-security: &default-security
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+x-labels: &managed-labels
+  com.edsys.managed: "true"
+  com.edsys.preserve: "true"
+  com.edsys.service: edsys-code-intelligence
+
+services:
+  zoekt-search:
+    image: ghcr.io/sourcegraph/zoekt@sha256:0bf4af966897c2fd493e2b0826440e17d5640e8c4d8579c7e5cac28f084da75a
+    container_name: edsys-code-search
+    restart: unless-stopped
+    <<: *default-security
+    user: "100:101"
+    init: true
+    command:
+      - zoekt-webserver
+      - -index
+      - /data/index
+      - -listen
+      - :6070
+      - -html=false
+      - -rpc=true
+      - -pprof=false
+      - -print=false
+    volumes:
+      - ${CODE_INTELLIGENCE_STATE_ROOT:-/mnt/ai-store/codex-intelligence}/zoekt:/data/index:ro
+    networks:
+      - code-intelligence-internal
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+    cpus: 8.0
+    mem_limit: 8g
+    mem_reservation: 256m
+    pids_limit: 256
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -qO /dev/null
+          --header='Content-Type: application/json'
+          --post-data='{"Q":"repo:__edsys_healthcheck_no_match__","Opts":{"MaxDocDisplayCount":1}}'
+          http://127.0.0.1:6070/api/search
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging: *bounded-logging
+    labels: *managed-labels
+
+  infinity-rerank-cpu:
+    image: docker.io/michaelf34/infinity@sha256:11e8b3921b9f1a58965afaad4a844c435c9807cbc82c51e47cb147b7d977fc88
+    container_name: edsys-code-reranker
+    restart: unless-stopped
+    <<: *default-security
+    user: "10001:10001"
+    init: true
+    command:
+      - v2
+      - --model-id
+      - /models/reranker
+      - --served-model-name
+      - ms-marco-MiniLM-L6-v2-cpu
+      - --engine
+      - optimum
+      - --device
+      - cpu
+      - --batch-size
+      - "16"
+      - --no-compile
+      - --no-bettertransformer
+      - --no-vector-disk-cache
+      - --host
+      - 0.0.0.0
+      - --port
+      - "7998"
+      - --log-level
+      - warning
+      - --no-permissive-cors
+    environment:
+      HOME: /tmp
+      XDG_CACHE_HOME: /tmp/cache
+      HF_HOME: /tmp/hf
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      DO_NOT_TRACK: "1"
+      INFINITY_ANONYMOUS_USAGE_STATS: "false"
+      INFINITY_ONNX_DISABLE_OPTIMIZE: "1"
+      INFINITY_QUEUE_SIZE: "64"
+      INFINITY_MAX_CLIENT_BATCH_SIZE: "40"
+      OMP_NUM_THREADS: "12"
+      OMP_WAIT_POLICY: PASSIVE
+    volumes:
+      - ${CODE_INTELLIGENCE_RERANK_MODEL_ROOT:-/mnt/ai-store/codex-intelligence/models/ms-marco-MiniLM-L6-v2-c5ee24cb}:/models/reranker:ro
+    networks:
+      - code-intelligence-internal
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777
+    cpus: 12.0
+    mem_limit: 4g
+    mem_reservation: 1536m
+    pids_limit: 256
+    stop_grace_period: 45s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import json,urllib.request;
+          data=json.load(urllib.request.urlopen('http://127.0.0.1:7998/models',timeout=3));
+          assert any('rerank' in m.get('capabilities',[]) for m in data.get('data',[]))
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+    logging: *bounded-logging
+    labels: *managed-labels
+
+  code-intelligence-mcp:
+    build:
+      context: ${CODE_INTELLIGENCE_APP_ROOT:-/home/jeremy/code/edsys-code-intelligence}
+      dockerfile: Dockerfile
+    image: edsys/code-intelligence-mcp:local
+    container_name: edsys-code-intelligence-mcp
+    restart: unless-stopped
+    <<: *default-security
+    user: "10001:10001"
+    init: true
+    depends_on:
+      zoekt-search:
+        condition: service_healthy
+      infinity-rerank-cpu:
+        condition: service_started
+    ports:
+      - 127.0.0.1:${CODE_INTELLIGENCE_MCP_PORT:-6071}:6071
+    environment:
+      CODE_INTELLIGENCE_HOST: 0.0.0.0
+      CODE_INTELLIGENCE_PORT: "6071"
+      CODE_INTELLIGENCE_REPOSITORY_CATALOG_PATH: /config/repositories.json
+      CODE_INTELLIGENCE_INDEX_STATUS_PATH: /state/index-status.json
+      CODE_INTELLIGENCE_ZOEKT_URL: http://zoekt-search:6070
+      CODE_INTELLIGENCE_RERANK_URL: http://infinity-rerank-cpu:7998
+      CODE_INTELLIGENCE_RERANK_MODEL: ms-marco-MiniLM-L6-v2-cpu
+      CODE_INTELLIGENCE_OLLAMA_URL: http://ollama:11434
+      CODE_INTELLIGENCE_OLLAMA_MODEL: qwen2.5-coder:32b
+      CODE_INTELLIGENCE_SEARCH_TIMEOUT_SECONDS: "8"
+      CODE_INTELLIGENCE_RERANK_TIMEOUT_SECONDS: "20"
+      CODE_INTELLIGENCE_REVIEW_TIMEOUT_SECONDS: "300"
+      CODE_INTELLIGENCE_REVIEW_BUSY_TIMEOUT_SECONDS: "2"
+      CODE_INTELLIGENCE_OLLAMA_NUM_CTX: "32768"
+      CODE_INTELLIGENCE_OLLAMA_NUM_THREAD: "24"
+      CODE_INTELLIGENCE_OLLAMA_NUM_PREDICT: "2048"
+      CODE_INTELLIGENCE_OLLAMA_KEEP_ALIVE: 5m
+    volumes:
+      - ./repositories.json:/config/repositories.json:ro
+      - ${CODE_INTELLIGENCE_STATE_ROOT:-/mnt/ai-store/codex-intelligence}/state:/state:ro
+    networks:
+      - code-intelligence-internal
+      - ai-net
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777
+    cpus: 4.0
+    mem_limit: 2g
+    mem_reservation: 128m
+    pids_limit: 128
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import json,urllib.request;
+          data=json.load(urllib.request.urlopen('http://127.0.0.1:6071/ready',timeout=5));
+          assert data.get('core_ready') is True
+      interval: 20s
+      timeout: 8s
+      retries: 10
+      start_period: 30s
+    logging: *bounded-logging
+    labels: *managed-labels
+
+networks:
+  code-intelligence-internal:
+    name: edsys-code-intelligence-internal
+    internal: true
+  ai-net:
+    external: true

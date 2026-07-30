@@ -26,3 +26,4 @@ Do not commit live `.env` files, Docker volumes, databases, uploads, logs, or ba
 - `homepage-workhorse/` - second Homepage instance for the 9950x Workhorse/AI/Programming/Codex dashboard on port `3019`.
 - `edsys-control-api/` - read-only EdSys source-of-truth API over `EdSys-Master` YAML, published directly on loopback/LAN with reviewed Tailnet proxy exposure.
 - `edsys-glasses-gateway/` - tracked deployment boundary for the private gateway, published directly on loopback/LAN with reviewed Tailnet proxy exposure.
+- `edsys-code-intelligence/` - loopback-only, CPU-first Zoekt/Infinity/MCP stack for committed-code search and advisory local Codex review; regenerable state lives on AI Store and no repository tree is mounted into the MCP app.

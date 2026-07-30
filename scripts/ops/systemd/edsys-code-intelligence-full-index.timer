@@ -1,0 +1,12 @@
+[Unit]
+Description=Weekly clean rebuild of the EdSys committed-code index
+
+[Timer]
+OnCalendar=Sun *-*-* 04:17:00
+AccuracySec=5min
+RandomizedDelaySec=15min
+Persistent=true
+Unit=edsys-code-intelligence-full-index.service
+
+[Install]
+WantedBy=timers.target

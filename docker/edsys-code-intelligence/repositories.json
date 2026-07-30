@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "repositories": [
+    {
+      "name": "EdSys-Master",
+      "source": "/home/jeremy/code/EdSys-Master",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "edsys-ai-portal",
+      "source": "/home/jeremy/code/edsys-ai-portal",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "edsys-code-intelligence",
+      "source": "/home/jeremy/code/edsys-code-intelligence",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "edsys-infra-configs",
+      "source": "/home/jeremy/code/edsys-infra-configs",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "edsys-infrastructure",
+      "source": "/srv/edsys/edsys-infrastructure",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "edsys-mailbrain",
+      "source": "/home/jeremy/code/edsys-mailbrain",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "edsys-radio",
+      "source": "/home/jeremy/code/edsys-radio",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "edsys-remotion-gpu-lab",
+      "source": "/home/jeremy/code/edsys-remotion-gpu-lab",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "edsys-remotion-toolkit",
+      "source": "/home/jeremy/code/edsys-remotion-toolkit",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "foothills-project-portal",
+      "source": "/home/jeremy/code/foothills-project-portal",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "homepage-config",
+      "source": "/home/jeremy/code/homepage-config",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "the-last-relay",
+      "source": "/home/jeremy/code/the-last-relay",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "app-foundry",
+      "source": "/home/jeremy/projects/app-foundry",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "foothills",
+      "source": "/home/jeremy/projects/foothills",
+      "branch": "HEAD",
+      "enabled": true
+    }
+  ]
+}

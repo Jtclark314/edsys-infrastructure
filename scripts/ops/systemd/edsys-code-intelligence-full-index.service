@@ -1,0 +1,33 @@
+[Unit]
+Description=EdSys committed-code Zoekt clean rebuild
+Documentation=file:///srv/edsys/edsys-infrastructure/docker/edsys-code-intelligence/README.md
+Requires=docker.service
+After=docker.service mnt-ai\x2dstore.mount edsys-git-sync.service
+ConditionPathIsMountPoint=/mnt/ai-store
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/edsys-code-intelligence-index --mode full
+TimeoutStartSec=30min
+Nice=12
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+CPUWeight=20
+IOWeight=20
+MemoryHigh=14G
+MemoryMax=18G
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=read-only
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+ReadWritePaths=/mnt/ai-store/codex-intelligence /run/lock
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=true
+SystemCallArchitectures=native

@@ -17,6 +17,7 @@ Status: helper scripts for local EdSys operations. Prefer report-only behavior u
 - `edsys-rag-watch-sync.py` - debounced user-service watcher for reviewed `*RAG Summary.md` changes. It triggers the existing `edsys-rag-sync.service`; the five-minute timer remains the fallback.
 - `edsys-rag-enrich-metadata.py` - local-only metadata enrichment builder for `/mnt/ai-store/rag/enrichment/metadata.sqlite`; it reads the clean mirror and never rewrites Obsidian notes.
 - `sync-edsys-repos.sh` - non-destructive five-minute fast-forward sync for the three authoritative `/srv/edsys` checkouts. It requires clean trees, tracks `origin/main`, refuses divergence, and never resets, cleans, commits, pushes, or deletes files.
+- `edsys-code-intelligence-index.py` - explicit-allowlist Zoekt builder for committed `HEAD` content. It runs the pinned indexer without network access, preserves the last usable index on refresh failure, and supports five-minute incremental plus weekly clean rebuild units.
 - `install-git-sync.sh` - root-only installer for the Git sync script, systemd service/timer, and bounded logrotate policy. Use `--enable` to enable the timer and `--rotate-log` to rotate an existing log after review; replaced files are backed up under `/var/backups/edsys-git-sync/`.
 - `edsys-codex-report-runner.py` - private report orchestrator for the read-only Morning Brief and weekly Codex maintenance. It prevents overlap, publishes report/status files atomically, keeps report bodies out of the journal, and retains 31 daily or 13 weekly runs.
 - `install-codex-operations.sh` - root-only, idempotent installer for the authoritative Morning Brief, weekly maintenance, and grounded-RAG quality-gate services/timers. File replacement is atomic and a failed replacement transaction restores prior tracked files. `--enable` refuses unless the root-only eval environment, AI Store mount, report generators, Portal evaluator/virtual environment, query contract, and deployed EdSys-Master acceptance wrapper are present.
@@ -26,6 +27,7 @@ Status: helper scripts for local EdSys operations. Prefer report-only behavior u
 - `systemd/edsys-morning-brief.*` - daily 06:00 America/New_York report schedule, executed by 9950x even when no Codex Desktop session is open.
 - `systemd/edsys-weekly-codex-maintenance.*` - Monday 07:30 America/New_York maintenance and RAG-memory-hygiene report schedule.
 - `systemd/edsys-rag-golden-eval.*` - Monday 05:00 America/New_York grounded-RAG quality gate. It calls the existing Portal evaluator through the EdSys-Master acceptance wrapper; it does not duplicate the evaluator or silently enable a cloud judge.
+- `systemd/edsys-code-intelligence-index.*` and `systemd/edsys-code-intelligence-full-index.*` - low-priority committed-code refresh schedules; both share a guarded nonoverlap lock and keep generated shards/status outside Git on AI Store.
 
 The three system timers are the authoritative always-on executors. Any Codex
 Scheduled task is presentation/delivery only and must not be the sole scheduler.
