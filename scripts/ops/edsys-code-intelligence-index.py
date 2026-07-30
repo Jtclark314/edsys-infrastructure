@@ -95,6 +95,19 @@ def is_relative_to(path: Path, root: Path) -> bool:
         return False
 
 
+def git_command(source: Path, *arguments: str) -> list[str]:
+    """Build a repository-specific Git command without changing global trust."""
+
+    return [
+        "git",
+        "-c",
+        f"safe.directory={source}",
+        "-C",
+        str(source),
+        *arguments,
+    ]
+
+
 def load_catalog(path: Path) -> list[Repository]:
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
@@ -130,13 +143,13 @@ def load_catalog(path: Path) -> list[Repository]:
         if not any(is_relative_to(source, root) for root in SAFE_SOURCE_ROOTS):
             raise IndexErrorSafe(f"Repository {name} is outside approved source roots")
 
-        top = run(
-            ["git", "-C", str(source), "rev-parse", "--show-toplevel"],
-            timeout=30,
-        ).stdout.strip()
+        top = run(git_command(source, "rev-parse", "--show-toplevel"), timeout=30).stdout.strip()
         if Path(top).resolve(strict=True) != source:
             raise IndexErrorSafe(f"Repository {name} source is not a Git root")
-        run(["git", "-C", str(source), "rev-parse", "--verify", "HEAD^{commit}"], timeout=30)
+        run(
+            git_command(source, "rev-parse", "--verify", "HEAD^{commit}"),
+            timeout=30,
+        )
         repositories.append(
             Repository(name=name, configured_source=configured, source=source)
         )
@@ -148,17 +161,12 @@ def load_catalog(path: Path) -> list[Repository]:
 
 
 def git_metadata(repository: Repository) -> dict[str, Any]:
-    commit = run(
-        ["git", "-C", str(repository.source), "rev-parse", "HEAD"],
-        timeout=30,
-    ).stdout.strip()
+    commit = run(git_command(repository.source, "rev-parse", "HEAD"), timeout=30).stdout.strip()
     branch = run(
-        ["git", "-C", str(repository.source), "branch", "--show-current"],
-        timeout=30,
+        git_command(repository.source, "branch", "--show-current"), timeout=30
     ).stdout.strip()
     tracked = run(
-        ["git", "-C", str(repository.source), "ls-files", "-z"],
-        timeout=120,
+        git_command(repository.source, "ls-files", "-z"), timeout=120
     ).stdout.count("\x00")
     return {
         "name": repository.name,

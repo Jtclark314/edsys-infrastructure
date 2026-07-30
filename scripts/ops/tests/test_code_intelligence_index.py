@@ -120,6 +120,14 @@ def test_build_command_is_bounded_and_offline(
     assert f"{repo_path}:/repos/repo:ro" in observed
 
 
+def test_git_command_uses_only_repository_specific_trust(
+    indexer: ModuleType, tmp_path: Path
+) -> None:
+    command = indexer.git_command(tmp_path, "status", "--short")
+    assert command[:3] == ["git", "-c", f"safe.directory={tmp_path}"]
+    assert "--global" not in command
+
+
 def test_atomic_status_and_failure_preserve_last_good(
     indexer: ModuleType, tmp_path: Path
 ) -> None:

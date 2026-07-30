@@ -37,6 +37,7 @@ docker network inspect ai-net >/dev/null 2>&1 || fail "External Docker network a
 [[ -f "${APP_ROOT}/requirements.lock" ]] || fail "Application runtime lock is missing."
 [[ -f "${STACK_DIR}/repositories.json" ]] || fail "Repository allowlist is missing."
 [[ -f "${INDEXER_SOURCE}" ]] || fail "Indexer source is missing."
+chmod 0644 "${STACK_DIR}/repositories.json"
 
 available_kib="$(df --output=avail "${STATE_ROOT%/*}" | tail -1 | tr -d ' ')"
 (( available_kib > 10 * 1024 * 1024 )) || fail "AI Store has less than 10 GiB available."
