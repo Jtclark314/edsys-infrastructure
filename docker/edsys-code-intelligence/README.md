@@ -118,9 +118,12 @@ uv run python scripts/evaluate.py \
 
 The evaluator requires every exact/symbol query in the checked-in suite to land
 in the top five, warmed native-search p95 below 100 ms, full index duration below
-10 minutes, and healthy core search. It reports reranker MRR separately. Native
-Zoekt ordering remains the default unless the measured intent-query MRR improves
-by at least 5% without a top-ten regression.
+10 minutes, and healthy core search. It reports reranker MRR separately. The
+accepted 2026-07-29 result cleared the 5%/no-top-ten-regression gate, so the MCP
+application's `ranking=auto` default uses CPU reranking for
+`query_mode=any_terms` and retains native Zoekt ordering for literal,
+conjunctive, and regex searches. Explicit `zoekt` and `rerank` overrides remain
+available.
 
 ## Rollback
 
