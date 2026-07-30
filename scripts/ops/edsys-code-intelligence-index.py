@@ -18,10 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-ZOEK_IMAGE = (
-    "ghcr.io/sourcegraph/zoekt@"
-    "sha256:0bf4af966897c2fd493e2b0826440e17d5640e8c4d8579c7e5cac28f084da75a"
-)
+ZOEK_IMAGE = "edsys/zoekt-minimal:2cb19912-go1.26.5"
 DEFAULT_STACK_DIR = Path(
     "/srv/edsys/edsys-infrastructure/docker/edsys-code-intelligence"
 )
@@ -246,6 +243,7 @@ def build_index(
             "-branches",
             "HEAD",
             "-submodules=false",
+            "-require_ctags",
             f"-incremental={'true' if incremental else 'false'}",
             "-parallelism",
             "12",

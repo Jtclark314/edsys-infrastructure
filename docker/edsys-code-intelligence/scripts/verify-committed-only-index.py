@@ -11,10 +11,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
-IMAGE = (
-    "ghcr.io/sourcegraph/zoekt@"
-    "sha256:0bf4af966897c2fd493e2b0826440e17d5640e8c4d8579c7e5cac28f084da75a"
-)
+IMAGE = "edsys/zoekt-minimal:2cb19912-go1.26.5"
 JEREMY = pwd.getpwnam("jeremy")
 
 
@@ -139,6 +136,7 @@ def main() -> None:
                 "-branches",
                 "HEAD",
                 "-submodules=false",
+                "-require_ctags",
                 "-incremental=true",
                 "/repo",
             ]

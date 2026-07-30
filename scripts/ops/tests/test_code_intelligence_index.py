@@ -116,6 +116,7 @@ def test_build_command_is_bounded_and_offline(
     assert "--cap-drop" in observed
     assert "--memory" in observed
     assert "-submodules=false" in observed
+    assert "-require_ctags" in observed
     assert "-incremental=true" in observed
     assert f"{repo_path}:/repos/repo:ro" in observed
 

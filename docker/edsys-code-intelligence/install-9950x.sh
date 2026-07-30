@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly REPO_ROOT="$(cd "${STACK_DIR}/../.." && pwd)"
+STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly STACK_DIR
+REPO_ROOT="$(cd "${STACK_DIR}/../.." && pwd)"
+readonly REPO_ROOT
 readonly APP_ROOT="${CODE_INTELLIGENCE_APP_ROOT:-/home/jeremy/code/edsys-code-intelligence}"
 readonly STATE_ROOT="${CODE_INTELLIGENCE_STATE_ROOT:-/mnt/ai-store/codex-intelligence}"
 readonly MODEL_ROOT="${CODE_INTELLIGENCE_RERANK_MODEL_ROOT:-${STATE_ROOT}/models/ms-marco-MiniLM-L6-v2-c5ee24cb}"
@@ -10,8 +12,9 @@ readonly INDEXER_SOURCE="${REPO_ROOT}/scripts/ops/edsys-code-intelligence-index.
 readonly INDEXER_TARGET="/usr/local/sbin/edsys-code-intelligence-index"
 readonly SYSTEMD_SOURCE="${REPO_ROOT}/scripts/ops/systemd"
 readonly MCP_PORT="${CODE_INTELLIGENCE_MCP_PORT:-6071}"
-readonly ZOEKT_IMAGE="ghcr.io/sourcegraph/zoekt@sha256:0bf4af966897c2fd493e2b0826440e17d5640e8c4d8579c7e5cac28f084da75a"
-readonly INFINITY_IMAGE="docker.io/michaelf34/infinity@sha256:11e8b3921b9f1a58965afaad4a844c435c9807cbc82c51e47cb147b7d977fc88"
+readonly ZOEKT_IMAGE="edsys/zoekt-minimal:2cb19912-go1.26.5"
+readonly RERANK_IMAGE="edsys/code-intelligence-reranker:0.1.0"
+readonly MCP_IMAGE="edsys/code-intelligence-mcp:local"
 
 log() {
   printf '%s %s\n' "$(date --utc +%Y-%m-%dT%H:%M:%SZ)" "$*"
@@ -35,7 +38,9 @@ docker info >/dev/null 2>&1 || fail "Docker daemon is unavailable."
 docker network inspect ai-net >/dev/null 2>&1 || fail "External Docker network ai-net is missing."
 [[ -d "${APP_ROOT}/.git" ]] || fail "Application checkout is missing at ${APP_ROOT}."
 [[ -f "${APP_ROOT}/requirements.lock" ]] || fail "Application runtime lock is missing."
+[[ -f "${APP_ROOT}/requirements.reranker.lock" ]] || fail "Reranker runtime lock is missing."
 [[ -f "${STACK_DIR}/repositories.json" ]] || fail "Repository allowlist is missing."
+[[ -f "${STACK_DIR}/images/zoekt/Dockerfile" ]] || fail "Minimal Zoekt build is missing."
 [[ -f "${INDEXER_SOURCE}" ]] || fail "Indexer source is missing."
 chmod 0644 "${STACK_DIR}/repositories.json"
 
@@ -97,14 +102,7 @@ log "Staging and verifying the pinned CPU reranker model."
 CODE_INTELLIGENCE_RERANK_MODEL_ROOT="${MODEL_ROOT}" \
   "${STACK_DIR}/stage-reranker-model.sh"
 
-log "Pulling exact upstream image digests."
-docker pull "${ZOEKT_IMAGE}"
-docker pull "${INFINITY_IMAGE}"
-
-log "Proving the indexer excludes dirty, untracked, and ignored working-tree content."
-python3 "${STACK_DIR}/scripts/verify-committed-only-index.py"
-
-log "Validating and building the local MCP image."
+log "Validating and building all minimal local runtime images."
 CODE_INTELLIGENCE_APP_ROOT="${APP_ROOT}" \
 CODE_INTELLIGENCE_STATE_ROOT="${STATE_ROOT}" \
 CODE_INTELLIGENCE_RERANK_MODEL_ROOT="${MODEL_ROOT}" \
@@ -114,7 +112,64 @@ CODE_INTELLIGENCE_APP_ROOT="${APP_ROOT}" \
 CODE_INTELLIGENCE_STATE_ROOT="${STATE_ROOT}" \
 CODE_INTELLIGENCE_RERANK_MODEL_ROOT="${MODEL_ROOT}" \
   docker compose --project-directory "${STACK_DIR}" -f "${STACK_DIR}/compose.yaml" \
-  build --pull=false code-intelligence-mcp
+  build --pull=false zoekt-search onnx-rerank-cpu code-intelligence-mcp
+
+log "Verifying immutable source labels on local runtime images."
+python3 - "${ZOEKT_IMAGE}" "${RERANK_IMAGE}" "${MCP_IMAGE}" <<'PY'
+import json
+import subprocess
+import sys
+
+zoekt_image, rerank_image, mcp_image = sys.argv[1:]
+
+def inspect(image: str) -> dict:
+    return json.loads(
+        subprocess.check_output(["docker", "image", "inspect", image], text=True)
+    )[0]
+
+zoekt = inspect(zoekt_image)
+zoekt_labels = zoekt["Config"]["Labels"]
+assert zoekt_labels["org.opencontainers.image.revision"] == (
+    "2cb19912a4073e5a9895658b7cb135ee4b35733b"
+)
+assert zoekt_labels["com.edsys.go.version"] == "1.26.5"
+assert zoekt_labels["com.edsys.ctags.version"] == "6.1.0"
+assert zoekt_labels["com.edsys.runtime"] == "zoekt-minimal"
+
+reranker = inspect(rerank_image)
+rerank_labels = reranker["Config"]["Labels"]
+assert rerank_labels["com.edsys.runtime"] == "code-intelligence-reranker"
+assert rerank_labels["com.edsys.onnxruntime.version"] == "1.28.0"
+assert reranker["Config"]["User"] == "10001:10001"
+
+mcp = inspect(mcp_image)
+assert mcp["Config"]["Labels"]["com.edsys.runtime"] == "code-intelligence-mcp"
+print("local image provenance verified")
+PY
+ctags_version="$(
+  docker run --rm --pull never --network none --read-only \
+  --cap-drop ALL --security-opt no-new-privileges:true \
+  --entrypoint universal-ctags "${ZOEKT_IMAGE}" --version
+)"
+grep -Fq "Universal Ctags 6.1.0" <<<"${ctags_version}" \
+  || fail "Universal Ctags version verification failed."
+for feature in +json +interactive +sandbox; do
+  grep -Fq "${feature}" <<<"${ctags_version}" \
+    || fail "Universal Ctags required feature is missing: ${feature}"
+done
+
+if command -v trivy >/dev/null 2>&1; then
+  log "Rejecting local runtime images with fixed HIGH or CRITICAL vulnerabilities."
+  for image in "${ZOEKT_IMAGE}" "${RERANK_IMAGE}" "${MCP_IMAGE}"; do
+    trivy image --quiet --scanners vuln --severity HIGH,CRITICAL \
+      --ignore-unfixed --exit-code 1 "${image}"
+  done
+else
+  log "Trivy is unavailable; image vulnerability gate skipped."
+fi
+
+log "Proving the indexer excludes dirty, untracked, and ignored working-tree content."
+python3 "${STACK_DIR}/scripts/verify-committed-only-index.py"
 
 log "Building and validating a fresh committed-content index."
 "${INDEXER_TARGET}" \
@@ -123,13 +178,34 @@ log "Building and validating a fresh committed-content index."
   --state-root "${STATE_ROOT}" \
   --stack-dir "${STACK_DIR}"
 
+mapfile -t legacy_rerankers < <(
+  docker ps -aq \
+    --filter "label=com.docker.compose.project=edsys-code-intelligence" \
+    --filter "label=com.docker.compose.service=infinity-rerank-cpu"
+)
+if (( ${#legacy_rerankers[@]} > 1 )); then
+  fail "Multiple legacy Infinity containers require manual audit."
+fi
+if (( ${#legacy_rerankers[@]} == 1 )); then
+  legacy_id="${legacy_rerankers[0]}"
+  legacy_name="$(docker inspect --format '{{.Name}}' "${legacy_id}")"
+  legacy_managed="$(docker inspect --format '{{index .Config.Labels "com.edsys.managed"}}' "${legacy_id}")"
+  [[ "${legacy_name}" == "/edsys-code-reranker" ]] \
+    || fail "Refusing to remove an unexpected legacy container."
+  [[ "${legacy_managed}" == "true" ]] \
+    || fail "Refusing to remove an unmanaged legacy container."
+  log "Replacing the audited legacy Infinity reranker container; its image remains available for rollback."
+  docker stop --time 45 "${legacy_id}" >/dev/null
+  docker rm "${legacy_id}" >/dev/null
+fi
+
 log "Starting the complete hardened stack."
 CODE_INTELLIGENCE_APP_ROOT="${APP_ROOT}" \
 CODE_INTELLIGENCE_STATE_ROOT="${STATE_ROOT}" \
 CODE_INTELLIGENCE_RERANK_MODEL_ROOT="${MODEL_ROOT}" \
 CODE_INTELLIGENCE_MCP_PORT="${MCP_PORT}" \
   docker compose --project-directory "${STACK_DIR}" -f "${STACK_DIR}/compose.yaml" \
-  up -d --remove-orphans
+  up -d --remove-orphans --force-recreate
 
 deadline=$((SECONDS + 180))
 while (( SECONDS < deadline )); do

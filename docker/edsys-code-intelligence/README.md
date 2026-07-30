@@ -6,8 +6,8 @@ Private, loopback-only code intelligence for Codex on `9950x`.
 
 | Component | Purpose | Compute policy |
 | --- | --- | --- |
-| Zoekt | Trigram and ctags-backed search of committed `HEAD` content | Up to 8 logical CPUs for queries |
-| Infinity | Cross-encoder reranking with a pinned AVX-512 VNNI ONNX model | CPU only; up to 12 logical CPUs and 4 GiB |
+| Minimal Zoekt | Trigram and ctags-backed search of committed `HEAD` content | Up to 8 logical CPUs for queries |
+| Local ONNX reranker | Cross-encoder reranking with a pinned AVX-512 VNNI ONNX model | CPU only; up to 12 logical CPUs and 2 GiB |
 | MCP application | Five bounded, read-only Codex tools | Up to 4 logical CPUs and 2 GiB |
 | Indexer timers | Incremental refresh and weekly clean rebuild | Low-priority; container capped at 24 logical CPUs and 16 GiB |
 | Ollama | Existing local `qwen2.5-coder:32b` review/triage backend | Direct internal `ai-net`; request uses 24 threads |
@@ -19,7 +19,8 @@ handle indexing, reranking, and advisory review.
 ## Network and privacy boundary
 
 - The MCP endpoint is published only at `127.0.0.1:6071/mcp`.
-- Zoekt and Infinity have no published ports and share an internal-only network.
+- Zoekt and the local reranker have no published ports and share an
+  internal-only network.
 - The MCP container has no repository mounts.
 - The indexer mounts the explicit repository list read-only, runs without
   network access, and asks `zoekt-git-index` to index Git `HEAD`. Dirty,
@@ -28,12 +29,22 @@ handle indexing, reranking, and advisory review.
   or included in application logs.
 - There is no LAN, Tailnet, tunnel, reverse-proxy, or public UI route.
 
-## Pins
+## Pins and minimal runtime provenance
 
-- Zoekt image:
-  `ghcr.io/sourcegraph/zoekt@sha256:0bf4af966897c2fd493e2b0826440e17d5640e8c4d8579c7e5cac28f084da75a`
-- Infinity image:
-  `docker.io/michaelf34/infinity@sha256:11e8b3921b9f1a58965afaad4a844c435c9807cbc82c51e47cb147b7d977fc88`
+- Zoekt source revision:
+  `2cb19912a4073e5a9895658b7cb135ee4b35733b`
+- Zoekt source archive SHA-256:
+  `7728e3498828c36cc4fea935d95c219ed9eddd082750d218ace8d58d15c85d2a`
+- Zoekt builder: Go `1.26.5`, pinned builder image digest in
+  `images/zoekt/Dockerfile`. The final scratch image contains only
+  `zoekt`, `zoekt-git-index`, `zoekt-webserver`, a static health probe, and
+  Universal Ctags `6.1.0` with JSON, interactive, and sandbox support.
+- Universal Ctags source archive SHA-256:
+  `1eb6d46d4c4cace62d230e7700033b8db9ad3d654f2d4564e87f517d4b652a53`
+- Local reranker: the `reranker` target in the private application
+  `Dockerfile`, built from a pinned Python base and
+  `requirements.reranker.lock`. It uses only the local ONNX execution path;
+  no CUDA, PyTorch, training, vision, audio, or telemetry runtime is present.
 - Reranker:
   `cross-encoder/ms-marco-MiniLM-L6-v2`
   revision `c5ee24cb16019beea0893ab7796b1df96625c6b8`
@@ -65,10 +76,14 @@ The installer:
    checkout;
 2. stages and verifies the pinned public reranker model if needed;
 3. installs the guarded indexer and systemd units;
-4. builds an initial committed-content index;
-5. builds and starts the hardened containers;
-6. enables five-minute incremental and weekly full-rebuild timers;
-7. verifies health, tool count, loopback binding, and container security.
+4. builds the minimal local Zoekt, reranker, and MCP images;
+5. rejects fixed HIGH or CRITICAL image vulnerabilities when Trivy is
+   available;
+6. proves dirty, untracked, and ignored content cannot enter the index;
+7. builds an initial committed-content index;
+8. starts the hardened containers and enables five-minute incremental and
+   weekly full-rebuild timers;
+9. verifies health, tool count, loopback binding, and container security.
 
 ## Scheduled refresh
 

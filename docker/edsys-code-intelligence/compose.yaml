@@ -20,7 +20,11 @@ x-labels: &managed-labels
 
 services:
   zoekt-search:
-    image: ghcr.io/sourcegraph/zoekt@sha256:0bf4af966897c2fd493e2b0826440e17d5640e8c4d8579c7e5cac28f084da75a
+    build:
+      context: ./images/zoekt
+      dockerfile: Dockerfile
+    image: edsys/zoekt-minimal:2cb19912-go1.26.5
+    pull_policy: never
     container_name: edsys-code-search
     restart: unless-stopped
     <<: *default-security
@@ -49,12 +53,8 @@ services:
     stop_grace_period: 30s
     healthcheck:
       test:
-        - CMD-SHELL
-        - >-
-          wget -qO /dev/null
-          --header='Content-Type: application/json'
-          --post-data='{"Q":"repo:__edsys_healthcheck_no_match__","Opts":{"MaxDocDisplayCount":1}}'
-          http://127.0.0.1:6070/api/search
+        - CMD
+        - /usr/local/bin/zoekt-healthcheck
       interval: 15s
       timeout: 5s
       retries: 10
@@ -62,58 +62,39 @@ services:
     logging: *bounded-logging
     labels: *managed-labels
 
-  infinity-rerank-cpu:
-    image: docker.io/michaelf34/infinity@sha256:11e8b3921b9f1a58965afaad4a844c435c9807cbc82c51e47cb147b7d977fc88
+  onnx-rerank-cpu:
+    build:
+      context: ${CODE_INTELLIGENCE_APP_ROOT:-/home/jeremy/code/edsys-code-intelligence}
+      dockerfile: Dockerfile
+      target: reranker
+    image: edsys/code-intelligence-reranker:0.1.0
+    pull_policy: never
     container_name: edsys-code-reranker
     restart: unless-stopped
     <<: *default-security
     user: "10001:10001"
     init: true
-    command:
-      - v2
-      - --model-id
-      - /models/reranker
-      - --served-model-name
-      - ms-marco-MiniLM-L6-v2-cpu
-      - --engine
-      - optimum
-      - --device
-      - cpu
-      - --batch-size
-      - "16"
-      - --no-compile
-      - --no-bettertransformer
-      - --no-vector-disk-cache
-      - --host
-      - 0.0.0.0
-      - --port
-      - "7998"
-      - --log-level
-      - warning
-      - --no-permissive-cors
     environment:
       HOME: /tmp
       XDG_CACHE_HOME: /tmp/cache
-      HF_HOME: /tmp/hf
-      HF_HUB_OFFLINE: "1"
-      TRANSFORMERS_OFFLINE: "1"
-      DO_NOT_TRACK: "1"
-      INFINITY_ANONYMOUS_USAGE_STATS: "false"
-      INFINITY_ONNX_DISABLE_OPTIMIZE: "1"
-      INFINITY_QUEUE_SIZE: "64"
-      INFINITY_MAX_CLIENT_BATCH_SIZE: "40"
-      OMP_NUM_THREADS: "12"
-      OMP_WAIT_POLICY: PASSIVE
+      RERANK_MODEL_ROOT: /models/reranker
+      RERANK_MODEL_NAME: ms-marco-MiniLM-L6-v2-cpu
+      RERANK_MODEL_SHA256: 3573b6b9593cb2f75987a31815d409ca3dd8808629118fd20451bb1a5d90cec7
+      RERANK_THREADS: "12"
+      RERANK_BATCH_SIZE: "16"
+      RERANK_HOST: 0.0.0.0
+      RERANK_PORT: "7998"
+      RERANK_LOG_LEVEL: WARNING
     volumes:
       - ${CODE_INTELLIGENCE_RERANK_MODEL_ROOT:-/mnt/ai-store/codex-intelligence/models/ms-marco-MiniLM-L6-v2-c5ee24cb}:/models/reranker:ro
     networks:
       - code-intelligence-internal
     tmpfs:
-      - /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
     cpus: 12.0
-    mem_limit: 4g
-    mem_reservation: 1536m
-    pids_limit: 256
+    mem_limit: 2g
+    mem_reservation: 256m
+    pids_limit: 128
     stop_grace_period: 45s
     healthcheck:
       test:
@@ -135,6 +116,7 @@ services:
     build:
       context: ${CODE_INTELLIGENCE_APP_ROOT:-/home/jeremy/code/edsys-code-intelligence}
       dockerfile: Dockerfile
+      target: mcp
     image: edsys/code-intelligence-mcp:local
     container_name: edsys-code-intelligence-mcp
     restart: unless-stopped
@@ -144,7 +126,7 @@ services:
     depends_on:
       zoekt-search:
         condition: service_healthy
-      infinity-rerank-cpu:
+      onnx-rerank-cpu:
         condition: service_started
     ports:
       - 127.0.0.1:${CODE_INTELLIGENCE_MCP_PORT:-6071}:6071
@@ -154,7 +136,7 @@ services:
       CODE_INTELLIGENCE_REPOSITORY_CATALOG_PATH: /config/repositories.json
       CODE_INTELLIGENCE_INDEX_STATUS_PATH: /state/index-status.json
       CODE_INTELLIGENCE_ZOEKT_URL: http://zoekt-search:6070
-      CODE_INTELLIGENCE_RERANK_URL: http://infinity-rerank-cpu:7998
+      CODE_INTELLIGENCE_RERANK_URL: http://onnx-rerank-cpu:7998
       CODE_INTELLIGENCE_RERANK_MODEL: ms-marco-MiniLM-L6-v2-cpu
       CODE_INTELLIGENCE_OLLAMA_URL: http://ollama:11434
       CODE_INTELLIGENCE_OLLAMA_MODEL: qwen2.5-coder:32b
