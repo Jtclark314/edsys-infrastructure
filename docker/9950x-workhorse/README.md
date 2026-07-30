@@ -48,6 +48,7 @@ Langfuse, Loki, and Grafana Alloy are the standard Workhorse observability path 
 - LiteLLM `turn_off_message_logging=true` keeps prompts/responses redacted in Langfuse.
 - The `langfuse-minio-init` one-shot service creates the required private MinIO `langfuse` bucket before Langfuse/worker startup.
 - Alloy collects Docker container logs into Loki; the Portal only exposes bounded, redacted lookups for an allow-list of Workhorse containers.
+- Loki's singleton Compactor enforces the configured seven-day filesystem retention policy. The 15-minute delete delay is selected for this single-process deployment, which has no separate index-gateway replicas, while avoiding unbounded local chunk growth; see Grafana's [retention documentation](https://grafana.com/docs/loki/latest/operations/storage/retention/).
 - The Portal resolves Langfuse traces asynchronously by request ID because Langfuse ingestion is not immediate.
 
 Smoke checks:

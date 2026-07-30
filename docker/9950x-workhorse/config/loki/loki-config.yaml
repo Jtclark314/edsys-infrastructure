@@ -36,4 +36,7 @@ ruler:
   alertmanager_url: http://127.0.0.1:9093
 compactor:
   working_directory: /loki/compactor
-  retention_enabled: false
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 15m
+  delete_request_store: filesystem
