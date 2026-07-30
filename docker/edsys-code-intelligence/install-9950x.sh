@@ -77,7 +77,7 @@ print(f"validated {len(names)} repositories")
 PY
 
 install -d -m 0755 "${STATE_ROOT}" "${STATE_ROOT}/zoekt" "${STATE_ROOT}/state"
-chown jeremy:jeremy "${STATE_ROOT}/zoekt"
+chown jeremy:jeremy "${STATE_ROOT}/zoekt" "${STATE_ROOT}/state"
 install -m 0755 "${INDEXER_SOURCE}" "${INDEXER_TARGET}"
 install -m 0644 \
   "${SYSTEMD_SOURCE}/edsys-code-intelligence-index.service" \
