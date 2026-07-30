@@ -27,3 +27,4 @@ Do not commit live `.env` files, Docker volumes, databases, uploads, logs, or ba
 - `edsys-control-api/` - read-only EdSys source-of-truth API over `EdSys-Master` YAML, published directly on loopback/LAN with reviewed Tailnet proxy exposure.
 - `edsys-glasses-gateway/` - tracked deployment boundary for the private gateway, published directly on loopback/LAN with reviewed Tailnet proxy exposure.
 - `edsys-code-intelligence/` - loopback-only, CPU-first Zoekt/Infinity/MCP stack for committed-code search and advisory local Codex review; regenerable state lives on AI Store and no repository tree is mounted into the MCP app.
+- `ask-foothills/` - not-yet-activated 9950x template for the read-only Ask Foothills knowledge UI, with a read-only project mount, metadata-only audit volume, health check, and secret-store references.

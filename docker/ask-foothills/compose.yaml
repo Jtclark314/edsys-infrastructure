@@ -1,0 +1,47 @@
+services:
+  ask-foothills:
+    build:
+      context: ${FOOTHILLS_PORTAL_REPO:-/home/jeremy/code/foothills-project-portal}
+      dockerfile: ask-foothills/Dockerfile
+    image: ask-foothills:${ASK_FOOTHILLS_IMAGE_TAG:-local}
+    container_name: ask-foothills
+    restart: unless-stopped
+    init: true
+    user: "${ASK_FOOTHILLS_UID:-1000}:${ASK_FOOTHILLS_GID:-1000}"
+    env_file:
+      - ${ASK_FOOTHILLS_ENV_FILE:-/etc/edsys/ask-foothills.env}
+    environment:
+      FOOTHILLS_PROJECT_ROOT: /srv/foothills/project
+      FOOTHILLS_QUERY_SCRIPT: /srv/foothills/project/.agents/skills/foothills-query/scripts/foothills_query.py
+      FOOTHILLS_CATALOG_DB: /srv/foothills/project/project-management/project-controls/foothills-catalog.sqlite3
+      FOOTHILLS_QUERY_DB: /srv/foothills/project/project-management/project-controls/foothills-query-index.sqlite3
+      ASK_FOOTHILLS_AUDIT_DB: /var/lib/ask-foothills/audit.sqlite3
+      FOOTHILLS_QUERY_MODEL: foothills-query-best
+      ASK_FOOTHILLS_DEV_AUTH: "false"
+    ports:
+      - "${ASK_FOOTHILLS_BIND_ADDRESS:-192.168.50.50}:3036:3036"
+    volumes:
+      - ${FOOTHILLS_PROJECT_ROOT:-/home/jeremy/projects/foothills}:/srv/foothills/project:ro
+      - ${ASK_FOOTHILLS_AUDIT_DIR:-/var/lib/ask-foothills}:/var/lib/ask-foothills:rw
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:3036/healthz', timeout=10))['ok']"
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

@@ -18,6 +18,7 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `../docker/edsys-ai-portal/README.md` - private LiteLLM-backed EdSys operator UI.
 - `../docker/edsys-control-api/README.md` - read-only API and dashboard over the EdSys-Master source-of-truth YAML.
 - `../docker/edsys-code-intelligence/README.md` - hardened, loopback-only committed-code search, CPU reranking, local review MCP, and guarded index timers for Codex.
+- `../docker/ask-foothills/README.md` - planned read-only Ask Foothills service on 9950x; production activation remains authorization-gated.
 - `../scripts/backup/README.md` - Google Drive offsite backup tooling using `9950x`, `restic`, and `rclone`.
 - `../scripts/security/README.md` - fail-closed 9950x SSH source/interface guard and capability-preserving forwarding policy.
 - `../scripts/network/README.md` - FreeBind systemd socket proxy for exact-address Tailnet AI access without Docker boot dependency on `tailscale0`.
