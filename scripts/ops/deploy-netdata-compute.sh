@@ -7,6 +7,7 @@ verify_script="${repo_root}/scripts/ops/verify-netdata-compute.py"
 parent_ip="192.168.50.50"
 group_name="edsys-compute"
 children=(pve-edcore pve-node0 pve-node1 pve-node2)
+ops_satellite="edcore-ops"
 
 usage() {
   cat <<'EOF'
@@ -119,6 +120,10 @@ for child in "${children[@]}"; do
   ssh "${ssh_options[@]}" "root@${child}" \
     "test \"\$(hostname)\" = '${child}'; curl -fsS --max-time 10 http://${parent_ip}:19999/api/v1/info >/dev/null"
 done
+ssh "${ssh_options[@]}" "${ops_satellite}" \
+  "test \"\$(hostname)\" = '${ops_satellite}'; \
+   sudo -n systemctl is-active --quiet netdata; \
+   curl -fsS --max-time 10 http://${parent_ip}:19999/api/v1/info >/dev/null"
 
 install -d -m 0700 "$parent_backup"
 for item in \
@@ -207,7 +212,7 @@ cat >"${tmpdir}/parent-stream.conf" <<EOF
 [${stream_key}]
     type = api
     enabled = yes
-    allow from = 192.168.50.51 192.168.50.52 192.168.50.53 192.168.50.54
+    allow from = 192.168.50.51 192.168.50.52 192.168.50.53 192.168.50.54 192.168.50.79
     db = dbengine
     health enabled = auto
     postpone alerts on connect = 1m
@@ -271,7 +276,7 @@ EOF
      systemctl restart netdata; systemctl is-active --quiet netdata"
 done
 
-echo "Waiting for all four child streams to become reachable on 9950x."
+echo "Waiting for all five child streams to become reachable on 9950x."
 for _ in {1..90}; do
   if python3 "$verify_script" >/dev/null 2>&1; then
     break

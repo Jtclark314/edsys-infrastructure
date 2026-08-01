@@ -2,10 +2,12 @@
 
 ## Current Design
 
-`9950x` is the single EdSys Netdata Parent. The four Proxmox hosts are Netdata
-Children and stream to the parent over the LAN:
+`9950x` is the single EdSys Netdata Parent. The four Proxmox hosts and the
+`edcore-ops` management satellite are Netdata Children and stream to the parent
+over the LAN:
 
 - `9950x` — parent and local collector
+- `edcore-ops` — Ubuntu operations/Codex satellite
 - `pve-edcore` — child
 - `pve-node0` — child
 - `pve-node1` — child
@@ -31,11 +33,14 @@ sudo scripts/ops/deploy-netdata-compute.sh --apply
 
 The installer:
 
-1. Preflights SSH and child-to-parent LAN reachability.
+1. Preflights SSH and child-to-parent LAN reachability, including the
+   separately provisioned `edcore-ops` satellite.
 2. Stores private pre-change configuration under
    `/var/backups/edsys-netdata-compute/<UTC timestamp>/` on every affected host.
 3. Aligns the four Debian 13 Proxmox hosts to the signed Netdata edge APT
-   repository already used by `9950x` and `pve-node0`.
+   repository already used by `9950x` and `pve-node0`. The Ubuntu 24.04
+   `edcore-ops` package/configuration is installed by its satellite build and
+   must already pass preflight; this deployer preserves and admits its stream.
 4. Configures exact hostnames and the shared `edsys-compute` label.
 5. Sets the Parent's Docker collector to a 10-second cadence while retaining
    Docker service discovery and Docker/cgroup charts.
@@ -62,11 +67,11 @@ scripts/ops/deploy-netdata-compute.sh --check
 
 The check fails unless:
 
-- the node set is exactly the five names above;
+- the node set is exactly the six names above;
 - every node is reachable, with its alert engine either online or in the
   bounded post-restart `initializing` state;
 - every node has `group=edsys-compute`;
-- `9950x` reports Parent mode, five total nodes, and four receiving streams.
+- `9950x` reports Parent mode, six total nodes, and five receiving streams.
 
 Direct API inspection remains available at:
 
