@@ -202,6 +202,15 @@ keeps each profile persistent, and records a credential-free status JSON under
 `%LOCALAPPDATA%\EdSys`. This prevents a fast Windows logon from permanently
 losing all five mappings before Tailscale and Basecamp become reachable.
 
+For tasks that run under `InteractiveToken`, use `net use /persistent:yes` for
+the actual drive creation. `New-SmbMapping -Persistent $true` can write a
+correct `HKCU\Network` profile and pass `Get-SmbMapping`/`Test-Path` inside the
+task while the existing Explorer process still does not enumerate the drive.
+That false-positive state was observed for Nimo `Q:` and `R:` on 2026-08-02.
+Acceptance must query the live `Shell.Application` **This PC** namespace from
+Explorer's session and confirm the expected drive path there; task result,
+registry profile, and task-local path access alone are insufficient.
+
 Basecamp continues to authenticate as `9950x\jeremy`. The managed work-laptop
 profile uses dedicated SMB-only identity `9950x\edsys-share-dell`. Samba forces
 both device identities to filesystem user `jeremy` only after successful

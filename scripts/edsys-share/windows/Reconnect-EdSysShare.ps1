@@ -96,58 +96,52 @@ try {
         throw "$LocalPath is already assigned to a different resource: $($logicalDrive.ProviderName)"
     }
 
-    $profile = Get-PersistentProfile
     $mapping = Get-SmbMapping -LocalPath $LocalPath -ErrorAction SilentlyContinue
-    $alreadyReady = (
-        $null -ne $profile -and
-        $profile.RemotePath -ieq $RemotePath -and
-        $null -ne $mapping -and
-        $mapping.RemotePath -ieq $RemotePath -and
-        (Test-Path -LiteralPath ($LocalPath + '\'))
-    )
-
-    if (-not $alreadyReady) {
-        if ($null -ne $mapping) {
-            try {
-                Remove-SmbMapping -LocalPath $LocalPath -Force -UpdateProfile -ErrorAction Stop
-            }
-            catch {
-                & "$env:SystemRoot\System32\net.exe" use $LocalPath /delete /y 2>&1 | Out-Null
-            }
+    if ($null -ne $mapping) {
+        try {
+            Remove-SmbMapping -LocalPath $LocalPath -Force -UpdateProfile -ErrorAction Stop
         }
-        Remove-Item -LiteralPath $registryPath -Recurse -Force -ErrorAction SilentlyContinue
-
-        $lastError = $null
-        do {
-            try {
-                New-SmbMapping -LocalPath $LocalPath -RemotePath $RemotePath -Persistent $true -RequireIntegrity $true -RequirePrivacy $true -ErrorAction Stop | Out-Null
-                $profile = Get-PersistentProfile
-                $mapping = Get-SmbMapping -LocalPath $LocalPath -ErrorAction SilentlyContinue
-                if (
-                    $null -ne $profile -and
-                    $profile.RemotePath -ieq $RemotePath -and
-                    $null -ne $mapping -and
-                    $mapping.RemotePath -ieq $RemotePath -and
-                    (Test-Path -LiteralPath ($LocalPath + '\'))
-                ) {
-                    $lastError = $null
-                    break
-                }
-                $lastError = 'The mapping command returned without a reachable persistent profile.'
-            }
-            catch {
-                $lastError = $_.Exception.Message
-            }
-
-            if ((Get-Date) -ge $deadline) {
-                throw $lastError
-            }
-            Start-Sleep -Seconds 5
-        } while ($true)
+        catch {
+            & "$env:SystemRoot\System32\cmd.exe" /d /c "net use $LocalPath /delete /y >nul 2>&1" | Out-Null
+        }
     }
+    & "$env:SystemRoot\System32\cmd.exe" /d /c "net use $LocalPath /delete /y >nul 2>&1" | Out-Null
+    Remove-Item -LiteralPath $registryPath -Recurse -Force -ErrorAction SilentlyContinue
+
+    $lastError = $null
+    do {
+        $netOutput = & "$env:SystemRoot\System32\cmd.exe" /d /c "net use $LocalPath $RemotePath /persistent:yes 2>&1"
+        $netExit = $LASTEXITCODE
+        $profile = Get-PersistentProfile
+        $mapping = Get-SmbMapping -LocalPath $LocalPath -ErrorAction SilentlyContinue
+        if (
+            $netExit -eq 0 -and
+            $null -ne $profile -and
+            $profile.RemotePath -ieq $RemotePath -and
+            $null -ne $mapping -and
+            $mapping.RemotePath -ieq $RemotePath -and
+            (Test-Path -LiteralPath ($LocalPath + '\'))
+        ) {
+            $lastError = $null
+            break
+        }
+
+        $safeOutput = (($netOutput | Out-String).Trim() -replace '(?i)password\s*[:=].*', '[redacted]')
+        $lastError = if ($safeOutput) {
+            "net use exit ${netExit}: $safeOutput"
+        }
+        else {
+            "net use exit $netExit without a reachable persistent profile."
+        }
+
+        if ((Get-Date) -ge $deadline) {
+            throw $lastError
+        }
+        Start-Sleep -Seconds 5
+    } while ($true)
 
     Set-ExplorerLabel
-    Write-DriveState 'ok' 'Persistent encrypted mapping and File Explorer label are ready.'
+    Write-DriveState 'ok' 'Explorer-visible persistent mapping and File Explorer label are ready; the server requires SMB encryption.'
 }
 catch {
     Write-DriveState 'error' $_.Exception.Message
