@@ -16,6 +16,6 @@ fi
 tailscale up --auth-key="file:$auth_file" --hostname=netbox --ssh=false --accept-dns=false --accept-routes=false
 shred -u "$auth_file"
 tailscale serve --bg --yes http://127.0.0.1:8080
-systemctl enable edsys-netbox-tailscale-serve.service
+systemctl enable --now edsys-netbox-tailscale-serve.service
 tailscale status --json | jq '{BackendState, Self: {HostName: .Self.HostName, DNSName: .Self.DNSName, TailscaleIPs: .Self.TailscaleIPs}}'
 tailscale serve status --json

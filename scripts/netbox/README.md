@@ -28,9 +28,10 @@ NIC evidence into private NetBox inventory items. Root-private plan/evidence
 files can contain hardware serials and must not be copied into Git or RAG.
 
 The daily review timer runs discovery, reconciliation, and validation only.
-It never applies a generated plan. Inventory remains explicitly
-non-authoritative until the operator completes every cutover gate and changes
-the reviewed cutover constant.
+It never applies a generated plan. All cutover gates passed on 2026-08-02 and
+the reviewed cutover constant now marks managed operational records
+authoritative. Retired host-local bridge observations remain explicitly
+non-authoritative.
 
 The export command follows the same review gate and writes a deterministic,
 sanitized snapshot. It excludes serials, credentials, SSIDs/PSKs, API tokens,

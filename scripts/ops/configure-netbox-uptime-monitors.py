@@ -7,6 +7,7 @@ SQLite-consistent private backup.  Provider credentials are never read.
 
 from __future__ import annotations
 
+import argparse
 import os
 from pathlib import Path
 import sqlite3
@@ -24,13 +25,25 @@ MONITORS = (
     {
         "name": "NetBox Tailnet HTTPS",
         "url": "https://netbox.taile832fe.ts.net/login/",
-        "active": 0,
-        "description": "Enable only after one-time Tailscale enrollment and Tailscale Serve acceptance pass.",
+        "active": None,
+        "description": "Private Tailnet HTTPS endpoint through accepted Tailscale Serve configuration.",
     },
 )
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--tailnet-state",
+        choices=("preserve", "enabled", "disabled"),
+        default="preserve",
+        help="Preserve the existing Tailnet monitor state by default; new monitors start disabled.",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
     if not DB_PATH.is_file():
         raise SystemExit(f"Uptime Kuma database not found: {DB_PATH}")
     connection = sqlite3.connect(DB_PATH)
@@ -44,8 +57,15 @@ def main() -> int:
             raise RuntimeError("No active Uptime Kuma notification provider exists")
         notification_id = notification[0]
         for monitor in MONITORS:
+            requested_active = monitor["active"]
+            if monitor["name"] == "NetBox Tailnet HTTPS":
+                if args.tailnet_state == "enabled":
+                    requested_active = 1
+                elif args.tailnet_state == "disabled":
+                    requested_active = 0
             row = connection.execute("SELECT id FROM monitor WHERE name=?", (monitor["name"],)).fetchone()
             if row is None:
+                initial_active = 0 if requested_active is None else requested_active
                 cursor = connection.execute(
                     """
                     INSERT INTO monitor
@@ -54,7 +74,7 @@ def main() -> int:
                        expiry_notification, accepted_statuscodes_json)
                     VALUES (?, ?, 1, 60, ?, 'http', 2, 0, 60, 'GET', ?, 1, 1, '[\"200-299\"]')
                     """,
-                    (monitor["name"], monitor["active"], monitor["url"], monitor["description"]),
+                    (monitor["name"], initial_active, monitor["url"], monitor["description"]),
                 )
                 monitor_id = cursor.lastrowid
             else:
@@ -62,13 +82,13 @@ def main() -> int:
                 connection.execute(
                     """
                     UPDATE monitor
-                    SET active=?, user_id=1, interval=60, url=?, type='http',
+                    SET active=COALESCE(?, active), user_id=1, interval=60, url=?, type='http',
                         maxretries=2, ignore_tls=0, retry_interval=60,
                         method='GET', description=?, parent=1,
                         expiry_notification=1, accepted_statuscodes_json='[\"200-299\"]'
                     WHERE id=?
                     """,
-                    (monitor["active"], monitor["url"], monitor["description"], monitor_id),
+                    (requested_active, monitor["url"], monitor["description"], monitor_id),
                 )
             connection.execute("DELETE FROM monitor_notification WHERE monitor_id=?", (monitor_id,))
             next_link_id = connection.execute(
@@ -78,7 +98,8 @@ def main() -> int:
                 "INSERT INTO monitor_notification (id, monitor_id, notification_id) VALUES (?, ?, ?)",
                 (next_link_id, monitor_id, notification_id),
             )
-            print(f"monitor={monitor['name']} id={monitor_id} active={monitor['active']} tls_verification=required")
+            active = connection.execute("SELECT active FROM monitor WHERE id=?", (monitor_id,)).fetchone()[0]
+            print(f"monitor={monitor['name']} id={monitor_id} active={active} tls_verification=required")
         connection.commit()
     except Exception:
         connection.rollback()

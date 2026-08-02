@@ -44,10 +44,12 @@ INVENTORY_OBJECT_TYPES = [
     "virtualization.virtualdisk",
 ]
 TODAY = dt.datetime.now(dt.timezone.utc).date().isoformat()
-# This flips only after every cutover gate, including Tailnet access and restore
-# acceptance, has passed.  Discovery can populate NetBox without prematurely
-# changing EdSys inventory authority.
-AUTHORITATIVE_CUTOVER = False
+# Every cutover gate passed on 2026-08-02: LAN and Tailnet access, scoped
+# authentication, idempotent reconciliation, application-consistent backup,
+# isolated restore, service/VM restart, controlled host reboot, monitoring, and
+# the retained post-acceptance rollback snapshot. NetBox is now the operational
+# authority; Git remains the reviewed sanitized export and narrative surface.
+AUTHORITATIVE_CUTOVER = True
 
 
 def canonical(value: Any) -> str:
@@ -457,6 +459,7 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
             {
                 "prefix": subnet["cidr"], "status": status, "tenant": ref("tenant:edsys"),
                 "description": f"{subnet.get('name', 'EdSys subnet')}; {subnet.get('notes', '')}"[:200],
+                "tags": inventory_tags(),
                 "custom_fields": cf_values(subnet.get("source", "EdSys network map"), subnet.get("last_verified"), subnet.get("confidence", "medium"), subnet),
             },
         )
@@ -508,6 +511,7 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
                     "device": ref(key), "name": ifname, "type": "other",
                     "enabled": str(interface.get("state", "UP")).upper() != "DOWN",
                     "description": str(interface.get("notes") or "Observed interface")[:200],
+                    "tags": tag_refs,
                     "custom_fields": cf_values(device.get("source", "EdSys network map"), device.get("last_verified"), device.get("confidence", "medium"), interface),
                 },
             )
@@ -531,6 +535,7 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
                         "assigned_object_type": "dcim.interface", "assigned_object_id": ref(ifkey),
                         "dns_name": f"{name}.edsys.local" if str(ip).startswith("192.168.50.") else "",
                         "description": "Observed interface address",
+                        "tags": tag_refs,
                         "custom_fields": cf_values(device.get("source", "EdSys network map"), device.get("last_verified"), device.get("confidence", "medium"), {"device": name, "interface": interface}),
                     },
                 )
@@ -539,9 +544,30 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
         if device.get("ip") and valid_ip(device["ip"]) and primary_ip_ref is None:
             ifkey = f"interface:{name}:management0"
             if not any(op["key"] == ifkey for op in plan.operations):
-                plan.upsert(ifkey, "dcim/interfaces/", {"device_id": ref(key), "name": "management0"}, {"device": ref(key), "name": "management0", "type": "other", "enabled": True})
+                plan.upsert(
+                    ifkey, "dcim/interfaces/", {"device_id": ref(key), "name": "management0"},
+                    {
+                        "device": ref(key), "name": "management0", "type": "other", "enabled": True,
+                        "description": "Reviewed primary management interface", "tags": tag_refs,
+                        "custom_fields": cf_values(
+                            device.get("source", "EdSys network map"), device.get("last_verified"),
+                            device.get("confidence", "medium"), {"device": name, "interface": "management0"},
+                        ),
+                    },
+                )
             primary_ip_ref = f"ip:{address_with_mask(device['ip'])}"
-            plan.upsert(primary_ip_ref, "ipam/ip-addresses/", {"address": address_with_mask(device["ip"])}, {"address": address_with_mask(device["ip"]), "status": "active", "tenant": ref("tenant:edsys"), "assigned_object_type": "dcim.interface", "assigned_object_id": ref(ifkey), "dns_name": f"{name}.edsys.local", "description": "Primary management address"})
+            plan.upsert(
+                primary_ip_ref, "ipam/ip-addresses/", {"address": address_with_mask(device["ip"])},
+                {
+                    "address": address_with_mask(device["ip"]), "status": "active", "tenant": ref("tenant:edsys"),
+                    "assigned_object_type": "dcim.interface", "assigned_object_id": ref(ifkey),
+                    "dns_name": f"{name}.edsys.local", "description": "Primary management address", "tags": tag_refs,
+                    "custom_fields": cf_values(
+                        device.get("source", "EdSys network map"), device.get("last_verified"),
+                        device.get("confidence", "medium"), {"device": name, "address": device["ip"]},
+                    ),
+                },
+            )
         if primary_ip_ref:
             plan.patch_ref(f"primary-ip:{name}", key, {"primary_ip4": ref(primary_ip_ref)})
 
@@ -609,19 +635,52 @@ def add_virtualization(plan: Plan, network: dict[str, Any], live_resources: list
             },
         )
         ifkey = f"vm-interface:{vmid}:net0"
-        plan.upsert(ifkey, "virtualization/interfaces/", {"virtual_machine_id": ref(key), "name": "net0"}, {"virtual_machine": ref(key), "name": "net0", "enabled": True, "description": f"Proxmox bridge {vm.get('bridge', 'vmbr0')}"})
+        plan.upsert(
+            ifkey, "virtualization/interfaces/", {"virtual_machine_id": ref(key), "name": "net0"},
+            {
+                "virtual_machine": ref(key), "name": "net0", "enabled": True,
+                "description": f"Proxmox bridge {vm.get('bridge', 'vmbr0')}", "tags": tag_refs,
+                "custom_fields": cf_values(
+                    vm.get("source", "Proxmox discovery"), vm.get("last_verified"), vm.get("confidence", "high"),
+                    {"vmid": vmid, "bridge": vm.get("bridge"), "mac": vm.get("mac")},
+                    last_verified=(vm.get("last_verified") or TODAY)[:10],
+                    management_method="Proxmox read-only discovery",
+                ),
+            },
+        )
         if vm.get("mac"):
             plan.upsert(f"vm-mac:{vmid}", "dcim/mac-addresses/", {"mac_address": vm["mac"]}, {"mac_address": vm["mac"], "assigned_object_type": "virtualization.vminterface", "assigned_object_id": ref(ifkey), "description": f"VMID {vmid} net0"})
         if valid_ip(ip):
             ipkey = f"ip:{address_with_mask(ip)}"
-            plan.upsert(ipkey, "ipam/ip-addresses/", {"address": address_with_mask(ip)}, {"address": address_with_mask(ip), "status": "active", "tenant": ref("tenant:edsys"), "assigned_object_type": "virtualization.vminterface", "assigned_object_id": ref(ifkey), "dns_name": f"{name}.edsys.local" if str(ip).startswith("192.168.50.") else "", "description": f"VMID {vmid} primary address"})
+            plan.upsert(
+                ipkey, "ipam/ip-addresses/", {"address": address_with_mask(ip)},
+                {
+                    "address": address_with_mask(ip), "status": "active", "tenant": ref("tenant:edsys"),
+                    "assigned_object_type": "virtualization.vminterface", "assigned_object_id": ref(ifkey),
+                    "dns_name": f"{name}.edsys.local" if str(ip).startswith("192.168.50.") else "",
+                    "description": f"VMID {vmid} primary address", "tags": tag_refs,
+                    "custom_fields": cf_values(
+                        vm.get("source", "Proxmox discovery"), vm.get("last_verified"), vm.get("confidence", "high"),
+                        {"vmid": vmid, "address": ip}, last_verified=(vm.get("last_verified") or TODAY)[:10],
+                        management_method="Proxmox read-only discovery",
+                    ),
+                },
+            )
             plan.patch_ref(f"vm-primary-ip:{vmid}", key, {"primary_ip4": ref(ipkey)})
         for index, disk in enumerate(vm.get("disks") or []):
             size = parse_disk_size_mb(str(disk))
             if size:
                 plan.upsert(
                     f"vm-disk:{vmid}:{index}", "virtualization/virtual-disks/", {"virtual_machine_id": ref(key), "name": f"disk{index}"},
-                    {"virtual_machine": ref(key), "name": f"disk{index}", "size": size, "description": str(disk)[:200]},
+                    {
+                        "virtual_machine": ref(key), "name": f"disk{index}", "size": size,
+                        "description": str(disk)[:200], "tags": tag_refs,
+                        "custom_fields": cf_values(
+                            vm.get("source", "Proxmox discovery"), vm.get("last_verified"), vm.get("confidence", "high"),
+                            {"vmid": vmid, "disk": str(disk)}, last_verified=(vm.get("last_verified") or TODAY)[:10],
+                            management_method="Proxmox read-only discovery",
+                        ),
+                    },
                 )
 
 
@@ -797,6 +856,7 @@ def add_proxmox_hardware(plan: Plan, hardware: list[dict[str, Any]]):
     for node in hardware:
         name = str(node.get("hostname") or node.get("requested_host"))
         device_ref = f"hardware-device:{name}"
+        tag_refs = inventory_tags()
         plan.reference(device_ref, "dcim/devices/", {"name": name})
         source = f"live root hardware discovery on {node.get('observed_date', TODAY)}"
         chassis_description = "; ".join(filter(None, [node.get("system_vendor"), node.get("product_name"), node.get("pve_version")]))[:200]
@@ -805,6 +865,7 @@ def add_proxmox_hardware(plan: Plan, hardware: list[dict[str, Any]]):
             {
                 "device": ref(device_ref), "name": "System Chassis", "serial": useful_serial(node.get("product_serial")),
                 "part_id": str(node.get("product_name") or "")[:100], "description": chassis_description,
+                "tags": tag_refs,
                 "custom_fields": cf_values(source, TODAY, "high", node, last_verified=TODAY, management_method="read-only Proxmox host hardware discovery"),
             },
         )
@@ -814,6 +875,7 @@ def add_proxmox_hardware(plan: Plan, hardware: list[dict[str, Any]]):
                 {
                     "device": ref(device_ref), "name": "System Board", "serial": useful_serial(node.get("board_serial")),
                     "part_id": str(node.get("board_name") or "")[:100], "description": "Observed system board",
+                    "tags": tag_refs,
                     "custom_fields": cf_values(source, TODAY, "high", {"board_name": node.get("board_name"), "board_serial": node.get("board_serial")}),
                 },
             )
@@ -827,6 +889,7 @@ def add_proxmox_hardware(plan: Plan, hardware: list[dict[str, Any]]):
                     "device": ref(device_ref), "name": disk_name, "serial": useful_serial(disk.get("serial")),
                     "part_id": str(disk.get("model") or "")[:100],
                     "description": f"{disk.get('size', 0)} bytes; transport {disk.get('tran') or 'to be confirmed'}"[:200],
+                    "tags": tag_refs,
                     "custom_fields": cf_values(source, TODAY, "high", disk, last_verified=TODAY),
                 },
             )
@@ -839,6 +902,7 @@ def add_proxmox_hardware(plan: Plan, hardware: list[dict[str, Any]]):
                 {
                     "device": ref(device_ref), "name": link_name,
                     "description": f"MAC {link.get('mac') or 'to be confirmed'}; state {link.get('state') or 'to be confirmed'}"[:200],
+                    "tags": tag_refs,
                     "custom_fields": cf_values(source, TODAY, "high", link, last_verified=TODAY),
                 },
             )

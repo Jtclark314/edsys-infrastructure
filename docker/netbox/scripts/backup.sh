@@ -37,7 +37,8 @@ done
 
 docker compose images --format json | jq -s . >"$staging/images.json"
 docker compose config --images | sort -u >"$staging/image-identities.txt"
-docker compose exec -T netbox /opt/netbox/netbox/manage.py shell <<'PY' >"$staging/object-counts.json"
+docker compose exec -T netbox /opt/netbox/netbox/manage.py shell --no-imports <<'PY' \
+  | tail -n 1 >"$staging/object-counts.json"
 import json
 from django.apps import apps
 
@@ -50,6 +51,7 @@ for model in apps.get_models():
             pass
 print(json.dumps(dict(sorted(result.items())), sort_keys=True))
 PY
+python3 -m json.tool "$staging/object-counts.json" >/dev/null
 
 cp compose.yaml "$staging/compose.yaml"
 cp -a configuration caddy env "$staging/"
@@ -58,7 +60,8 @@ cp -a configuration caddy env "$staging/"
   printf 'hostname=%s\n' "$(hostname -f)"
   docker version --format 'docker_server={{.Server.Version}}'
   docker compose version --short | sed 's/^/compose=/'
-  docker compose exec -T netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py --version | sed 's/^/netbox=/'
+  docker compose exec -T netbox awk -F'"' '/^version:/ { print $2; exit }' /opt/netbox/netbox/release.yaml | sed 's/^/netbox=/'
+  docker compose exec -T netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py --version | tail -n 1 | sed 's/^/django=/'
   docker compose exec -T postgres psql -U netbox -d netbox -Atc 'SHOW data_checksums' | sed 's/^/postgres_data_checksums=/'
 } >"$staging/manifest.txt"
 (cd "$staging" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum) >"$staging/SHA256SUMS"

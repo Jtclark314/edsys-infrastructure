@@ -1,9 +1,11 @@
 # EdSys NetBox
 
-This stack runs NetBox 4.6.7 in dedicated Proxmox VMID 323. NetBox becomes the
-structured operational authority only after the import, idempotence, backup,
-isolated restore, VM reboot, and `pve-edcore` reboot gates pass. Until then the
-reviewed EdSys-Master YAML remains authoritative.
+This stack runs NetBox 4.6.7 in dedicated Proxmox VMID 323. All authority gates
+passed on 2026-08-02, including LAN/Tailnet access, authentication,
+idempotence, backup/isolated restore, monitoring, VM/host reboot recovery, and
+the retained post-acceptance snapshot. NetBox is the structured operational
+authority; reviewed EdSys-Master YAML remains the sanitized export/narrative
+surface and may lag live state.
 
 ## Boundaries
 
@@ -25,14 +27,16 @@ reviewed EdSys-Master YAML remains authoritative.
 5. Run `scripts/deploy.sh` as root.
 6. Supply a one-time Tailscale auth key outside Git, then run
    `scripts/enroll-tailscale.sh`. Enrollment deliberately declines Tailnet DNS
-   and advertised routes so the server retains the reviewed LAN/Pi-hole path.
+   and advertised routes so the server retains the reviewed LAN/Pi-hole path;
+   the script starts and enables the persistent Serve unit after enrollment.
 7. Trust Caddy's public root certificate on approved LAN clients only.
 
 ## Backups and restore
 
 `scripts/backup.sh` produces a PostgreSQL custom-format dump, volume archives,
-configuration copies, image identities, object counts, and SHA-256 checksums
-under `/var/backups/netbox`. The 9950x backup orchestrator must pull and verify
+configuration copies, exact NetBox/Django image versions, validated JSON
+object counts, and SHA-256 checksums under `/var/backups/netbox`. The 9950x
+backup orchestrator must pull and verify
 `current` before encrypted Restic runs. `scripts/restore-test.sh` validates
 hashes/archives, PostgreSQL checksums and relations, then runs NetBox migration,
 system-check, and representative ORM assertions against an internal-only
@@ -42,6 +46,11 @@ always begin in isolation.
 The 9950x-side verified pull, sync/export review timers, and Healthchecks
 integration live under `scripts/netbox/`. Scheduled discovery and export jobs
 produce plans only; neither applies changes nor writes the reviewed export.
+
+The Uptime Kuma reconciler preserves the existing Tailnet monitor state by
+default. After accepted Tailscale enrollment, an operator may run
+`scripts/ops/configure-netbox-uptime-monitors.py --tailnet-state enabled`
+against a stopped Kuma database; `disabled` is the explicit rollback state.
 
 The Proxmox post-acceptance snapshot is a short-lived rollback point, not a
 backup. Upgrades are manual and require a logical backup, isolated rehearsal,
