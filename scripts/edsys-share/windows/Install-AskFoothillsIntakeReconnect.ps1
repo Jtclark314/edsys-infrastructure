@@ -1,19 +1,19 @@
 [CmdletBinding()]
 param(
-    [string]$TaskName = 'EdSys Share Q Reconnect',
-    [int]$LogonDelaySeconds = 20
+    [string]$TaskName = 'Ask Foothills Intake I Reconnect',
+    [int]$LogonDelaySeconds = 10
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-$source = Join-Path $PSScriptRoot 'Reconnect-EdSysShare.ps1'
+$source = Join-Path $PSScriptRoot 'Reconnect-AskFoothillsIntake.ps1'
 if (-not (Test-Path -LiteralPath $source)) {
     throw "Reconnect script is missing: $source"
 }
 
 $installDirectory = Join-Path $env:LOCALAPPDATA 'EdSys'
-$installedScript = Join-Path $installDirectory 'Reconnect-EdSysShare.ps1'
+$installedScript = Join-Path $installDirectory 'Reconnect-AskFoothillsIntake.ps1'
 New-Item -ItemType Directory -Path $installDirectory -Force | Out-Null
 Copy-Item -LiteralPath $source -Destination $installedScript -Force
 
@@ -36,7 +36,7 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Principal $principal -Settings $settings -Description (
-        'Waits for Tailscale/SMB readiness and restores persistent encrypted EdSys Share Q:.'
+        'Waits for the private 9950x SMB endpoint and restores persistent Ask Foothills Intake I:.'
     ) -Force | Out-Null
 
 Start-ScheduledTask -TaskName $TaskName

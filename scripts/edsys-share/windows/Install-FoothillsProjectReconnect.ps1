@@ -2,7 +2,7 @@
 param(
     [ValidatePattern('^[A-Za-z]:$')]
     [string]$LocalPath = 'R:',
-    [string]$TaskName = 'Foothills Inbox R Reconnect',
+    [string]$TaskName = 'Foothills Project R Reconnect',
     [int]$LogonDelaySeconds = 25
 )
 
@@ -14,7 +14,7 @@ if (-not (Test-Path -LiteralPath $source)) {
     throw "Reconnect script is missing: $source"
 }
 
-$remotePath = '\\9950x.taile832fe.ts.net\Foothills-Inbox'
+$remotePath = '\\9950x.taile832fe.ts.net\Foothills-Project'
 $installDirectory = Join-Path $env:LOCALAPPDATA 'EdSys'
 $installedScript = Join-Path $installDirectory 'Reconnect-EdSysShare.ps1'
 New-Item -ItemType Directory -Path $installDirectory -Force | Out-Null
@@ -22,10 +22,11 @@ Copy-Item -LiteralPath $source -Destination $installedScript -Force
 
 $powerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $actionArguments = (
-    '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass ' +
+    '-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass ' +
     '-File "' + $installedScript + '" ' +
     '-LocalPath "' + $LocalPath + '" ' +
-    '-RemotePath "' + $remotePath + '"'
+    '-RemotePath "' + $remotePath + '" ' +
+    '-Label "Foothills Project"'
 )
 $action = New-ScheduledTaskAction -Execute $powerShell -Argument $actionArguments
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User (
@@ -37,11 +38,12 @@ $principal = New-ScheduledTaskPrincipal -UserId (
 ) -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries -StartWhenAvailable `
-    -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+    -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 20) `
+    -Hidden
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Principal $principal -Settings $settings -Description (
-        "Waits for Tailscale/SMB readiness and maps Foothills Inbox as $LocalPath."
+        "Waits for Tailscale/SMB readiness and restores the persistent full Foothills project tree as $LocalPath."
     ) -Force | Out-Null
 
 Start-ScheduledTask -TaskName $TaskName

@@ -1,19 +1,19 @@
 [CmdletBinding()]
 param(
-    [string]$TaskName = 'EdSys Share Q Reconnect',
-    [int]$LogonDelaySeconds = 20
+    [string]$TaskName = 'Basecamp Shares Reconnect',
+    [int]$LogonDelaySeconds = 30
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-$source = Join-Path $PSScriptRoot 'Reconnect-EdSysShare.ps1'
+$source = Join-Path $PSScriptRoot 'Reconnect-BasecampShares.ps1'
 if (-not (Test-Path -LiteralPath $source)) {
     throw "Reconnect script is missing: $source"
 }
 
 $installDirectory = Join-Path $env:LOCALAPPDATA 'EdSys'
-$installedScript = Join-Path $installDirectory 'Reconnect-EdSysShare.ps1'
+$installedScript = Join-Path $installDirectory 'Reconnect-BasecampShares.ps1'
 New-Item -ItemType Directory -Path $installDirectory -Force | Out-Null
 Copy-Item -LiteralPath $source -Destination $installedScript -Force
 
@@ -36,7 +36,7 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Principal $principal -Settings $settings -Description (
-        'Waits for Tailscale/SMB readiness and restores persistent encrypted EdSys Share Q:.'
+        'Waits for Basecamp SMB readiness and restores the five persistent Nimo file drives with bounded retries.'
     ) -Force | Out-Null
 
 Start-ScheduledTask -TaskName $TaskName

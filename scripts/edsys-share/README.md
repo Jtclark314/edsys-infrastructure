@@ -169,20 +169,38 @@ New-SmbMapping -LocalPath 'Q:' `
 
 Nimo uses dedicated SMB-only identity `9950x\edsys-share-nimo`. To avoid the
 Windows logon restore racing Tailscale/MagicDNS, deploy the user-level reconnect
-task from `windows/` in the normal `NIMO-LAPTOP\jtcla` profile. It removes the
-native persistent `Q:` profile, waits up to five minutes for TCP 445, and creates
-an encrypted/signed nonpersistent mapping at each logon. The saved credential
-remains in Windows Credential Manager; no password is stored in either script.
+tasks from `windows/` in the normal `NIMO-LAPTOP\jtcla` profile. They wait up to
+ten minutes for TCP 445 and restore persistent, encrypted/signed mappings plus
+stable File Explorer labels. The saved credential remains in Windows Credential
+Manager; no password is stored in either script.
 
 ```powershell
 cmdkey /add:9950x.taile832fe.ts.net /user:9950x\edsys-share-nimo /pass
+& .\windows\Install-AskFoothillsIntakeReconnect.ps1
 & .\windows\Install-EdSysShareReconnect.ps1
-& .\windows\Install-FoothillsInboxReconnect.ps1 -LocalPath 'R:'
+& .\windows\Install-FoothillsProjectReconnect.ps1 -LocalPath 'R:'
 ```
 
-The second user-level reconnect task waits for the same encrypted SMB endpoint
-and recreates the Foothills Inbox mapping after logon without storing a password
-in the script.
+`I:` exposes only the dedicated `ask-foothills-intake` lane. `R:` exposes
+`\\9950x.taile832fe.ts.net\Foothills-Project`, the complete
+organized Foothills tree. `00-inbox` remains the intake subfolder inside that
+broader view; the dedicated Ask Foothills intake lane is mapped separately as
+`I:`. Both reconnect tasks use delayed interactive logon triggers, bounded
+retries, persistent `HKCU\Network` profiles, and hidden PowerShell windows.
+
+Nimo's purposeful Basecamp drives are `F:` Files, `K:` Kindle Drop, `S:`
+Foothills ASI, `T:` Transfer, and `U:` Unit Selections Intake. After the
+dedicated Basecamp SMB credential has been saved in the normal Nimo profile,
+install their shared delayed reconnect task:
+
+```powershell
+& .\windows\Install-BasecampSharesReconnect.ps1
+```
+
+The Basecamp helper waits up to ten minutes for SMB, retries every mapping,
+keeps each profile persistent, and records a credential-free status JSON under
+`%LOCALAPPDATA%\EdSys`. This prevents a fast Windows logon from permanently
+losing all five mappings before Tailscale and Basecamp become reachable.
 
 Basecamp continues to authenticate as `9950x\jeremy`. The managed work-laptop
 profile uses dedicated SMB-only identity `9950x\edsys-share-dell`. Samba forces

@@ -1,39 +1,61 @@
 [CmdletBinding()]
 param(
+    [ValidatePattern('^[A-Z]:$')]
     [string]$LocalPath = 'Q:',
     [string]$RemotePath = '\\9950x.taile832fe.ts.net\EdSys-Share',
     [string]$ServerName = '9950x.taile832fe.ts.net',
-    [int]$WaitSeconds = 300
+    [string]$Label = '',
+    [ValidateRange(30, 1800)]
+    [int]$WaitSeconds = 600
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
+if ([string]::IsNullOrWhiteSpace($Label)) {
+    $Label = if ($LocalPath -eq 'Q:') { 'EdSys Share' } else { 'Remote Drive' }
+}
 
 $stateDirectory = Join-Path $env:LOCALAPPDATA 'EdSys'
-$stateFile = if ($LocalPath -eq 'Q:' -and
-    $RemotePath -eq '\\9950x.taile832fe.ts.net\EdSys-Share') {
-    'EdSys-Share-Q-status.json'
-}
-else {
-    'Foothills-Inbox-{0}-status.json' -f $LocalPath.TrimEnd(':')
+$stateFile = switch ($LocalPath) {
+    'Q:' { 'EdSys-Share-Q-status.json' }
+    'R:' { 'Foothills-Project-R-status.json' }
+    default { 'Remote-Drive-{0}-status.json' -f $LocalPath.TrimEnd(':') }
 }
 $statePath = Join-Path $stateDirectory $stateFile
 New-Item -ItemType Directory -Path $stateDirectory -Force | Out-Null
 
-function Write-EdSysShareState {
+function Get-PersistentProfile {
+    $registryPath = "HKCU:\Network\$($LocalPath.TrimEnd(':'))"
+    if (-not (Test-Path -LiteralPath $registryPath)) {
+        return $null
+    }
+    return Get-ItemProperty -LiteralPath $registryPath
+}
+
+function Write-DriveState {
     param([string]$Status, [string]$Detail)
 
+    $profile = Get-PersistentProfile
+    $mapping = Get-SmbMapping -LocalPath $LocalPath -ErrorAction SilentlyContinue
     [pscustomobject]@{
         status = $Status
         detail = $Detail
         time = (Get-Date).ToString('o')
         localPath = $LocalPath
         remotePath = $RemotePath
-    } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
+        label = $Label
+        reachable = (Test-Path -LiteralPath ($LocalPath + '\'))
+        persistentProfile = ($null -ne $profile -and $profile.RemotePath -ieq $RemotePath)
+        mappingStatus = if ($null -ne $mapping) { [string]$mapping.Status } else { $null }
+        user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+        sessionId = (Get-Process -Id $PID).SessionId
+    } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $statePath -Encoding UTF8
 }
 
 function Test-SmbEndpoint {
-    $client = New-Object System.Net.Sockets.TcpClient
+    $client = New-Object Net.Sockets.TcpClient
     try {
         $connect = $client.BeginConnect($ServerName, 445, $null, $null)
         if (-not $connect.AsyncWaitHandle.WaitOne(3000, $false)) {
@@ -50,7 +72,16 @@ function Test-SmbEndpoint {
     }
 }
 
+function Set-ExplorerLabel {
+    $mountRoot = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2'
+    $mountName = '##' + $RemotePath.TrimStart('\').Replace('\', '#')
+    $mountKey = Join-Path $mountRoot $mountName
+    New-Item -Path $mountKey -Force | Out-Null
+    New-ItemProperty -Path $mountKey -Name '_LabelFromReg' -PropertyType String -Value $Label -Force | Out-Null
+}
+
 try {
+    Write-DriveState 'running' 'Waiting for the SMB endpoint.'
     $deadline = (Get-Date).AddSeconds($WaitSeconds)
     while (-not (Test-SmbEndpoint)) {
         if ((Get-Date) -ge $deadline) {
@@ -59,47 +90,66 @@ try {
         Start-Sleep -Seconds 5
     }
 
-    $logicalDrive = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$LocalPath'" `
-        -ErrorAction SilentlyContinue
-    if ($null -ne $logicalDrive -and
-        $logicalDrive.ProviderName -ne $RemotePath) {
-        throw "$LocalPath is already assigned to a different resource."
-    }
-
     $registryPath = "HKCU:\Network\$($LocalPath.TrimEnd(':'))"
-    $persistentProfile = Test-Path -LiteralPath $registryPath
+    $logicalDrive = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$LocalPath'" -ErrorAction SilentlyContinue
+    if ($null -ne $logicalDrive -and $logicalDrive.ProviderName -and $logicalDrive.ProviderName -ine $RemotePath) {
+        throw "$LocalPath is already assigned to a different resource: $($logicalDrive.ProviderName)"
+    }
+
+    $profile = Get-PersistentProfile
     $mapping = Get-SmbMapping -LocalPath $LocalPath -ErrorAction SilentlyContinue
-    if ($null -ne $mapping -and
-        $mapping.RemotePath -eq $RemotePath -and
-        -not $persistentProfile -and
-        (Test-Path "$LocalPath\")) {
-        Write-EdSysShareState 'ok' 'Existing mapping is accessible.'
-        exit 0
-    }
+    $alreadyReady = (
+        $null -ne $profile -and
+        $profile.RemotePath -ieq $RemotePath -and
+        $null -ne $mapping -and
+        $mapping.RemotePath -ieq $RemotePath -and
+        (Test-Path -LiteralPath ($LocalPath + '\'))
+    )
 
-    if ($null -ne $mapping) {
-        try {
-            Remove-SmbMapping -LocalPath $LocalPath -Force -UpdateProfile `
-                -ErrorAction Stop
+    if (-not $alreadyReady) {
+        if ($null -ne $mapping) {
+            try {
+                Remove-SmbMapping -LocalPath $LocalPath -Force -UpdateProfile -ErrorAction Stop
+            }
+            catch {
+                & "$env:SystemRoot\System32\net.exe" use $LocalPath /delete /y 2>&1 | Out-Null
+            }
         }
-        catch {
-            & cmd.exe /c "net use $LocalPath /delete /y" 2>$null | Out-Null
-        }
+        Remove-Item -LiteralPath $registryPath -Recurse -Force -ErrorAction SilentlyContinue
+
+        $lastError = $null
+        do {
+            try {
+                New-SmbMapping -LocalPath $LocalPath -RemotePath $RemotePath -Persistent $true -RequireIntegrity $true -RequirePrivacy $true -ErrorAction Stop | Out-Null
+                $profile = Get-PersistentProfile
+                $mapping = Get-SmbMapping -LocalPath $LocalPath -ErrorAction SilentlyContinue
+                if (
+                    $null -ne $profile -and
+                    $profile.RemotePath -ieq $RemotePath -and
+                    $null -ne $mapping -and
+                    $mapping.RemotePath -ieq $RemotePath -and
+                    (Test-Path -LiteralPath ($LocalPath + '\'))
+                ) {
+                    $lastError = $null
+                    break
+                }
+                $lastError = 'The mapping command returned without a reachable persistent profile.'
+            }
+            catch {
+                $lastError = $_.Exception.Message
+            }
+
+            if ((Get-Date) -ge $deadline) {
+                throw $lastError
+            }
+            Start-Sleep -Seconds 5
+        } while ($true)
     }
 
-    Remove-Item -LiteralPath $registryPath -Recurse -Force `
-        -ErrorAction SilentlyContinue
-
-    New-SmbMapping -LocalPath $LocalPath -RemotePath $RemotePath `
-        -Persistent $false -RequireIntegrity $true -RequirePrivacy $true | Out-Null
-
-    if (-not (Test-Path "$LocalPath\")) {
-        throw 'The SMB mapping was created but is not accessible.'
-    }
-
-    Write-EdSysShareState 'ok' 'Mapping created after the SMB endpoint became ready.'
+    Set-ExplorerLabel
+    Write-DriveState 'ok' 'Persistent encrypted mapping and File Explorer label are ready.'
 }
 catch {
-    Write-EdSysShareState 'error' $_.Exception.Message
+    Write-DriveState 'error' $_.Exception.Message
     exit 1
 }
