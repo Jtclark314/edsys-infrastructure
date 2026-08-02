@@ -1,0 +1,16 @@
+[Unit]
+Description=EdSys NetBox Docker Compose stack
+Requires=docker.service network-online.target
+After=docker.service network-online.target tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/srv/edsys/edsys-infrastructure/docker/netbox
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose stop -t 90
+TimeoutStartSec=360
+TimeoutStopSec=180
+
+[Install]
+WantedBy=multi-user.target

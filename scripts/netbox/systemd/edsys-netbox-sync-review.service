@@ -1,0 +1,17 @@
+[Unit]
+Description=Generate read-only NetBox synchronization plans for review
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=SUDO_USER=jeremy
+EnvironmentFile=-/etc/edsys-healthchecks/edsys-netbox-sync-review.env
+ExecStart=/srv/edsys/edsys-infrastructure/scripts/netbox/review-sync.sh
+ExecStartPost=-/usr/local/sbin/edsys-healthchecks-ping success
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/var/lib/edsys-netbox-sync

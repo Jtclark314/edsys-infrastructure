@@ -1,0 +1,1130 @@
+#!/usr/bin/env python3
+"""Plan-gated, no-delete synchronization between EdSys sources and NetBox."""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import datetime as dt
+import hashlib
+import ipaddress
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import subprocess
+import sys
+from typing import Any
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError
+
+import yaml
+
+
+COMMANDS = (
+    "bootstrap",
+    "sync-proxmox",
+    "sync-docker",
+    "sync-network",
+    "reconcile",
+    "validate",
+    "export",
+)
+INVENTORY_OBJECT_TYPES = [
+    "dcim.device",
+    "dcim.interface",
+    "dcim.inventoryitem",
+    "ipam.ipaddress",
+    "ipam.prefix",
+    "ipam.service",
+    "virtualization.virtualmachine",
+    "virtualization.vminterface",
+    "virtualization.virtualdisk",
+]
+TODAY = dt.datetime.now(dt.timezone.utc).date().isoformat()
+# This flips only after every cutover gate, including Tailnet access and restore
+# acceptance, has passed.  Discovery can populate NetBox without prematurely
+# changing EdSys inventory authority.
+AUTHORITATIVE_CUTOVER = False
+
+
+def canonical(value: Any) -> str:
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=lambda item: item.isoformat() if isinstance(item, (dt.date, dt.datetime)) else str(item),
+    )
+
+
+def digest(value: Any) -> str:
+    return hashlib.sha256(canonical(value).encode()).hexdigest()
+
+
+def slug(value: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return cleaned[:100] or "unnamed"
+
+
+def source_hash(value: Any) -> str:
+    return digest(value)
+
+
+def ref(name: str) -> dict[str, str]:
+    return {"$ref": name}
+
+
+class NetBoxAPI:
+    def __init__(self, base_url: str, token_file: str):
+        self.base = base_url.rstrip("/") + "/api/"
+        self.auth = Path(token_file).read_text(encoding="utf-8").strip()
+        if not self.auth.startswith(("Bearer nbt_", "Token ")):
+            raise RuntimeError("NetBox token file does not contain a supported authorization header")
+
+    def request(self, method: str, path: str, payload=None, params=None):
+        url = self.base + path.lstrip("/")
+        if params:
+            url += "?" + urlencode(params, doseq=True)
+        data = None if payload is None else canonical(payload).encode()
+        request = Request(
+            url,
+            data=data,
+            method=method,
+            headers={
+                "Authorization": self.auth,
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "User-Agent": "edsys-netbox-sync/1.0",
+            },
+        )
+        try:
+            with urlopen(request, timeout=45) as response:
+                body = response.read()
+                return json.loads(body) if body else None
+        except HTTPError as exc:
+            body = exc.read().decode(errors="replace")
+            raise RuntimeError(f"NetBox API {method} {url} failed: HTTP {exc.code}: {body[:2000]}") from exc
+
+    def get(self, path: str, params=None):
+        return self.request("GET", path, params=params)
+
+    def list(self, path: str, params=None) -> list[dict[str, Any]]:
+        params = dict(params or {})
+        params.setdefault("limit", 1000)
+        response = self.get(path, params=params)
+        if isinstance(response, list):
+            return response
+        return response.get("results", [])
+
+    def find_one(self, path: str, lookup: dict[str, Any]):
+        matches = self.list(path, lookup)
+        if len(matches) > 1:
+            raise RuntimeError(f"Non-unique NetBox lookup for {path}: {lookup}")
+        return matches[0] if matches else None
+
+    def create(self, path: str, payload: dict[str, Any]):
+        return self.request("POST", path, payload=payload)
+
+    def patch(self, path: str, object_id: int, payload: dict[str, Any]):
+        return self.request("PATCH", f"{path}{object_id}/", payload=payload)
+
+
+class Plan:
+    def __init__(self, command: str, evidence: dict[str, Any] | None = None):
+        self.command = command
+        self.evidence = evidence or {}
+        self.operations: list[dict[str, Any]] = []
+
+    def upsert(self, key: str, endpoint: str, lookup: dict[str, Any], payload: dict[str, Any]):
+        self.operations.append(
+            {
+                "kind": "upsert",
+                "key": key,
+                "endpoint": endpoint,
+                "lookup": lookup,
+                "payload": payload,
+            }
+        )
+
+    def patch_ref(self, key: str, target: str, payload: dict[str, Any]):
+        self.operations.append({"kind": "patch-ref", "key": key, "target": target, "payload": payload})
+
+    def reference(self, key: str, endpoint: str, lookup: dict[str, Any]):
+        self.operations.append({"kind": "reference", "key": key, "endpoint": endpoint, "lookup": lookup})
+
+    def as_dict(self):
+        return {
+            "schema": 1,
+            "command": self.command,
+            "created_utc": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
+            "policy": {"automatic_deletion": False, "field_ownership": "observed facts only"},
+            "evidence": self.evidence,
+            "operations": self.operations,
+        }
+
+
+def resolve(value: Any, refs: dict[str, dict[str, Any]]):
+    if isinstance(value, dict) and set(value) == {"$ref"}:
+        try:
+            return refs[value["$ref"]]["id"]
+        except KeyError as exc:
+            raise RuntimeError(f"Unresolved plan reference: {value['$ref']}") from exc
+    if isinstance(value, dict):
+        return {key: resolve(item, refs) for key, item in value.items()}
+    if isinstance(value, list):
+        return [resolve(item, refs) for item in value]
+    return value
+
+
+def normalize_compare(value: Any):
+    if isinstance(value, dict):
+        if "value" in value and set(value).issubset({"value", "label", "description"}):
+            return value["value"]
+        if "id" in value and any(key in value for key in ("name", "display", "slug", "address")):
+            return value["id"]
+        return {key: normalize_compare(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [normalize_compare(item) for item in value]
+    return value
+
+
+def values_match(existing: Any, desired: Any, key: str = "") -> bool:
+    """Compare an API representation with the plan's writable representation.
+
+    NetBox expands relationships, supplies unset custom fields as null, sorts
+    some lists, normalizes MAC/IP values, and trims text.  Those presentation
+    differences must not trigger perpetual PATCH requests.
+    """
+    existing = normalize_compare(existing)
+    desired = normalize_compare(desired)
+    if isinstance(desired, dict):
+        if not isinstance(existing, dict):
+            return False
+        return all(values_match(existing.get(child), value, child) for child, value in desired.items())
+    if isinstance(desired, list):
+        if not isinstance(existing, list):
+            return False
+        left = [normalize_compare(item) for item in existing]
+        right = [normalize_compare(item) for item in desired]
+        return sorted(canonical(item) for item in left) == sorted(canonical(item) for item in right)
+    if isinstance(existing, str) and isinstance(desired, str):
+        left, right = existing.strip(), desired.strip()
+        if key == "mac_address":
+            return left.upper() == right.upper()
+        if key in {"start_address", "end_address"}:
+            return left.split("/", 1)[0] == right.split("/", 1)[0]
+        return left == right
+    if isinstance(existing, (int, float)) and isinstance(desired, str):
+        try:
+            return float(existing) == float(desired)
+        except ValueError:
+            pass
+    return existing == desired
+
+
+def execute_plan(api: NetBoxAPI, plan: dict[str, Any]):
+    refs: dict[str, dict[str, Any]] = {}
+    changes = {"created": 0, "updated": 0, "unchanged": 0}
+    for operation in plan["operations"]:
+        if operation["kind"] == "reference":
+            lookup = resolve(operation["lookup"], refs)
+            obj = api.find_one(operation["endpoint"], lookup)
+            if obj is None:
+                raise RuntimeError(f"Required NetBox reference is missing for {operation['key']}")
+            refs[operation["key"]] = obj
+            changes["unchanged"] += 1
+        elif operation["kind"] == "upsert":
+            lookup = resolve(operation["lookup"], refs)
+            payload = resolve(operation["payload"], refs)
+            existing = api.find_one(operation["endpoint"], lookup)
+            if existing is None:
+                obj = api.create(operation["endpoint"], payload)
+                changes["created"] += 1
+            else:
+                needs_update = any(not values_match(existing.get(key), value, key) for key, value in payload.items())
+                if needs_update:
+                    obj = api.patch(operation["endpoint"], existing["id"], payload)
+                    changes["updated"] += 1
+                else:
+                    obj = existing
+                    changes["unchanged"] += 1
+            refs[operation["key"]] = obj
+        elif operation["kind"] == "patch-ref":
+            target = refs.get(operation["target"])
+            if not target:
+                raise RuntimeError(f"Patch target is unavailable: {operation['target']}")
+            payload = resolve(operation["payload"], refs)
+            if any(not values_match(target.get(key), value, key) for key, value in payload.items()):
+                obj = api.patch(target["url"].split("/api/", 1)[1].rsplit("/", 2)[0] + "/", target["id"], payload)
+                refs[operation["target"]] = obj
+                changes["updated"] += 1
+            else:
+                changes["unchanged"] += 1
+    return changes
+
+
+def cf_values(source: str, observed: str | None, confidence: str, raw: Any, **extra):
+    result = {
+        "source": source[:200],
+        "last_observed": (observed or TODAY)[:10],
+        "confidence": (confidence or "to be confirmed")[:100],
+        "source_hash": source_hash(raw),
+        "discovered": True,
+        "authoritative": AUTHORITATIVE_CUTOVER,
+        "retired": False,
+    }
+    result.update({key: value for key, value in extra.items() if value is not None})
+    return result
+
+
+def inventory_tags(*, to_be_confirmed: bool = False):
+    result = [ref("tag:discovered")]
+    if AUTHORITATIVE_CUTOVER:
+        result.append(ref("tag:authoritative"))
+    if to_be_confirmed:
+        result.append(ref("tag:to-be-confirmed"))
+    return result
+
+
+def add_foundation(plan: Plan):
+    tags = {
+        "discovered": ("4caf50", "Observed through an EdSys discovery source."),
+        "authoritative": ("2196f3", "Operationally authoritative after cutover."),
+        "retired": ("9e9e9e", "Retired but retained for history."),
+        "to-be-confirmed": ("ff9800", "Evidence is incomplete or conflicting."),
+        "critical": ("f44336", "Critical EdSys infrastructure."),
+    }
+    for name, (color, description) in tags.items():
+        plan.upsert(
+            f"tag:{name}", "extras/tags/", {"slug": name},
+            {"name": name.replace("-", " ").title(), "slug": name, "color": color, "description": description},
+        )
+
+    fields = {
+        "source": ("text", "Discovery or reviewed source"),
+        "last_observed": ("date", "Most recent observation date"),
+        "last_verified": ("date", "Most recent human verification date"),
+        "confidence": ("text", "Evidence confidence"),
+        "criticality": ("text", "Operational criticality"),
+        "backup_requirement": ("text", "Backup requirement or policy"),
+        "management_method": ("text", "Management or synchronization method"),
+        "runtime_container_identity": ("text", "Observed container/image/Compose identity"),
+        "source_hash": ("text", "SHA-256 of normalized source data"),
+        "discovered": ("boolean", "Created or updated from discovery"),
+        "authoritative": ("boolean", "Authoritative structured record"),
+        "retired": ("boolean", "Retired object"),
+    }
+    for name, (field_type, description) in fields.items():
+        plan.upsert(
+            f"custom-field:{name}", "extras/custom-fields/", {"name": name},
+            {
+                "name": name,
+                "label": name.replace("_", " ").title(),
+                "type": field_type,
+                "object_types": INVENTORY_OBJECT_TYPES,
+                "required": False,
+                "description": description,
+            },
+        )
+
+    plan.upsert(
+        "tenant-group:edsys", "tenancy/tenant-groups/", {"slug": "edsys"},
+        {"name": "EdSys", "slug": "edsys", "description": "EdSys internal infrastructure"},
+    )
+    plan.upsert(
+        "tenant:edsys", "tenancy/tenants/", {"slug": "edsys-internal"},
+        {"name": "EdSys Internal", "slug": "edsys-internal", "group": ref("tenant-group:edsys"), "description": "Private EdSys infrastructure"},
+    )
+    plan.upsert(
+        "site:edsys-home", "dcim/sites/", {"slug": "edsys-home"},
+        {"name": "EdSys Home", "slug": "edsys-home", "status": "active", "tenant": ref("tenant:edsys"), "description": "Primary EdSys home lab"},
+    )
+    plan.upsert(
+        "location:network-core", "dcim/locations/", {"slug": "network-core", "site_id": ref("site:edsys-home")},
+        {"name": "Network Core", "slug": "network-core", "site": ref("site:edsys-home"), "status": "active", "description": "Core EdSys network and compute location"},
+    )
+    plan.upsert(
+        "contact-group:operators", "tenancy/contact-groups/", {"slug": "edsys-operators"},
+        {"name": "EdSys Operators", "slug": "edsys-operators", "description": "EdSys infrastructure operators"},
+    )
+    plan.upsert(
+        "contact-role:owner", "tenancy/contact-roles/", {"slug": "owner"},
+        {"name": "Owner", "slug": "owner", "description": "Infrastructure owner"},
+    )
+    plan.upsert(
+        "contact:jeremy", "tenancy/contacts/", {"name": "Jeremy"},
+        {"name": "Jeremy", "groups": [ref("contact-group:operators")], "description": "EdSys owner and operator"},
+    )
+    plan.upsert(
+        "contact-assignment:edsys-site-owner", "tenancy/contact-assignments/",
+        {"object_type": "dcim.site", "object_id": ref("site:edsys-home"), "contact_id": ref("contact:jeremy")},
+        {"object_type": "dcim.site", "object_id": ref("site:edsys-home"), "contact": ref("contact:jeremy"), "role": ref("contact-role:owner"), "priority": "primary"},
+    )
+    plan.upsert(
+        "provider:att", "circuits/providers/", {"slug": "att"},
+        {"name": "AT&T", "slug": "att", "description": "Observed EdSys Internet provider; circuit identifier and terms remain to be confirmed"},
+    )
+
+
+def device_category_role(category: str | None, role: str | None):
+    value = (category or role or "infrastructure").lower()
+    if "network" in value or "router" in value or "switch" in value or "wireless" in value:
+        return "network"
+    if "client" in value or "laptop" in value or "tablet" in value:
+        return "endpoint"
+    if "server" in value or "compute" in value or "host" in value:
+        return "compute"
+    return "infrastructure"
+
+
+def add_roles_types(plan: Plan, network: dict[str, Any]):
+    roles = {
+        "network": ("Network", "2196f3"),
+        "compute": ("Compute", "4caf50"),
+        "endpoint": ("Managed Endpoint", "9e9e9e"),
+        "infrastructure": ("Infrastructure", "673ab7"),
+        "virtual-machine": ("Virtual Machine", "00bcd4"),
+    }
+    for key, (name, color) in roles.items():
+        plan.upsert(f"role:{key}", "dcim/device-roles/", {"slug": key}, {"name": name, "slug": key, "color": color})
+
+    plan.upsert(
+        "manufacturer:edsys-generic", "dcim/manufacturers/", {"slug": "edsys-generic"},
+        {"name": "EdSys Generic", "slug": "edsys-generic", "description": "Placeholder only where verified hardware manufacturer/model is unavailable"},
+    )
+    categories = {device_category_role(item.get("category"), item.get("role")) for item in network["devices"]}
+    for category in sorted(categories):
+        key = f"device-type:{category}"
+        plan.upsert(
+            key, "dcim/device-types/", {"slug": f"edsys-{category}"},
+            {"manufacturer": ref("manufacturer:edsys-generic"), "model": f"EdSys {category.title()}", "slug": f"edsys-{category}", "u_height": 0},
+        )
+    plan.upsert(
+        "cluster-type:proxmox", "virtualization/cluster-types/", {"slug": "proxmox-ve"},
+        {"name": "Proxmox VE", "slug": "proxmox-ve", "description": "EdSys Proxmox VE cluster"},
+    )
+    plan.upsert(
+        "cluster:gadgetlab", "virtualization/clusters/", {"name": network["proxmox_cluster"]["name"]},
+        {"name": network["proxmox_cluster"]["name"], "type": ref("cluster-type:proxmox"), "scope_type": "dcim.site", "scope_id": ref("site:edsys-home"), "tenant": ref("tenant:edsys"), "description": "Four-node EdSys Proxmox cluster"},
+    )
+
+
+def address_with_mask(value: str):
+    if "/" in value:
+        return value
+    ip = ipaddress.ip_address(value)
+    if ip.is_loopback or ip.version == 6 or value.startswith("100."):
+        return f"{value}/{32 if ip.version == 4 else 128}"
+    return f"{value}/24"
+
+
+def valid_ip(value: Any):
+    if not isinstance(value, str) or value.lower() in {"none", "dhcp", "unknown", "to be confirmed"}:
+        return False
+    try:
+        ipaddress.ip_interface(address_with_mask(value))
+        return True
+    except ValueError:
+        return False
+
+
+def stable_inventory_ip(value: Any):
+    """Exclude host-local bridge addresses which are duplicated by design."""
+    if not valid_ip(value):
+        return False
+    address = ipaddress.ip_interface(address_with_mask(value)).ip
+    if address.version == 4 and ipaddress.ip_address("172.16.0.0") <= address <= ipaddress.ip_address("172.31.255.255"):
+        return False
+    return True
+
+
+def add_network_inventory(plan: Plan, network: dict[str, Any]):
+    vm_ips = {item.get("guest_ip") for item in network.get("proxmox_resources", []) if item.get("guest_ip")}
+    vm_names = {item.get("name") for item in network.get("proxmox_resources", [])}
+    vm_names.update({"home-assistant", "edcore-ops", "edcore-sdr", "node1-services", "family-services", "arr-server", "edrouter-node0", "arr-vm", "netbox"})
+
+    plan.upsert(
+        "vlan:1", "ipam/vlans/", {"vid": 1, "name": "DEFAULT_VLAN"},
+        {"vid": 1, "name": "DEFAULT_VLAN", "status": "active", "site": ref("site:edsys-home"), "tenant": ref("tenant:edsys"), "description": "EdSys core untagged LAN"},
+    )
+    for subnet in network.get("subnets", []):
+        status = "active" if subnet.get("status") not in {"retired", "deprecated"} else "deprecated"
+        plan.upsert(
+            f"prefix:{subnet['cidr']}", "ipam/prefixes/", {"prefix": subnet["cidr"]},
+            {
+                "prefix": subnet["cidr"], "status": status, "tenant": ref("tenant:edsys"),
+                "description": f"{subnet.get('name', 'EdSys subnet')}; {subnet.get('notes', '')}"[:200],
+                "custom_fields": cf_values(subnet.get("source", "EdSys network map"), subnet.get("last_verified"), subnet.get("confidence", "medium"), subnet),
+            },
+        )
+        if subnet.get("dhcp_range") and subnet["cidr"] == "192.168.50.0/24":
+            start, end = [part.strip() for part in re.split(r"\s*(?:-|to)\s*", subnet["dhcp_range"], maxsplit=1)]
+            plan.upsert(
+                "ip-range:core-dhcp", "ipam/ip-ranges/", {"start_address": start, "end_address": end},
+                {"start_address": start, "end_address": end, "status": "active", "tenant": ref("tenant:edsys"), "description": "EdSys router DHCP pool"},
+            )
+
+    seen_macs: set[str] = set()
+    host_local_addresses: set[str] = set()
+    for device in network.get("devices", []):
+        name = device["hostname"]
+        if name in vm_names or device.get("ip") in vm_ips:
+            continue
+        category = device_category_role(device.get("category"), device.get("role"))
+        key = f"device:{name}"
+        is_tbc = bool(device.get("verify_live")) or str(device.get("confidence", "")).lower() not in {"high", "verified"}
+        tag_refs = inventory_tags(to_be_confirmed=is_tbc)
+        payload = {
+            "name": name,
+            "device_type": ref(f"device-type:{category}"),
+            "role": ref(f"role:{category}"),
+            "site": ref("site:edsys-home"),
+            "location": ref("location:network-core"),
+            "tenant": ref("tenant:edsys"),
+            "status": "active" if "retired" not in str(device.get("status", "")) else "offline",
+            "description": str(device.get("role") or device.get("category") or "EdSys managed device")[:200],
+            "comments": f"Management: {', '.join(device.get('management_urls') or [])}\n\n{device.get('notes', '')}"[:5000],
+            "tags": tag_refs,
+            "custom_fields": cf_values(
+                device.get("source", "EdSys network map"), device.get("last_verified"), device.get("confidence", "medium"), device,
+                last_verified=(device.get("last_verified") or TODAY)[:10], management_method="EdSys reviewed inventory and read-only discovery",
+            ),
+        }
+        if name in set(network.get("proxmox_cluster", {}).get("nodes", [])):
+            payload["cluster"] = ref("cluster:gadgetlab")
+        plan.upsert(key, "dcim/devices/", {"name": name}, payload)
+
+        interfaces = device.get("interfaces") or [{"name": "management0", "ip": device.get("ip"), "mac": device.get("mac"), "state": "UP"}]
+        primary_ip_ref = None
+        for index, interface in enumerate(interfaces):
+            ifname = str(interface.get("name") or f"interface{index}")
+            ifkey = f"interface:{name}:{ifname}"
+            plan.upsert(
+                ifkey, "dcim/interfaces/", {"device_id": ref(key), "name": ifname},
+                {
+                    "device": ref(key), "name": ifname, "type": "other",
+                    "enabled": str(interface.get("state", "UP")).upper() != "DOWN",
+                    "description": str(interface.get("notes") or "Observed interface")[:200],
+                    "custom_fields": cf_values(device.get("source", "EdSys network map"), device.get("last_verified"), device.get("confidence", "medium"), interface),
+                },
+            )
+            mac = interface.get("mac") or (device.get("mac") if index == 0 else None)
+            normalized_mac = str(mac).upper() if mac else None
+            if normalized_mac and normalized_mac not in seen_macs:
+                seen_macs.add(normalized_mac)
+                plan.upsert(
+                    f"mac:{name}:{ifname}", "dcim/mac-addresses/", {"mac_address": mac},
+                    {"mac_address": mac, "assigned_object_type": "dcim.interface", "assigned_object_id": ref(ifkey), "description": "Observed management MAC"},
+                )
+            ip = interface.get("ip")
+            if valid_ip(ip) and not stable_inventory_ip(ip):
+                host_local_addresses.add(address_with_mask(ip))
+            if stable_inventory_ip(ip):
+                ipkey = f"ip:{address_with_mask(ip)}"
+                plan.upsert(
+                    ipkey, "ipam/ip-addresses/", {"address": address_with_mask(ip)},
+                    {
+                        "address": address_with_mask(ip), "status": "active", "tenant": ref("tenant:edsys"),
+                        "assigned_object_type": "dcim.interface", "assigned_object_id": ref(ifkey),
+                        "dns_name": f"{name}.edsys.local" if str(ip).startswith("192.168.50.") else "",
+                        "description": "Observed interface address",
+                        "custom_fields": cf_values(device.get("source", "EdSys network map"), device.get("last_verified"), device.get("confidence", "medium"), {"device": name, "interface": interface}),
+                    },
+                )
+                if ip == device.get("ip") or (primary_ip_ref is None and str(ip).startswith("192.168.50.")):
+                    primary_ip_ref = ipkey
+        if device.get("ip") and valid_ip(device["ip"]) and primary_ip_ref is None:
+            ifkey = f"interface:{name}:management0"
+            if not any(op["key"] == ifkey for op in plan.operations):
+                plan.upsert(ifkey, "dcim/interfaces/", {"device_id": ref(key), "name": "management0"}, {"device": ref(key), "name": "management0", "type": "other", "enabled": True})
+            primary_ip_ref = f"ip:{address_with_mask(device['ip'])}"
+            plan.upsert(primary_ip_ref, "ipam/ip-addresses/", {"address": address_with_mask(device["ip"])}, {"address": address_with_mask(device["ip"]), "status": "active", "tenant": ref("tenant:edsys"), "assigned_object_type": "dcim.interface", "assigned_object_id": ref(ifkey), "dns_name": f"{name}.edsys.local", "description": "Primary management address"})
+        if primary_ip_ref:
+            plan.patch_ref(f"primary-ip:{name}", key, {"primary_ip4": ref(primary_ip_ref)})
+
+    # Retain, but explicitly de-authorize, host-local Docker bridge addresses
+    # that were present in older reviewed maps. They are duplicated by design
+    # and must not compete for globally unique operational IP assignments.
+    for address in sorted(host_local_addresses):
+        plan.upsert(
+            f"stale-host-local-ip:{address}", "ipam/ip-addresses/", {"address": address},
+            {
+                "address": address,
+                "status": "deprecated",
+                "assigned_object_type": None,
+                "assigned_object_id": None,
+                "description": "Host-local Docker bridge address; retained as stale evidence only",
+                "tags": [ref("tag:discovered"), ref("tag:retired")],
+                "custom_fields": {
+                    "source": "EdSys NetBox reconciliation",
+                    "last_observed": TODAY,
+                    "confidence": "high",
+                    "discovered": True,
+                    "authoritative": False,
+                    "retired": True,
+                },
+            },
+        )
+
+
+def parse_disk_size_mb(value: str):
+    match = re.search(r"size=(\d+(?:\.\d+)?)([KMGT])", value, re.I)
+    if not match:
+        return None
+    amount = float(match.group(1))
+    multiplier = {"K": 1 / 1024, "M": 1, "G": 1024, "T": 1024 * 1024}[match.group(2).upper()]
+    return int(amount * multiplier)
+
+
+def add_virtualization(plan: Plan, network: dict[str, Any], live_resources: list[dict[str, Any]] | None = None):
+    by_vmid = {int(item["vmid"]): copy.deepcopy(item) for item in network.get("proxmox_resources", [])}
+    for item in live_resources or []:
+        vmid = int(item["vmid"])
+        by_vmid.setdefault(vmid, {}).update(item)
+    by_vmid[323] = {
+        "type": "qemu", "vmid": 323, "name": "netbox", "node": "pve-edcore", "status": "running",
+        "guest_ip": "192.168.50.81", "cores": 4, "memory_mb": 8192,
+        "disks": ["local-lvm:vm-323-disk,size=128G"], "onboot": True, "startup": "order=40,up=180,down=180",
+        "source": "EdSys NetBox production deployment", "confidence": "high", "last_verified": TODAY,
+    }
+    for vmid, vm in sorted(by_vmid.items()):
+        name = vm.get("name") or f"vm-{vmid}"
+        key = f"vm:{vmid}"
+        ip = vm.get("guest_ip")
+        tag_refs = inventory_tags(to_be_confirmed=str(vm.get("confidence", "")).lower() not in {"high", "verified"})
+        plan.upsert(
+            key, "virtualization/virtual-machines/", {"cluster_id": ref("cluster:gadgetlab"), "name": name},
+            {
+                "name": name, "cluster": ref("cluster:gadgetlab"), "role": ref("role:virtual-machine"),
+                "site": ref("site:edsys-home"), "tenant": ref("tenant:edsys"),
+                "status": "active" if vm.get("status") == "running" else "offline",
+                "start_on_boot": "on" if vm.get("onboot") else "off",
+                "vcpus": vm.get("cores"), "memory": vm.get("memory_mb"),
+                "description": f"Proxmox VMID {vmid} on {vm.get('node', 'to be confirmed')}"[:200],
+                "comments": str(vm.get("notes") or "")[:5000], "tags": tag_refs,
+                "custom_fields": cf_values(vm.get("source", "Proxmox discovery"), vm.get("last_verified"), vm.get("confidence", "high"), vm, last_verified=(vm.get("last_verified") or TODAY)[:10], management_method="Proxmox read-only discovery"),
+            },
+        )
+        ifkey = f"vm-interface:{vmid}:net0"
+        plan.upsert(ifkey, "virtualization/interfaces/", {"virtual_machine_id": ref(key), "name": "net0"}, {"virtual_machine": ref(key), "name": "net0", "enabled": True, "description": f"Proxmox bridge {vm.get('bridge', 'vmbr0')}"})
+        if vm.get("mac"):
+            plan.upsert(f"vm-mac:{vmid}", "dcim/mac-addresses/", {"mac_address": vm["mac"]}, {"mac_address": vm["mac"], "assigned_object_type": "virtualization.vminterface", "assigned_object_id": ref(ifkey), "description": f"VMID {vmid} net0"})
+        if valid_ip(ip):
+            ipkey = f"ip:{address_with_mask(ip)}"
+            plan.upsert(ipkey, "ipam/ip-addresses/", {"address": address_with_mask(ip)}, {"address": address_with_mask(ip), "status": "active", "tenant": ref("tenant:edsys"), "assigned_object_type": "virtualization.vminterface", "assigned_object_id": ref(ifkey), "dns_name": f"{name}.edsys.local" if str(ip).startswith("192.168.50.") else "", "description": f"VMID {vmid} primary address"})
+            plan.patch_ref(f"vm-primary-ip:{vmid}", key, {"primary_ip4": ref(ipkey)})
+        for index, disk in enumerate(vm.get("disks") or []):
+            size = parse_disk_size_mb(str(disk))
+            if size:
+                plan.upsert(
+                    f"vm-disk:{vmid}:{index}", "virtualization/virtual-disks/", {"virtual_machine_id": ref(key), "name": f"disk{index}"},
+                    {"virtual_machine": ref(key), "name": f"disk{index}", "size": size, "description": str(disk)[:200]},
+                )
+
+
+def service_protocol(service: dict[str, Any]):
+    raw_port = service.get("port")
+    raw_protocol = str(service.get("protocol") or "").lower()
+    if isinstance(raw_port, int):
+        port = raw_port
+    elif isinstance(raw_port, str):
+        match = re.fullmatch(r"(\d+)(?:/(tcp|udp|sctp))?", raw_port.strip(), re.I)
+        if not match:
+            return None
+        port = int(match.group(1))
+        if match.group(2):
+            raw_protocol = match.group(2).lower()
+    else:
+        return None
+    tokens = {token for token in re.split(r"[^a-z]+", raw_protocol) if token}
+    if "udp" in tokens and "tcp" not in tokens:
+        protocol = "udp"
+    elif "sctp" in tokens and not ({"tcp", "udp"} & tokens):
+        protocol = "sctp"
+    elif "tcp" in tokens or tokens & {"http", "https", "ssh", "mcp", "smb", "wyoming"}:
+        protocol = "tcp"
+    else:
+        protocol = "tcp"
+    return protocol, port
+
+
+def add_services(plan: Plan, services: dict[str, Any], network: dict[str, Any]):
+    physical = {op["payload"].get("name"): op["key"] for op in plan.operations if op.get("endpoint") == "dcim/devices/"}
+    vm_name_map = {str(item.get("name")): f"vm:{item['vmid']}" for item in network.get("proxmox_resources", [])}
+    vm_ip_map = {str(item.get("guest_ip")): f"vm:{item['vmid']}" for item in network.get("proxmox_resources", []) if item.get("guest_ip")}
+    vm_name_map.update({"netbox": "vm:323"})
+    vm_ip_map["192.168.50.81"] = "vm:323"
+    # Service-catalog host aliases which intentionally differ from Proxmox guest names.
+    vm_name_map["arr-server"] = "vm:200"
+    for item in services.get("services", []):
+        parsed = service_protocol(item)
+        if not parsed or "retired" in str(item.get("status", "")).lower():
+            continue
+        protocol, port = parsed
+        host = str(item.get("host") or "")
+        parent = physical.get(host) or vm_name_map.get(host) or vm_ip_map.get(str(item.get("ip") or ""))
+        if not parent or host in {"multiple", "external", "cloud"}:
+            continue
+        is_vm = parent.startswith("vm:")
+        parent_type = "virtualization.virtualmachine" if is_vm else "dcim.device"
+        payload = {
+            "parent_object_type": parent_type, "parent_object_id": ref(parent), "name": item["name"][:100],
+            "protocol": protocol, "ports": [port],
+            "description": f"{item.get('runtime', '')}; {item.get('url') or ''}"[:200].strip(),
+            "comments": str(item.get("notes") or "")[:5000],
+            "tags": inventory_tags(),
+            "custom_fields": cf_values(
+                item.get("source", "EdSys service catalog"), item.get("last_verified"), item.get("confidence", "medium"), item,
+                last_verified=(item.get("last_verified") or TODAY)[:10], criticality=str(item.get("criticality") or "")[:100],
+                backup_requirement=str(item.get("backup_required") or "")[:200], management_method=str(item.get("runtime") or "")[:200],
+            ),
+        }
+        plan.upsert(f"service:{slug(item['name'])}", "ipam/services/", {"name": item["name"][:100]}, payload)
+
+
+def load_yaml(path: str):
+    with open(path, encoding="utf-8") as handle:
+        loaded = yaml.safe_load(handle)
+    # Normalize YAML timestamps/dates into deterministic ISO strings so plan
+    # serialization and source hashing never depend on Python object types.
+    return json.loads(canonical(loaded))
+
+
+def ssh_json(host: str, command: str):
+    prefix = []
+    if os.geteuid() == 0 and os.environ.get("SUDO_USER") not in {None, "", "root"}:
+        prefix = ["sudo", "-H", "-u", os.environ["SUDO_USER"], "--"]
+    result = subprocess.run(
+        prefix + ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", host, command],
+        check=True, text=True, capture_output=True, timeout=90,
+    )
+    return json.loads(result.stdout)
+
+
+def ssh_argv(host: str, command: str, *, strict=True):
+    prefix = []
+    if os.geteuid() == 0 and os.environ.get("SUDO_USER") not in {None, "", "root"}:
+        prefix = ["sudo", "-H", "-u", os.environ["SUDO_USER"], "--"]
+    return prefix + [
+        "ssh", "-o", "BatchMode=yes",
+        "-o", f"StrictHostKeyChecking={'yes' if strict else 'accept-new'}",
+        "-o", "ConnectTimeout=10", host, command,
+    ]
+
+
+def discover_proxmox(config: dict[str, Any]):
+    primary = config["proxmox_hosts"][0]
+    resources = ssh_json(primary, "pvesh get /cluster/resources --type vm --output-format json")
+    result = []
+    for item in resources:
+        if item.get("template"):
+            continue
+        node = item.get("node")
+        vmid = int(item["vmid"])
+        kind = item.get("type", "qemu")
+        vm_config = ssh_json(primary, f"pvesh get /nodes/{node}/{kind}/{vmid}/config --output-format json")
+        net0 = str(vm_config.get("net0") or "")
+        mac_match = re.search(r"(?:^|,)(?:virtio|e1000|rtl8139|vmxnet3)=([0-9A-F:]{17})", net0, re.I)
+        bridge_match = re.search(r"(?:^|,)bridge=([^,]+)", net0)
+        disks = [
+            str(value)
+            for key, value in sorted(vm_config.items())
+            if re.fullmatch(r"(?:ide|sata|scsi|virtio)\d+", key)
+            and "media=cdrom" not in str(value)
+            and "cloudinit" not in str(value)
+        ]
+        result.append({
+            "vmid": vmid, "name": item.get("name"), "node": node, "type": kind,
+            "status": item.get("status"), "cores": vm_config.get("cores") or item.get("maxcpu"),
+            "memory_mb": vm_config.get("memory") or int(item.get("maxmem", 0) / 1024 / 1024),
+            "onboot": bool(vm_config.get("onboot", 0)), "startup": vm_config.get("startup"),
+            "mac": mac_match.group(1).upper() if mac_match else None,
+            "bridge": bridge_match.group(1) if bridge_match else None,
+            "disks": disks,
+            "source": "live Proxmox cluster and guest configuration discovery",
+            "confidence": "high", "last_verified": TODAY,
+        })
+    return sorted(result, key=lambda item: item["vmid"])
+
+
+def discover_proxmox_hardware(config: dict[str, Any]):
+    probe = r'''
+import json, pathlib, subprocess
+def read(path):
+    try: return pathlib.Path(path).read_text(errors="replace").strip()
+    except Exception: return ""
+def run(*args):
+    try: return json.loads(subprocess.run(args, check=True, text=True, capture_output=True, timeout=30).stdout)
+    except Exception: return None
+links = run("ip", "-j", "link", "show") or []
+block = run("lsblk", "-J", "-b", "-o", "NAME,MODEL,SERIAL,SIZE,TYPE,TRAN") or {"blockdevices": []}
+print(json.dumps({
+  "hostname": read("/etc/hostname"),
+  "system_vendor": read("/sys/class/dmi/id/sys_vendor"),
+  "product_name": read("/sys/class/dmi/id/product_name"),
+  "product_serial": read("/sys/class/dmi/id/product_serial"),
+  "board_name": read("/sys/class/dmi/id/board_name"),
+  "board_serial": read("/sys/class/dmi/id/board_serial"),
+  "pve_version": subprocess.run(["pveversion"], text=True, capture_output=True, timeout=15).stdout.strip(),
+  "disks": block.get("blockdevices", []),
+  "links": [{"name": x.get("ifname"), "mac": x.get("address"), "type": x.get("link_type"), "state": x.get("operstate")} for x in links],
+}))
+'''
+    records = []
+    for host in config.get("proxmox_hosts", []):
+        # Proxmox aliases use the dedicated key-only root management identity;
+        # minimal PVE installs do not ship sudo.
+        command = "python3 -c " + shlex.quote(probe)
+        proc = subprocess.run(ssh_argv(host, command), check=True, text=True, capture_output=True, timeout=90)
+        item = json.loads(proc.stdout)
+        item["requested_host"] = host
+        item["observed_date"] = TODAY
+        records.append(item)
+    return sorted(records, key=lambda item: item.get("hostname") or item.get("requested_host"))
+
+
+def useful_serial(value: Any):
+    cleaned = str(value or "").strip()
+    if not cleaned or cleaned.lower() in {"none", "unknown", "default string", "to be filled by o.e.m."}:
+        return ""
+    return cleaned[:100]
+
+
+def add_proxmox_hardware(plan: Plan, hardware: list[dict[str, Any]]):
+    for node in hardware:
+        name = str(node.get("hostname") or node.get("requested_host"))
+        device_ref = f"hardware-device:{name}"
+        plan.reference(device_ref, "dcim/devices/", {"name": name})
+        source = f"live root hardware discovery on {node.get('observed_date', TODAY)}"
+        chassis_description = "; ".join(filter(None, [node.get("system_vendor"), node.get("product_name"), node.get("pve_version")]))[:200]
+        plan.upsert(
+            f"inventory:{name}:chassis", "dcim/inventory-items/", {"device_id": ref(device_ref), "name": "System Chassis"},
+            {
+                "device": ref(device_ref), "name": "System Chassis", "serial": useful_serial(node.get("product_serial")),
+                "part_id": str(node.get("product_name") or "")[:100], "description": chassis_description,
+                "custom_fields": cf_values(source, TODAY, "high", node, last_verified=TODAY, management_method="read-only Proxmox host hardware discovery"),
+            },
+        )
+        if useful_serial(node.get("board_serial")):
+            plan.upsert(
+                f"inventory:{name}:system-board", "dcim/inventory-items/", {"device_id": ref(device_ref), "name": "System Board"},
+                {
+                    "device": ref(device_ref), "name": "System Board", "serial": useful_serial(node.get("board_serial")),
+                    "part_id": str(node.get("board_name") or "")[:100], "description": "Observed system board",
+                    "custom_fields": cf_values(source, TODAY, "high", {"board_name": node.get("board_name"), "board_serial": node.get("board_serial")}),
+                },
+            )
+        for disk in node.get("disks") or []:
+            if disk.get("type") != "disk":
+                continue
+            disk_name = f"Disk {disk.get('name')}"
+            plan.upsert(
+                f"inventory:{name}:disk:{disk.get('name')}", "dcim/inventory-items/", {"device_id": ref(device_ref), "name": disk_name},
+                {
+                    "device": ref(device_ref), "name": disk_name, "serial": useful_serial(disk.get("serial")),
+                    "part_id": str(disk.get("model") or "")[:100],
+                    "description": f"{disk.get('size', 0)} bytes; transport {disk.get('tran') or 'to be confirmed'}"[:200],
+                    "custom_fields": cf_values(source, TODAY, "high", disk, last_verified=TODAY),
+                },
+            )
+        for link in node.get("links") or []:
+            if link.get("type") != "ether" or re.match(r"^(?:lo|veth|tap|fw|br-|docker|vmbr)", str(link.get("name") or "")):
+                continue
+            link_name = f"NIC {link.get('name')}"
+            plan.upsert(
+                f"inventory:{name}:nic:{link.get('name')}", "dcim/inventory-items/", {"device_id": ref(device_ref), "name": link_name},
+                {
+                    "device": ref(device_ref), "name": link_name,
+                    "description": f"MAC {link.get('mac') or 'to be confirmed'}; state {link.get('state') or 'to be confirmed'}"[:200],
+                    "custom_fields": cf_values(source, TODAY, "high", link, last_verified=TODAY),
+                },
+            )
+
+
+def discover_docker(config: dict[str, Any]):
+    records = []
+    command = "docker ps --format '{{json .}}'"
+    for host in config.get("docker_hosts", []):
+        try:
+            if host == "localhost":
+                proc = subprocess.run(["bash", "-lc", command], check=True, text=True, capture_output=True, timeout=60)
+            else:
+                proc = subprocess.run(ssh_argv(host, command), check=True, text=True, capture_output=True, timeout=90)
+        except Exception as exc:
+            records.append({"host": host, "status": "to be confirmed", "error": str(exc)[:300]})
+            continue
+        for line in proc.stdout.splitlines():
+            if not line.strip():
+                continue
+            item = json.loads(line)
+            compose_project = None
+            for label in item.get("Labels", "").split(","):
+                if label.startswith("com.docker.compose.project="):
+                    compose_project = label.split("=", 1)[1]
+                    break
+            records.append({
+                "host": host, "name": item.get("Names"), "image": item.get("Image"),
+                "ports": item.get("Ports"), "status": item.get("Status"),
+                "compose_project": compose_project,
+            })
+    return sorted(records, key=lambda item: (item["host"], item.get("name") or ""))
+
+
+def discover_network(config: dict[str, Any]):
+    records = []
+    command = "hostname; ip -j address show"
+    for host in config.get("network_hosts", []):
+        try:
+            if host == "localhost":
+                proc = subprocess.run(["bash", "-lc", command], check=True, text=True, capture_output=True, timeout=30)
+            else:
+                proc = subprocess.run(ssh_argv(host, command), check=True, text=True, capture_output=True, timeout=45)
+            lines = proc.stdout.splitlines()
+            hostname = lines[0].strip()
+            interfaces = json.loads("\n".join(lines[1:]))
+            stable = []
+            for interface in interfaces:
+                addresses = [
+                    item.get("local")
+                    for item in interface.get("addr_info", [])
+                    if item.get("scope") in {"global", "link"} and item.get("local")
+                ]
+                stable.append({
+                    "name": interface.get("ifname"), "mac": interface.get("address"),
+                    "state": interface.get("operstate"), "addresses": sorted(addresses),
+                })
+            records.append({"requested_host": host, "hostname": hostname, "interfaces": sorted(stable, key=lambda item: item["name"] or ""), "status": "observed"})
+        except Exception as exc:
+            records.append({"requested_host": host, "status": "to be confirmed", "error": str(exc)[:300]})
+
+    try:
+        status = subprocess.run(["tailscale", "status", "--json"], check=True, text=True, capture_output=True, timeout=30)
+        raw = json.loads(status.stdout)
+        tailscale_nodes = []
+        for item in [raw.get("Self", {})] + list((raw.get("Peer") or {}).values()):
+            if not item:
+                continue
+            tailscale_nodes.append({
+                "hostname": item.get("HostName"), "dns_name": item.get("DNSName"),
+                "tailscale_ips": sorted(item.get("TailscaleIPs") or []), "online": item.get("Online"),
+            })
+    except Exception as exc:
+        tailscale_nodes = [{"status": "to be confirmed", "error": str(exc)[:300]}]
+    return {"hosts": sorted(records, key=lambda item: item["requested_host"]), "tailscale_nodes": sorted(tailscale_nodes, key=lambda item: item.get("hostname") or "")}
+
+
+def build_plan(command: str, config: dict[str, Any]):
+    network = load_yaml(config["network_map"])
+    services = load_yaml(config["service_catalog"])
+    evidence = {"network_source_hash": source_hash(network), "service_source_hash": source_hash(services)}
+    plan = Plan(command, evidence)
+
+    if command in {"bootstrap", "sync-network"}:
+        if command == "sync-network":
+            plan.evidence["network_discovery"] = discover_network(config)
+            live_proxmox = discover_proxmox(config)
+            plan.evidence["proxmox"] = live_proxmox
+        else:
+            live_proxmox = None
+        add_foundation(plan)
+        add_roles_types(plan, network)
+        add_network_inventory(plan, network)
+        add_virtualization(plan, network, live_proxmox)
+        add_services(plan, services, network)
+    elif command == "sync-proxmox":
+        live = discover_proxmox(config)
+        hardware = discover_proxmox_hardware(config)
+        plan.evidence["proxmox"] = live
+        plan.evidence["proxmox_hardware"] = hardware
+        add_foundation(plan)
+        add_roles_types(plan, network)
+        add_virtualization(plan, network, live)
+        add_proxmox_hardware(plan, hardware)
+    elif command == "sync-docker":
+        live = discover_docker(config)
+        plan.evidence["docker"] = live
+        # Container models are deliberately not invented. Discovery remains an evidence
+        # report and service custom fields are updated only through reviewed catalog data.
+    else:
+        raise RuntimeError(f"No mutating plan builder for {command}")
+    return plan.as_dict()
+
+
+def validate_inventory(api: NetBoxAPI):
+    endpoints = {
+        "devices": "dcim/devices/", "interfaces": "dcim/interfaces/", "ip_addresses": "ipam/ip-addresses/",
+        "prefixes": "ipam/prefixes/", "virtual_machines": "virtualization/virtual-machines/",
+        "virtual_disks": "virtualization/virtual-disks/", "services": "ipam/services/",
+        "inventory_items": "dcim/inventory-items/",
+    }
+    objects = {name: api.list(path) for name, path in endpoints.items()}
+    errors = []
+    warnings = []
+    for name in ("devices", "virtual_machines"):
+        values = [item.get("name") for item in objects[name]]
+        duplicates = sorted({value for value in values if value and values.count(value) > 1})
+        if duplicates:
+            errors.append(f"duplicate {name}: {duplicates}")
+    for service in objects["services"]:
+        if not service.get("parent"):
+            errors.append(f"orphan service: {service.get('name')}")
+    for vm in objects["virtual_machines"]:
+        if not vm.get("cluster"):
+            errors.append(f"VM without cluster: {vm.get('name')}")
+        if not vm.get("primary_ip4"):
+            errors.append(f"VM without primary IPv4: {vm.get('name')}")
+    addresses = [item.get("address") for item in objects["ip_addresses"]]
+    duplicates = sorted({address for address in addresses if address and addresses.count(address) > 1})
+    if duplicates:
+        errors.append(f"duplicate IP addresses: {duplicates}")
+    if not AUTHORITATIVE_CUTOVER:
+        for name in ("devices", "virtual_machines", "services", "prefixes", "ip_addresses"):
+            premature = [
+                item.get("display") or item.get("name") or item.get("address") or item.get("prefix")
+                for item in objects[name]
+                if (item.get("custom_fields") or {}).get("authoritative") is True
+            ]
+            if premature:
+                errors.append(f"premature authoritative flags in {name}: {premature[:10]}")
+    stale = sum(
+        1 for item in objects["ip_addresses"]
+        if (item.get("custom_fields") or {}).get("retired") is True
+    )
+    if stale:
+        warnings.append(f"retained stale/retired IP observations: {stale}")
+    required = {"devices": 1, "ip_addresses": 1, "prefixes": 1, "virtual_machines": 8, "services": 1}
+    for name, minimum in required.items():
+        if len(objects[name]) < minimum:
+            errors.append(f"{name} count {len(objects[name])} below required {minimum}")
+    return {"ok": not errors, "errors": errors, "warnings": warnings, "counts": {name: len(items) for name, items in objects.items()}}
+
+
+def sanitized_export(api: NetBoxAPI):
+    def nested_name(value):
+        if not value:
+            return None
+        return value.get("name") or value.get("display") or value.get("slug")
+
+    devices = []
+    for item in api.list("dcim/devices/"):
+        devices.append({
+            "name": item.get("name"), "status": item.get("status", {}).get("value") if isinstance(item.get("status"), dict) else item.get("status"),
+            "site": nested_name(item.get("site")), "role": nested_name(item.get("role")),
+            "device_type": nested_name(item.get("device_type")), "primary_ip4": (item.get("primary_ip4") or {}).get("address"),
+        })
+    virtual_machines = []
+    for item in api.list("virtualization/virtual-machines/"):
+        virtual_machines.append({
+            "name": item.get("name"), "status": item.get("status", {}).get("value") if isinstance(item.get("status"), dict) else item.get("status"),
+            "cluster": nested_name(item.get("cluster")), "site": nested_name(item.get("site")),
+            "vcpus": item.get("vcpus"), "memory_mb": item.get("memory"), "primary_ip4": (item.get("primary_ip4") or {}).get("address"),
+        })
+    prefixes = [{"prefix": item.get("prefix"), "status": (item.get("status") or {}).get("value")} for item in api.list("ipam/prefixes/")]
+    services = []
+    for item in api.list("ipam/services/"):
+        services.append({
+            "name": item.get("name"), "parent": nested_name(item.get("parent")),
+            "protocol": (item.get("protocol") or {}).get("value") if isinstance(item.get("protocol"), dict) else item.get("protocol"),
+            "ports": item.get("ports") or [],
+        })
+    return {
+        "metadata": {
+            "title": "EdSys reviewed NetBox inventory snapshot", "generated_date": TODAY,
+            "authority": (
+                "NetBox operational authority; this reviewed sanitized snapshot may lag live state"
+                if AUTHORITATIVE_CUTOVER
+                else "Pre-cutover inventory candidate; reviewed YAML catalogs remain authoritative"
+            ),
+            "safety": "serials, credentials, SSIDs, PSKs, tokens, raw logs, and dynamic clients excluded",
+        },
+        "devices": sorted(devices, key=lambda item: item["name"] or ""),
+        "virtual_machines": sorted(virtual_machines, key=lambda item: item["name"] or ""),
+        "prefixes": sorted(prefixes, key=lambda item: item["prefix"] or ""),
+        "services": sorted(services, key=lambda item: ((item["parent"] or ""), item["name"] or "")),
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", default="/etc/edsys-netbox-sync/config.yml")
+    parser.add_argument("command", choices=COMMANDS)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true")
+    mode.add_argument("--apply", action="store_true")
+    parser.add_argument("--confirm-plan-hash")
+    parser.add_argument("--output")
+    args = parser.parse_args()
+
+    config = load_yaml(args.config)
+    state_dir = Path(config.get("state_dir", "/var/lib/edsys-netbox-sync"))
+    plan_dir = state_dir / "plans"
+    report_dir = state_dir / "reports"
+    plan_dir.mkdir(parents=True, exist_ok=True)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(state_dir, 0o700)
+    api = NetBoxAPI(config["netbox_url"], config["token_file"])
+
+    if args.command in {"validate", "reconcile"}:
+        result = validate_inventory(api)
+        print(yaml.safe_dump(result, sort_keys=True), end="")
+        if args.command == "validate" and not result["ok"]:
+            return 2
+        return 0
+
+    if args.apply:
+        if not args.confirm_plan_hash:
+            raise RuntimeError("--apply requires the exact --confirm-plan-hash produced by the preceding dry run")
+        plan_hash = args.confirm_plan_hash
+        plan_path = plan_dir / f"{args.command}-{plan_hash}.json"
+        if not plan_path.exists():
+            raise RuntimeError(f"Approved plan file does not exist: {plan_path}")
+        approved = json.loads(plan_path.read_text(encoding="utf-8"))
+        verified_hash = digest({key: value for key, value in approved.items() if key != "created_utc"})
+        if verified_hash != plan_hash:
+            raise RuntimeError("Approved plan content no longer matches its SHA-256")
+        if approved.get("command") != args.command:
+            raise RuntimeError("Approved plan command does not match the requested command")
+        if args.command == "export":
+            output = Path(args.output or config["export_path"])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            rendered = yaml.safe_dump(approved["snapshot"], sort_keys=False, allow_unicode=True)
+            temporary = output.with_suffix(output.suffix + ".tmp")
+            temporary.write_text(rendered, encoding="utf-8")
+            os.replace(temporary, output)
+            print(f"Wrote deterministic sanitized export to {output}")
+            return 0
+        changes = execute_plan(api, approved)
+        report = {"command": args.command, "plan_hash": plan_hash, "applied_utc": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(), "changes": changes, "automatic_deletion": False}
+        report_path = report_dir / f"{args.command}-{plan_hash}.json"
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        os.chmod(report_path, 0o600)
+        print(yaml.safe_dump(report, sort_keys=True), end="")
+        return 0
+
+    if args.command == "export":
+        snapshot = sanitized_export(api)
+        plan = {"schema": 1, "command": "export", "snapshot": snapshot}
+    else:
+        plan = build_plan(args.command, config)
+
+    plan_hash = digest({key: value for key, value in plan.items() if key != "created_utc"})
+    plan_path = plan_dir / f"{args.command}-{plan_hash}.json"
+
+    plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.chmod(plan_path, 0o600)
+    summary = {"command": args.command, "mode": "dry-run", "plan_hash": plan_hash, "plan_path": str(plan_path), "operation_count": len(plan.get("operations", [])), "automatic_deletion": False}
+    print(yaml.safe_dump(summary, sort_keys=True), end="")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        if os.environ.get("EDSYS_NETBOX_SYNC_DEBUG") == "1":
+            raise
+        raise SystemExit(1)

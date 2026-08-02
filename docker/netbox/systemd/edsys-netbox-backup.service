@@ -1,0 +1,18 @@
+[Unit]
+Description=EdSys NetBox application-consistent backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/edsys-secrets/netbox/healthchecks/backup.env
+ExecStart=/srv/edsys/edsys-infrastructure/docker/netbox/scripts/backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/netbox /var/lib/docker /run/docker.sock

@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily NetBox synchronization review plans
+
+[Timer]
+OnCalendar=*-*-* 04:15:00 America/New_York
+Persistent=true
+RandomizedDelaySec=300
+Unit=edsys-netbox-sync-review.service
+
+[Install]
+WantedBy=timers.target

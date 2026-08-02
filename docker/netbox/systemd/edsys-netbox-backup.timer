@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly EdSys NetBox backup
+
+[Timer]
+OnCalendar=*-*-* 01:40:00 America/New_York
+Persistent=true
+RandomizedDelaySec=120
+Unit=edsys-netbox-backup.service
+
+[Install]
+WantedBy=timers.target

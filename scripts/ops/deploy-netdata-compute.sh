@@ -7,13 +7,13 @@ verify_script="${repo_root}/scripts/ops/verify-netdata-compute.py"
 parent_ip="192.168.50.50"
 group_name="edsys-compute"
 pve_children=(pve-edcore pve-node0 pve-node1 pve-node2)
-satellites=(edcore-ops edcore-sdr)
+satellites=(edcore-ops edcore-sdr netbox)
 
 usage() {
   cat <<'EOF'
 Usage: deploy-netdata-compute.sh --check | --apply
 
---check  Verify the exact seven-node parent/child topology without changing it.
+--check  Verify the exact eight-node parent/child topology without changing it.
 --apply  Back up configuration, align packages, deploy the topology, and verify it.
 EOF
 }
@@ -285,7 +285,7 @@ cat >"${tmpdir}/parent-stream.conf" <<EOF
 [${stream_key}]
     type = api
     enabled = yes
-    allow from = 192.168.50.51 192.168.50.52 192.168.50.53 192.168.50.54 192.168.50.79 192.168.50.80
+    allow from = 192.168.50.51 192.168.50.52 192.168.50.53 192.168.50.54 192.168.50.79 192.168.50.80 192.168.50.81
     db = dbengine
     health enabled = auto
     postpone alerts on connect = 1m
@@ -349,7 +349,7 @@ EOF
      systemctl restart netdata; systemctl is-active --quiet netdata"
 done
 
-echo "Configuring and starting the two Ubuntu satellite children."
+echo "Configuring and starting the three Ubuntu satellite children."
 for satellite in "${satellites[@]}"; do
   cat >"${tmpdir}/${satellite}-netdata.conf" <<EOF
 # Managed by EdSys deploy-netdata-compute.sh.
@@ -382,9 +382,49 @@ EOF
      install -m 0600 -o root -g root /tmp/stream.conf.edsys /etc/netdata/stream.conf; \
      rm -f /tmp/netdata.conf.edsys /tmp/stream.conf.edsys; \
      systemctl restart netdata; systemctl is-active --quiet netdata'"
+  if [[ "$satellite" == netbox ]]; then
+    cat >"${tmpdir}/netbox-docker.conf" <<'EOF'
+# Managed by EdSys deploy-netdata-compute.sh.
+jobs:
+  - name: local
+    address: 'unix:///var/run/docker.sock'
+    timeout: 2
+    update_every: 10
+    collect_container_size: no
+EOF
+    cat >"${tmpdir}/netbox-prometheus.conf" <<'EOF'
+# Managed by EdSys deploy-netdata-compute.sh.
+jobs:
+  - name: netbox
+    url: http://127.0.0.1:8080/metrics
+    update_every: 10
+  - name: node-exporter
+    url: http://127.0.0.1:9100/metrics
+    update_every: 10
+EOF
+    scp "${scp_options[@]}" "${tmpdir}/netbox-docker.conf" "${satellite}:/tmp/docker.conf.edsys"
+    scp "${scp_options[@]}" "${tmpdir}/netbox-prometheus.conf" "${satellite}:/tmp/prometheus.conf.edsys"
+    ssh "${ssh_options[@]}" "$satellite" 'sudo -n bash -s' <<'REMOTE_NETBOX_MONITORING'
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get install -y prometheus-node-exporter
+install -d -m 0755 /etc/netdata/go.d
+install -m 0644 -o root -g root /tmp/docker.conf.edsys /etc/netdata/go.d/docker.conf
+install -m 0644 -o root -g root /tmp/prometheus.conf.edsys /etc/netdata/go.d/prometheus.conf
+rm -f /tmp/docker.conf.edsys /tmp/prometheus.conf.edsys
+usermod -aG docker netdata
+cat >/etc/default/prometheus-node-exporter <<'EOF'
+ARGS="--web.listen-address=127.0.0.1:9100"
+EOF
+systemctl enable --now prometheus-node-exporter
+systemctl restart prometheus-node-exporter netdata
+curl -fsS --max-time 10 http://127.0.0.1:9100/metrics >/dev/null
+curl -fsS --max-time 10 http://127.0.0.1:8080/metrics >/dev/null
+REMOTE_NETBOX_MONITORING
+  fi
 done
 
-echo "Waiting for all six child streams to become reachable on 9950x."
+echo "Waiting for all seven child streams to become reachable on 9950x."
 for _ in {1..90}; do
   if python3 "$verify_script" >/dev/null 2>&1; then
     break

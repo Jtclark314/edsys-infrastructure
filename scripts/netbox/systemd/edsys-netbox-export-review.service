@@ -1,0 +1,16 @@
+[Unit]
+Description=Generate a sanitized NetBox export plan for explicit review
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/edsys-healthchecks/edsys-netbox-export-review.env
+ExecStart=/srv/edsys/edsys-infrastructure/scripts/netbox/review-export.sh
+ExecStartPost=-/usr/local/sbin/edsys-healthchecks-ping success
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/edsys-netbox-sync

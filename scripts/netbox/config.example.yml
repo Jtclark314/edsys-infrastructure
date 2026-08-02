@@ -1,0 +1,34 @@
+netbox_url: https://netbox.edsys.local
+token_file: /etc/edsys-secrets/netbox/sync_api_bearer
+network_map: /home/jeremy/code/EdSys-Master/data/network-map.yml
+service_catalog: /home/jeremy/code/EdSys-Master/data/service-catalog.yml
+export_path: /home/jeremy/code/EdSys-Master/data/netbox-inventory.yml
+state_dir: /var/lib/edsys-netbox-sync
+proxmox_hosts:
+  - pve-edcore
+  - pve-node0
+  - pve-node1
+  - pve-node2
+docker_hosts:
+  - localhost
+  - arr-server
+  - family-services
+  - node1-services
+  - edsys-ingress
+  - edsys-voice
+network_hosts:
+  - localhost
+  - pve-edcore
+  - pve-node0
+  - pve-node1
+  - pve-node2
+  - edrouter-node0
+  - pihole-primary
+  - pihole-secondary
+  - arr-server
+  - family-services
+  - node1-services
+  - edcore-ops
+  - edcore-sdr
+  - aruba-switch
+  - unifi-ap

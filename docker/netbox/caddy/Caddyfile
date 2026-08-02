@@ -1,0 +1,32 @@
+{
+	admin off
+	servers {
+		protocols h1 h2 h3
+		strict_sni_host on
+	}
+}
+
+http://netbox.edsys.local {
+	redir https://netbox.edsys.local{uri} permanent
+}
+
+https://netbox.edsys.local {
+	tls internal
+	encode zstd gzip
+	reverse_proxy netbox:8080 {
+		# Preserve the client-supplied Host so Django's exact ALLOWED_HOSTS
+		# policy remains an effective second boundary behind Caddy's SNI match.
+		header_up Host {http.request.host}
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+	log {
+		output stdout
+		format json
+	}
+}

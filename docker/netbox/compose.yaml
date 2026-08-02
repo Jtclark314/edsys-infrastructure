@@ -1,0 +1,215 @@
+name: edsys-netbox
+
+x-netbox: &netbox
+  image: docker.io/netboxcommunity/netbox:v4.6.7-5.0.2@sha256:2e8cce924de85fc73da279f30034de747d036ebb674b9e86a8b28ac79461ea06
+  env_file:
+    - ./env/netbox.env
+  user: "netbox:root"
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    valkey-tasks:
+      condition: service_healthy
+    valkey-cache:
+      condition: service_healthy
+  secrets:
+    - db_password
+    - source: valkey_tasks_password
+      target: redis_password
+    - source: valkey_cache_password
+      target: redis_cache_password
+    - secret_key
+    - api_token_pepper_1
+    - superuser_password
+    - sync_api_bearer
+    - export_api_bearer
+  volumes:
+    - ./configuration:/etc/netbox/config:ro
+    - netbox-media:/opt/netbox/netbox/media
+    - netbox-reports:/opt/netbox/netbox/reports
+    - netbox-scripts:/opt/netbox/netbox/scripts
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=128m
+  logging:
+    driver: local
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  netbox:
+    <<: *netbox
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/login/ >/dev/null"]
+      start_period: 120s
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  netbox-worker:
+    <<: *netbox
+    command:
+      - /opt/netbox/venv/bin/python
+      - /opt/netbox/netbox/manage.py
+      - rqworker
+    depends_on:
+      netbox:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "ps -aux | grep -v grep | grep -q '[r]qworker'"]
+      start_period: 30s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: docker.io/postgres:18-alpine@sha256:b6a16ed0eb96e2c362811f7eeb951eac8b459e7b40be4149ea5444aa7c65569b
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: netbox
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_INITDB_ARGS: --data-checksums
+    secrets:
+      - db_password
+    volumes:
+      - netbox-postgres:/var/lib/postgresql
+    shm_size: 256m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -t 3 -d netbox -U netbox"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  valkey-tasks:
+    image: docker.io/valkey/valkey:9.1-alpine@sha256:3fe38a705227d29534a199e876b38d5474dec4d3baca980ac6894df539416562
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -ec
+      - exec valkey-server --appendonly yes --appendfsync everysec --requirepass "$$(cat /run/secrets/valkey_tasks_password)"
+    secrets:
+      - valkey_tasks_password
+    volumes:
+      - netbox-valkey-tasks:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli --pass \"$$(cat /run/secrets/valkey_tasks_password)\" ping | grep -qx PONG"]
+      start_period: 10s
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: local
+      options:
+        max-size: 5m
+        max-file: "2"
+
+  valkey-cache:
+    image: docker.io/valkey/valkey:9.1-alpine@sha256:3fe38a705227d29534a199e876b38d5474dec4d3baca980ac6894df539416562
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -ec
+      - exec valkey-server --save "" --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass "$$(cat /run/secrets/valkey_cache_password)"
+    secrets:
+      - valkey_cache_password
+    tmpfs:
+      - /data:rw,noexec,nosuid,nodev,size=300m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli --pass \"$$(cat /run/secrets/valkey_cache_password)\" ping | grep -qx PONG"]
+      start_period: 10s
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: local
+      options:
+        max-size: 5m
+        max-file: "2"
+
+  caddy:
+    image: docker.io/caddy:2.11.4-alpine@sha256:98eb57d882ccd5213d1688764db10c1ca2c58a1ca3a6717a3411ad798f7a423a
+    restart: unless-stopped
+    depends_on:
+      netbox:
+        condition: service_healthy
+    ports:
+      - "192.168.50.81:80:80/tcp"
+      - "192.168.50.81:443:443/tcp"
+      - "192.168.50.81:443:443/udp"
+    extra_hosts:
+      - "netbox.edsys.local:127.0.0.1"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - netbox-caddy-data:/data
+      - netbox-caddy-config:/config
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider --no-check-certificate https://netbox.edsys.local/login/ || exit 1"]
+      start_period: 30s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+
+secrets:
+  db_password:
+    file: /etc/edsys-secrets/netbox/db_password
+  valkey_tasks_password:
+    file: /etc/edsys-secrets/netbox/valkey_tasks_password
+  valkey_cache_password:
+    file: /etc/edsys-secrets/netbox/valkey_cache_password
+  secret_key:
+    file: /etc/edsys-secrets/netbox/secret_key
+  api_token_pepper_1:
+    file: /etc/edsys-secrets/netbox/api_token_pepper_1
+  superuser_password:
+    file: /etc/edsys-secrets/netbox/superuser_password
+  sync_api_bearer:
+    file: /etc/edsys-secrets/netbox/sync_api_bearer
+  export_api_bearer:
+    file: /etc/edsys-secrets/netbox/export_api_bearer
+
+volumes:
+  netbox-postgres:
+  netbox-valkey-tasks:
+  netbox-media:
+  netbox-reports:
+  netbox-scripts:
+  netbox-caddy-data:
+  netbox-caddy-config:

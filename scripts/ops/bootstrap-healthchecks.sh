@@ -65,6 +65,11 @@ checks = [
     ("edsys-gdrive-auth-check", "EdSys Google Drive authorization and parity", 8, 2),
     ("foothills-restic-restore-test", "Foothills local encrypted restore test", 8 * 24, 24),
     ("foothills-restic-offsite-restore-test", "Foothills Google Drive restore test", 8 * 24, 24),
+    ("edsys-netbox-backup", "NetBox application backup", 26, 2),
+    ("edsys-netbox-backup-pull", "NetBox verified backup pull", 26, 2),
+    ("edsys-netbox-restore-test", "NetBox isolated restore test", 8 * 24, 24),
+    ("edsys-netbox-sync-review", "NetBox discovery and reconciliation review", 26, 2),
+    ("edsys-netbox-export-review", "NetBox sanitized export review", 8 * 24, 24),
 ]
 for slug, name, timeout_hours, grace_hours in checks:
     check, _ = Check.objects.get_or_create(
@@ -110,6 +115,9 @@ declare -A SYSTEMD_SERVICES=(
   [edsys-gdrive-auth-check]=edsys-gdrive-auth-check
   [foothills-restic-restore-test]=foothills-restic-restore-test
   [foothills-restic-offsite-restore-test]=foothills-restic-offsite-restore-test
+  [edsys-netbox-backup-pull]=edsys-netbox-backup-pull
+  [edsys-netbox-sync-review]=edsys-netbox-sync-review
+  [edsys-netbox-export-review]=edsys-netbox-export-review
 )
 
 for slug in "${!SYSTEMD_SERVICES[@]}"; do

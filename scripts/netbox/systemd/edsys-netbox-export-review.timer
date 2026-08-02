@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly sanitized NetBox export review plan
+
+[Timer]
+OnCalendar=Mon *-*-* 04:45:00 America/New_York
+Persistent=true
+RandomizedDelaySec=300
+Unit=edsys-netbox-export-review.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly isolated EdSys NetBox restore test
+
+[Timer]
+OnCalendar=Sun *-*-* 03:45:00 America/New_York
+Persistent=true
+RandomizedDelaySec=300
+Unit=edsys-netbox-restore-test.service
+
+[Install]
+WantedBy=timers.target

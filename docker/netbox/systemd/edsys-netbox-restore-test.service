@@ -1,0 +1,18 @@
+[Unit]
+Description=Weekly isolated EdSys NetBox restore test
+Requires=docker.service
+After=docker.service edsys-netbox-backup.service
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/edsys-secrets/netbox/healthchecks/restore-test.env
+ExecStart=/srv/edsys/edsys-infrastructure/docker/netbox/scripts/restore-test.sh
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/netbox /var/tmp /var/lib/docker /run/docker.sock

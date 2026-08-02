@@ -1,0 +1,33 @@
+name: NetBox
+description: Authoritative structured operational inventory for EdSys infrastructure.
+host: netbox
+runtime: Docker Compose inside dedicated Proxmox VMID 323
+ports:
+  - 80/tcp LAN redirect only
+  - 443/tcp+udp LAN HTTPS
+  - 8080/tcp loopback-only upstream
+volumes:
+  - Docker volumes for PostgreSQL, persistent Valkey tasks, media, scripts, reports, and Caddy state
+environment:
+  - non-secret application settings in env/netbox.env
+secrets_required:
+  - PostgreSQL password
+  - Valkey task password
+  - Valkey cache password
+  - Django secret key
+  - API token pepper
+  - local administrator password
+  - scoped synchronization and export API tokens
+backup:
+  - nightly PostgreSQL custom-format dump plus media, scripts, manifests, counts, and hashes
+  - verified pull to 9950x before encrypted Restic
+  - weekly isolated restore test
+monitoring:
+  - NetBox and container health
+  - PostgreSQL and Valkey health
+  - Netdata child metrics
+  - Uptime Kuma LAN and Tailnet HTTPS
+  - Healthchecks job heartbeats
+restore_notes: Restore only into an isolated environment first; validate migrations and representative inventory before promotion.
+owner: Jeremy
+last_verified: to be confirmed after production acceptance

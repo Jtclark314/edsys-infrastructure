@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly verified NetBox backup pull
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 America/New_York
+Persistent=true
+RandomizedDelaySec=120
+Unit=edsys-netbox-backup-pull.service
+
+[Install]
+WantedBy=timers.target

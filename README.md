@@ -15,6 +15,8 @@ This repo should describe how services are deployed, but it must not contain liv
 - [9950x full-host reboot acceptance](docs/REBOOT_ACCEPTANCE.md)
 - [ARR transfer arbiter](docs/ARR_TRANSFER_ARBITER.md)
 - [Netdata compute topology](docs/NETDATA_COMPUTE.md)
+- [NetBox deployment](docker/netbox/README.md)
+- [NetBox synchronization](scripts/netbox/README.md)
 - [EdCore SDR deployment](scripts/sdr/README.md)
 
 ## Folder Map

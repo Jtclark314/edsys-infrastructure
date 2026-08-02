@@ -1,0 +1,20 @@
+[Unit]
+Description=Pull and verify the latest NetBox application backup
+Wants=network-online.target
+After=network-online.target
+Before=edsys-backup.service
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/edsys-healthchecks/edsys-netbox-backup-pull.env
+ExecStart=/srv/edsys/edsys-infrastructure/scripts/netbox/pull-backup.sh
+ExecStartPost=-/usr/local/sbin/edsys-healthchecks-ping success
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/srv/edsys-backup/staging/netbox /root/.ssh
