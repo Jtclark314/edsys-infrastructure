@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly edcore-sdr private configuration backup
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=1h
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

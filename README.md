@@ -14,6 +14,8 @@ This repo should describe how services are deployed, but it must not contain liv
 - [Config template standard](docs/CONFIG_TEMPLATE_STANDARD.md)
 - [9950x full-host reboot acceptance](docs/REBOOT_ACCEPTANCE.md)
 - [ARR transfer arbiter](docs/ARR_TRANSFER_ARBITER.md)
+- [Netdata compute topology](docs/NETDATA_COMPUTE.md)
+- [EdCore SDR deployment](scripts/sdr/README.md)
 
 ## Folder Map
 

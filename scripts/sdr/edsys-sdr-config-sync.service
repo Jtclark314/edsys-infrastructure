@@ -1,0 +1,27 @@
+[Unit]
+Description=Copy private edcore-sdr configuration into the protected NFS backup area
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=openwebrx
+Group=openwebrx
+ExecStart=/usr/local/libexec/edsys-sdr-config-sync
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/openwebrx /var/lib/openwebrx
+ReadWritePaths=/srv/edsys-sdr-data/config-backups
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=

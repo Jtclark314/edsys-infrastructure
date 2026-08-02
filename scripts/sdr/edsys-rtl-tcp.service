@@ -1,0 +1,33 @@
+[Unit]
+Description=EdSys on-demand loopback-only RTL-TCP server
+Documentation=https://osmocom.org/projects/rtl-sdr/wiki/Rtl-sdr
+After=network.target
+Conflicts=openwebrx.service
+
+[Service]
+Type=simple
+User=openwebrx
+Group=openwebrx
+ExecStart=/usr/bin/rtl_tcp -a 127.0.0.1 -p 1234 -f 144390000 -s 2048000 -g 29.7
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+# libusb device discovery uses udev's netlink socket; without AF_NETLINK the
+# RTL-SDR library reports "No supported devices found" inside this sandbox.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

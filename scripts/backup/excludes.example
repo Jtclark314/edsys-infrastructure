@@ -35,6 +35,12 @@
 /mnt/ai-store/models/**
 /mnt/ai-store/cache/**
 
+# Bulk SDR captures are intentionally local. Reviewed configuration, metadata,
+# decoded output, spectra, satellite products, and explicitly curated files
+# remain protected through the /mnt/ai-store/edsys-sdr include.
+/mnt/ai-store/edsys-sdr/raw/**
+/mnt/ai-store/edsys-sdr/recordings/**
+
 *.iso
 *.img
 *.qcow2

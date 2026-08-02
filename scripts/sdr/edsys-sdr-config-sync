@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+destination=/srv/edsys-sdr-data/config-backups/current
+lock=/run/lock/edsys-sdr-config-sync.lock
+
+exec 9>"$lock"
+flock -n 9 || exit 0
+
+# Accessing the path activates the nofail systemd NFS automount. A missing
+# archive is visible as a failed timer run rather than blocking OpenWebRX.
+test -d /srv/edsys-sdr-data/config-backups
+install -d -m 0770 "$destination"
+
+for source in \
+  /var/lib/openwebrx/settings.json \
+  /var/lib/openwebrx/bookmarks.json \
+  /var/lib/openwebrx/users.json \
+  /etc/openwebrx/openwebrx.conf; do
+  test -r "$source" || continue
+  install -m 0600 "$source" "$destination/$(basename "$source")"
+done
+
+date -u +%Y-%m-%dT%H:%M:%SZ >"$destination/last-sync-utc.txt"

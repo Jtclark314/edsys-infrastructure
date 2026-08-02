@@ -1,0 +1,589 @@
+{
+  "version": 8,
+  "receiver_name": "EdSys RF Observatory",
+  "receiver_location": "Central Pennsylvania, USA (approximate)",
+  "receiver_country": "United States",
+  "receiver_asl": 0,
+  "receiver_admin": "",
+  "receiver_gps": {
+    "lat": 40.0,
+    "lon": -77.0
+  },
+  "receiver_help": "https://fms.komkon.org/OWRX/",
+  "photo_title": "EdSys RF Observatory",
+  "photo_desc": "Private EdSys receiver. The Ham It Up hardware switch must match the selected profile label.",
+  "max_clients": 5,
+  "max_clients_per_ip": 5,
+  "fft_fps": 12,
+  "fft_size": 4096,
+  "fft_voverlap_factor": 0.3,
+  "audio_compression": "adpcm",
+  "fft_compression": "adpcm",
+  "wfm_deemphasis_tau": 0.000075,
+  "wfm_rds_rbds": true,
+  "waterfall_scheme": "GoogleTurboWaterfall",
+  "waterfall_levels": {
+    "min": -88,
+    "max": -20
+  },
+  "waterfall_auto_levels": {
+    "min": 3,
+    "max": 10
+  },
+  "waterfall_auto_level_default_mode": true,
+  "waterfall_auto_min_range": 50,
+  "allow_center_freq_changes": true,
+  "allow_audio_recording": true,
+  "allow_chat": false,
+  "tuning_precision": 2,
+  "squelch_auto_margin": 10,
+  "map_type": "leaflet",
+  "bandplan_region": 2,
+  "session_timeout": 0,
+  "keep_files": 50,
+  "decoding_queue_workers": 3,
+  "decoding_queue_length": 20,
+  "wsjt_decoding_depth": 3,
+  "services_enabled": true,
+  "services_decoders": [
+    "ft8",
+    "ft4",
+    "wspr",
+    "js8",
+    "packet",
+    "ais",
+    "navtex",
+    "dsc",
+    "page",
+    "eas",
+    "ism",
+    "hfdl",
+    "vdl2",
+    "acars",
+    "adsb",
+    "uat",
+    "sstv",
+    "fax",
+    "cwskimmer",
+    "rttyskimmer",
+    "sonde-rs41",
+    "sonde-dfm9",
+    "sonde-dfm17",
+    "sonde-mts01",
+    "sonde-m10",
+    "sonde-m20",
+    "meteor-lrpt"
+  ],
+  "eibi_bookmarks_range": 10000,
+  "repeater_range": 100,
+  "aprs_igate_enabled": false,
+  "aisreporter_enabled": false,
+  "pskreporter_enabled": false,
+  "wsprnet_enabled": false,
+  "sondehub_enabled": false,
+  "mqtt_enabled": false,
+  "report_clients": false,
+  "report_radio": false,
+  "bot_ban_enabled": true,
+  "sdrs": {
+    "nesdr-smart-v5": {
+      "name": "NESDR SMArt v5 + Ham It Up",
+      "type": "rtl_sdr",
+      "enabled": true,
+      "always-on": false,
+      "services": true,
+      "device": "00000001",
+      "rf_gain": 29.7,
+      "ppm": 0,
+      "bias_tee": false,
+      "direct_sampling": 0,
+      "scheduler": {
+        "type": "static",
+        "schedule": {
+          "0000-0000": "pass-aprs-2m"
+        }
+      },
+      "profiles": {
+        "pass-aprs-2m": {
+          "name": "PASS-THROUGH - APRS 144.390 (idle default)",
+          "center_freq": 144800000,
+          "samp_rate": 1024000,
+          "start_freq": 144390000,
+          "start_mod": "packet",
+          "tuning_step": 5000,
+          "repeater_range": 100
+        },
+        "pass-2m-wide": {
+          "name": "PASS-THROUGH - 2m voice wide",
+          "center_freq": 146000000,
+          "samp_rate": 2400000,
+          "start_freq": 146520000,
+          "start_mod": "nfm",
+          "tuning_step": 5000,
+          "repeater_range": 100
+        },
+        "pass-fm-low": {
+          "name": "PASS-THROUGH - FM broadcast low",
+          "center_freq": 89500000,
+          "samp_rate": 2400000,
+          "start_freq": 88500000,
+          "start_mod": "wfm",
+          "tuning_step": 100000
+        },
+        "pass-fm-mid": {
+          "name": "PASS-THROUGH - FM broadcast mid",
+          "center_freq": 98500000,
+          "samp_rate": 2400000,
+          "start_freq": 98900000,
+          "start_mod": "wfm",
+          "tuning_step": 100000
+        },
+        "pass-fm-high": {
+          "name": "PASS-THROUGH - FM broadcast high",
+          "center_freq": 106500000,
+          "samp_rate": 2400000,
+          "start_freq": 106100000,
+          "start_mod": "wfm",
+          "tuning_step": 100000
+        },
+        "pass-hd-radio": {
+          "name": "PASS-THROUGH - North American HD Radio",
+          "center_freq": 99500000,
+          "samp_rate": 2400000,
+          "start_freq": 99500000,
+          "start_mod": "hdr",
+          "tuning_step": 100000
+        },
+        "pass-airband": {
+          "name": "PASS-THROUGH - civil airband and 121.5 MHz",
+          "center_freq": 120500000,
+          "samp_rate": 2400000,
+          "start_freq": 121500000,
+          "start_mod": "am",
+          "tuning_step": 8330
+        },
+        "pass-acars": {
+          "name": "PASS-THROUGH - ACARS aviation data",
+          "center_freq": 131000000,
+          "samp_rate": 2400000,
+          "start_freq": 131550000,
+          "start_mod": "acars",
+          "tuning_step": 25000
+        },
+        "pass-vdl2": {
+          "name": "PASS-THROUGH - VDL Mode 2 aviation data",
+          "center_freq": 136200000,
+          "samp_rate": 2400000,
+          "start_freq": 136975000,
+          "start_mod": "vdl2",
+          "tuning_step": 25000
+        },
+        "pass-weather": {
+          "name": "PASS-THROUGH - NOAA Weather Radio and SAME/EAS",
+          "center_freq": 162200000,
+          "samp_rate": 1024000,
+          "start_freq": 162550000,
+          "start_mod": "nfm",
+          "tuning_step": 25000
+        },
+        "pass-weather-sat": {
+          "name": "PASS-THROUGH - 137 MHz weather satellites",
+          "center_freq": 137500000,
+          "samp_rate": 2400000,
+          "start_freq": 137100000,
+          "start_mod": "nfm",
+          "tuning_step": 25000
+        },
+        "pass-marine-ais": {
+          "name": "PASS-THROUGH - marine VHF and AIS",
+          "center_freq": 161500000,
+          "samp_rate": 2400000,
+          "start_freq": 161975000,
+          "start_mod": "ais",
+          "tuning_step": 25000
+        },
+        "pass-6m": {
+          "name": "PASS-THROUGH - 6m amateur",
+          "center_freq": 52000000,
+          "samp_rate": 2400000,
+          "start_freq": 52525000,
+          "start_mod": "nfm",
+          "tuning_step": 5000
+        },
+        "pass-cb": {
+          "name": "PASS-THROUGH - 11m CB",
+          "center_freq": 27185000,
+          "samp_rate": 2400000,
+          "start_freq": 27185000,
+          "start_mod": "am",
+          "tuning_step": 10000
+        },
+        "pass-1-25m": {
+          "name": "PASS-THROUGH - 1.25m amateur",
+          "center_freq": 223500000,
+          "samp_rate": 2400000,
+          "start_freq": 223500000,
+          "start_mod": "nfm",
+          "tuning_step": 5000
+        },
+        "pass-dab": {
+          "name": "PASS-THROUGH - DAB ensemble exploration",
+          "center_freq": 225648000,
+          "samp_rate": 2400000,
+          "start_freq": 225648000,
+          "start_mod": "dab",
+          "tuning_step": 1000
+        },
+        "pass-70cm": {
+          "name": "PASS-THROUGH - 70cm amateur",
+          "center_freq": 445000000,
+          "samp_rate": 2400000,
+          "start_freq": 446000000,
+          "start_mod": "nfm",
+          "tuning_step": 5000
+        },
+        "pass-gmrs-frs": {
+          "name": "PASS-THROUGH - FRS and GMRS",
+          "center_freq": 463000000,
+          "samp_rate": 2400000,
+          "start_freq": 462562500,
+          "start_mod": "nfm",
+          "tuning_step": 12500
+        },
+        "pass-ism433": {
+          "name": "PASS-THROUGH - 433 MHz ISM sensors",
+          "center_freq": 433920000,
+          "samp_rate": 2400000,
+          "start_freq": 433920000,
+          "start_mod": "ism",
+          "tuning_step": 25000
+        },
+        "pass-radiosonde": {
+          "name": "PASS-THROUGH - 400 MHz radiosondes",
+          "center_freq": 403000000,
+          "samp_rate": 2400000,
+          "start_freq": 403000000,
+          "start_mod": "sonde-rs41",
+          "tuning_step": 10000
+        },
+        "pass-700mhz": {
+          "name": "PASS-THROUGH - 700 MHz general monitoring",
+          "center_freq": 770000000,
+          "samp_rate": 2400000,
+          "start_freq": 770000000,
+          "start_mod": "nfm",
+          "tuning_step": 12500
+        },
+        "pass-800mhz": {
+          "name": "PASS-THROUGH - 800 MHz general monitoring",
+          "center_freq": 853500000,
+          "samp_rate": 2400000,
+          "start_freq": 853500000,
+          "start_mod": "nfm",
+          "tuning_step": 12500
+        },
+        "pass-ism915": {
+          "name": "PASS-THROUGH - 915 MHz ISM sensors",
+          "center_freq": 915000000,
+          "samp_rate": 2400000,
+          "start_freq": 915000000,
+          "start_mod": "ism",
+          "tuning_step": 25000
+        },
+        "pass-uat978": {
+          "name": "PASS-THROUGH - 978 MHz UAT aviation",
+          "center_freq": 978000000,
+          "samp_rate": 2400000,
+          "start_freq": 978000000,
+          "start_mod": "uat",
+          "tuning_step": 25000
+        },
+        "pass-adsb1090": {
+          "name": "PASS-THROUGH - 1090 MHz ADS-B",
+          "center_freq": 1090000000,
+          "samp_rate": 2400000,
+          "start_freq": 1090000000,
+          "start_mod": "adsb",
+          "tuning_step": 25000
+        },
+        "pass-23cm": {
+          "name": "PASS-THROUGH - 23cm amateur",
+          "center_freq": 1296000000,
+          "samp_rate": 2400000,
+          "start_freq": 1296000000,
+          "start_mod": "nfm",
+          "tuning_step": 25000
+        },
+        "pass-lband": {
+          "name": "PASS-THROUGH - L-band satellite exploration",
+          "center_freq": 1545000000,
+          "samp_rate": 2400000,
+          "start_freq": 1545000000,
+          "start_mod": "nfm",
+          "tuning_step": 25000
+        },
+        "enable-longwave": {
+          "name": "HAM IT UP ENABLE - longwave and NDB",
+          "center_freq": 350000,
+          "samp_rate": 1024000,
+          "start_freq": 350000,
+          "start_mod": "am",
+          "tuning_step": 1000,
+          "lfo_offset": 125000000,
+          "eibi_bookmarks_range": 10000
+        },
+        "enable-am-broadcast": {
+          "name": "HAM IT UP ENABLE - AM broadcast",
+          "center_freq": 1000000,
+          "samp_rate": 2048000,
+          "start_freq": 1000000,
+          "start_mod": "am",
+          "tuning_step": 10000,
+          "lfo_offset": 125000000,
+          "eibi_bookmarks_range": 10000
+        },
+        "enable-160m": {
+          "name": "HAM IT UP ENABLE - 160m amateur",
+          "center_freq": 1900000,
+          "samp_rate": 1024000,
+          "start_freq": 1840000,
+          "start_mod": "ft8",
+          "tuning_step": 500,
+          "lfo_offset": 125000000
+        },
+        "enable-wwv-2-5": {
+          "name": "HAM IT UP ENABLE - WWV 2.5 MHz",
+          "center_freq": 2500000,
+          "samp_rate": 1024000,
+          "start_freq": 2500000,
+          "start_mod": "sam",
+          "tuning_step": 1000,
+          "lfo_offset": 125000000
+        },
+        "enable-80m": {
+          "name": "HAM IT UP ENABLE - 80m amateur",
+          "center_freq": 3750000,
+          "samp_rate": 1024000,
+          "start_freq": 3573000,
+          "start_mod": "ft8",
+          "tuning_step": 500,
+          "lfo_offset": 125000000
+        },
+        "enable-wwv-5": {
+          "name": "HAM IT UP ENABLE - WWV 5 MHz",
+          "center_freq": 5000000,
+          "samp_rate": 1024000,
+          "start_freq": 5000000,
+          "start_mod": "sam",
+          "tuning_step": 1000,
+          "lfo_offset": 125000000
+        },
+        "enable-60m": {
+          "name": "HAM IT UP ENABLE - 60m amateur",
+          "center_freq": 5350000,
+          "samp_rate": 1024000,
+          "start_freq": 5357000,
+          "start_mod": "ft8",
+          "tuning_step": 500,
+          "lfo_offset": 125000000
+        },
+        "enable-sw-49m": {
+          "name": "HAM IT UP ENABLE - 49m shortwave broadcast",
+          "center_freq": 6050000,
+          "samp_rate": 1024000,
+          "start_freq": 6070000,
+          "start_mod": "am",
+          "tuning_step": 5000,
+          "lfo_offset": 125000000,
+          "eibi_bookmarks_range": 10000
+        },
+        "enable-40m": {
+          "name": "HAM IT UP ENABLE - 40m amateur",
+          "center_freq": 7150000,
+          "samp_rate": 1024000,
+          "start_freq": 7074000,
+          "start_mod": "ft8",
+          "tuning_step": 500,
+          "lfo_offset": 125000000
+        },
+        "enable-sw-41m": {
+          "name": "HAM IT UP ENABLE - 41m shortwave broadcast",
+          "center_freq": 7350000,
+          "samp_rate": 1024000,
+          "start_freq": 7325000,
+          "start_mod": "am",
+          "tuning_step": 5000,
+          "lfo_offset": 125000000,
+          "eibi_bookmarks_range": 10000
+        },
+        "enable-sw-31m": {
+          "name": "HAM IT UP ENABLE - 31m shortwave broadcast",
+          "center_freq": 9650000,
+          "samp_rate": 1024000,
+          "start_freq": 9700000,
+          "start_mod": "am",
+          "tuning_step": 5000,
+          "lfo_offset": 125000000,
+          "eibi_bookmarks_range": 10000
+        },
+        "enable-wwv-10": {
+          "name": "HAM IT UP ENABLE - WWV 10 MHz",
+          "center_freq": 10000000,
+          "samp_rate": 1024000,
+          "start_freq": 10000000,
+          "start_mod": "sam",
+          "tuning_step": 1000,
+          "lfo_offset": 125000000
+        },
+        "enable-30m": {
+          "name": "HAM IT UP ENABLE - 30m amateur",
+          "center_freq": 10125000,
+          "samp_rate": 1024000,
+          "start_freq": 10136000,
+          "start_mod": "ft8",
+          "tuning_step": 500,
+          "lfo_offset": 125000000
+        },
+        "enable-sw-25m": {
+          "name": "HAM IT UP ENABLE - 25m shortwave broadcast",
+          "center_freq": 11850000,
+          "samp_rate": 1024000,
+          "start_freq": 12000000,
+          "start_mod": "am",
+          "tuning_step": 5000,
+          "lfo_offset": 125000000,
+          "eibi_bookmarks_range": 10000
+        },
+        "enable-sw-22m": {
+          "name": "HAM IT UP ENABLE - 22m shortwave broadcast",
+          "center_freq": 13720000,
+          "samp_rate": 1024000,
+          "start_freq": 13800000,
+          "start_mod": "am",
+          "tuning_step": 5000,
+          "lfo_offset": 125000000,
+          "eibi_bookmarks_range": 10000
+        },
+        "enable-20m": {
+          "name": "HAM IT UP ENABLE - 20m amateur",
+          "center_freq": 14175000,
+          "samp_rate": 1024000,
+          "start_freq": 14074000,
+          "start_mod": "ft8",
+          "tuning_step": 500,
+          "lfo_offset": 125000000
+        },
+        "enable-wwv-15": {
+          "name": "HAM IT UP ENABLE - WWV 15 MHz",
+          "center_freq": 15000000,
+          "samp_rate": 1024000,
+          "start_freq": 15000000,
+          "start_mod": "sam",
+          "tuning_step": 1000,
+          "lfo_offset": 125000000
+        },
+        "enable-sw-19m": {
+          "name": "HAM IT UP ENABLE - 19m shortwave broadcast",
+          "center_freq": 15300000,
+          "samp_rate": 1024000,
+          "start_freq": 15300000,
+          "start_mod": "am",
+          "tuning_step": 5000,
+          "lfo_offset": 125000000,
+          "eibi_bookmarks_range": 10000
+        },
+        "enable-17m": {
+          "name": "HAM IT UP ENABLE - 17m amateur",
+          "center_freq": 18118000,
+          "samp_rate": 1024000,
+          "start_freq": 18100000,
+          "start_mod": "ft8",
+          "tuning_step": 500,
+          "lfo_offset": 125000000
+        },
+        "enable-wwv-20": {
+          "name": "HAM IT UP ENABLE - WWV 20 MHz",
+          "center_freq": 20000000,
+          "samp_rate": 1024000,
+          "start_freq": 20000000,
+          "start_mod": "sam",
+          "tuning_step": 1000,
+          "lfo_offset": 125000000
+        },
+        "enable-15m": {
+          "name": "HAM IT UP ENABLE - 15m amateur",
+          "center_freq": 21225000,
+          "samp_rate": 1024000,
+          "start_freq": 21074000,
+          "start_mod": "ft8",
+          "tuning_step": 500,
+          "lfo_offset": 125000000
+        },
+        "enable-sw-13m": {
+          "name": "HAM IT UP ENABLE - 13m shortwave broadcast",
+          "center_freq": 21650000,
+          "samp_rate": 1024000,
+          "start_freq": 21600000,
+          "start_mod": "am",
+          "tuning_step": 5000,
+          "lfo_offset": 125000000,
+          "eibi_bookmarks_range": 10000
+        },
+        "enable-12m": {
+          "name": "HAM IT UP ENABLE - 12m amateur",
+          "center_freq": 24940000,
+          "samp_rate": 1024000,
+          "start_freq": 24915000,
+          "start_mod": "ft8",
+          "tuning_step": 500,
+          "lfo_offset": 125000000
+        },
+        "enable-wwv-25": {
+          "name": "HAM IT UP ENABLE - WWV 25 MHz",
+          "center_freq": 25000000,
+          "samp_rate": 1024000,
+          "start_freq": 25000000,
+          "start_mod": "sam",
+          "tuning_step": 1000,
+          "lfo_offset": 125000000
+        },
+        "enable-10m": {
+          "name": "HAM IT UP ENABLE - 10m amateur",
+          "center_freq": 28500000,
+          "samp_rate": 2048000,
+          "start_freq": 28074000,
+          "start_mod": "ft8",
+          "tuning_step": 500,
+          "lfo_offset": 125000000
+        },
+        "enable-hfdl-low": {
+          "name": "HAM IT UP ENABLE - HFDL low HF aviation",
+          "center_freq": 6600000,
+          "samp_rate": 1024000,
+          "start_freq": 6535000,
+          "start_mod": "hfdl",
+          "tuning_step": 1000,
+          "lfo_offset": 125000000
+        },
+        "enable-hfdl-high": {
+          "name": "HAM IT UP ENABLE - HFDL high HF aviation",
+          "center_freq": 13300000,
+          "samp_rate": 1024000,
+          "start_freq": 13270000,
+          "start_mod": "hfdl",
+          "tuning_step": 1000,
+          "lfo_offset": 125000000
+        },
+        "enable-wfax": {
+          "name": "HAM IT UP ENABLE - HF weather fax",
+          "center_freq": 12750000,
+          "samp_rate": 1024000,
+          "start_freq": 12786000,
+          "start_mod": "fax",
+          "tuning_step": 1000,
+          "lfo_offset": 125000000
+        }
+      }
+    }
+  }
+}

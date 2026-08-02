@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the authoritative six-node EdSys Netdata parent topology."""
+"""Verify the authoritative seven-node EdSys Netdata parent topology."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ PARENT = "http://127.0.0.1:19999"
 EXPECTED = {
     "9950x",
     "edcore-ops",
+    "edcore-sdr",
     "pve-edcore",
     "pve-node0",
     "pve-node1",
@@ -77,11 +78,11 @@ def main() -> int:
         counts = local_agent.get("nodes", {})
         if runtime.get("parent") is not True:
             errors.append(f"9950x parent flag is {runtime.get('parent')!r}")
-        if counts.get("total") != 6:
-            errors.append(f"9950x reports total={counts.get('total')!r}, expected 6")
-        if counts.get("receiving") != 5:
+        if counts.get("total") != 7:
+            errors.append(f"9950x reports total={counts.get('total')!r}, expected 7")
+        if counts.get("receiving") != 6:
             errors.append(
-                f"9950x reports receiving={counts.get('receiving')!r}, expected 5"
+                f"9950x reports receiving={counts.get('receiving')!r}, expected 6"
             )
 
     if errors:
@@ -96,7 +97,7 @@ def main() -> int:
             f"health={node.get('health', {}).get('status')}, "
             f"group={node.get('labels', {}).get('group')}, version={node.get('v')}"
         )
-    print("PASS topology: 9950x parent, 6 total nodes, 5 receiving children")
+    print("PASS topology: 9950x parent, 7 total nodes, 6 receiving children")
     return 0
 
 

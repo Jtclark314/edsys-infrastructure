@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+lock=/run/lock/edsys-sdr-mode.lock
+
+settle_device() {
+  # rtl_connector resets the RTL2832U while shutting down.  Give udev and the
+  # USB stack a bounded moment to recreate the stable device node before a
+  # different owner tries to open it.
+  udevadm settle --timeout=10
+  sleep 3
+}
+
+usage() {
+  cat <<'EOF'
+Usage: sudo edsys-sdrctl web|rtl-tcp|idle|status
+       sudo edsys-sdrctl run -- command [args ...]
+
+web      Make OpenWebRX+ the sole USB owner (normal/default mode).
+rtl-tcp  Make a loopback-only rtl_tcp server the sole USB owner.
+idle     Stop both managed USB owners.
+status   Show managed services, USB identity, and listeners.
+run      Stop both owners for one bounded command, then restore web mode.
+
+Reach rtl_tcp only through an SSH tunnel, for example:
+  ssh -N -L 1234:127.0.0.1:1234 edcore-sdr
+EOF
+}
+
+status() {
+  printf 'openwebrx=%s\n' "$(systemctl is-active openwebrx.service 2>/dev/null || true)"
+  printf 'rtl_tcp=%s\n' "$(systemctl is-active edsys-rtl-tcp.service 2>/dev/null || true)"
+  lsusb -d 0bda:2838 || true
+  ss -lntp '( sport = :8073 or sport = :1234 )' || true
+}
+
+(( EUID == 0 )) || { echo 'Run through sudo.' >&2; exit 2; }
+exec 9>"$lock"
+flock 9
+
+case "${1:-}" in
+  web)
+    systemctl stop edsys-rtl-tcp.service
+    systemctl reset-failed edsys-rtl-tcp.service 2>/dev/null || true
+    settle_device
+    systemctl start openwebrx.service
+    ;;
+  rtl-tcp)
+    systemctl stop openwebrx.service
+    systemctl reset-failed edsys-rtl-tcp.service 2>/dev/null || true
+    settle_device
+    systemctl start edsys-rtl-tcp.service
+    ;;
+  idle)
+    systemctl stop edsys-rtl-tcp.service openwebrx.service
+    systemctl reset-failed edsys-rtl-tcp.service 2>/dev/null || true
+    ;;
+  status)
+    status
+    ;;
+  run)
+    shift
+    [[ ${1:-} == -- ]] && shift
+    (( $# > 0 )) || { usage >&2; exit 2; }
+    systemctl stop edsys-rtl-tcp.service openwebrx.service
+    systemctl reset-failed edsys-rtl-tcp.service 2>/dev/null || true
+    settle_device
+    restore_web() { settle_device; systemctl start openwebrx.service || true; }
+    trap restore_web EXIT INT TERM
+    "$@"
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

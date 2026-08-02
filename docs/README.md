@@ -24,10 +24,12 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `../scripts/network/README.md` - FreeBind systemd socket proxy for exact-address Tailnet AI access without Docker boot dependency on `tailscale0`.
 - `../scripts/deploy/README.md` - deployment preparation helpers.
 - `../scripts/ops/README.md` - operations/report helpers.
+- `../scripts/sdr/README.md` - isolated EdCore SDR receiver deployment,
+  decoder, storage, USB arbitration, and recovery source.
 - `CONTAINER_RECOVERY.md` - ordered 9950x Docker recovery architecture and operations.
 - `REBOOT_ACCEPTANCE.md` - one-shot full-host reboot recovery and acceptance gate.
 - `ARR_TRANSFER_ARBITER.md` - fail-closed SABnzbd/qBittorrent mutual exclusion and operator controls.
-- `NETDATA_COMPUTE.md` - authoritative five-node Netdata Parent/Child deployment and recovery procedure.
+- `NETDATA_COMPUTE.md` - authoritative seven-node Netdata Parent/Child deployment and recovery procedure.
 
 ## Rule
 

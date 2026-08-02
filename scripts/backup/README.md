@@ -19,6 +19,11 @@ The scripts are designed to protect critical service state first. They exclude r
 
 As of the 2026-07-13 Remotion hardening pass, the default 9950x include set also protects the operator repos under `/home/jeremy/code`, selected shell/Codex hub state, `/opt/edsys-workhorse` runtime state, and durable Remotion deliverables under `/mnt/ai-store/remotion/outputs`. Replaceable Remotion browser caches/temp data, Codex package caches, and Loki/renovate cache-heavy paths remain excluded.
 
+The EdCore SDR archive at `/mnt/ai-store/edsys-sdr` is also selected. Raw IQ
+captures and routine audio recordings are explicitly excluded; reviewed
+configuration backups, metadata, decoded output, spectra, satellite products,
+and curated material remain inside the encrypted Restic set.
+
 The Basecamp Foothills extension under `basecamp-foothills/` creates one
 private, manifest-verified recovery stage for all critical Basecamp
 applications and host service configuration. It transfers that stage before

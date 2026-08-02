@@ -6,14 +6,14 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 verify_script="${repo_root}/scripts/ops/verify-netdata-compute.py"
 parent_ip="192.168.50.50"
 group_name="edsys-compute"
-children=(pve-edcore pve-node0 pve-node1 pve-node2)
-ops_satellite="edcore-ops"
+pve_children=(pve-edcore pve-node0 pve-node1 pve-node2)
+satellites=(edcore-ops edcore-sdr)
 
 usage() {
   cat <<'EOF'
 Usage: deploy-netdata-compute.sh --check | --apply
 
---check  Verify the exact five-node parent/child topology without changing it.
+--check  Verify the exact seven-node parent/child topology without changing it.
 --apply  Back up configuration, align packages, deploy the topology, and verify it.
 EOF
 }
@@ -95,12 +95,29 @@ rollback_configs() {
     restore_local_file /etc/netdata/go.d/docker.conf docker.conf || true
     restore_local_file /etc/netdata/edsys-compute-stream.key stream.key || true
     systemctl restart netdata || true
-    for child in "${children[@]}"; do
+    for child in "${pve_children[@]}"; do
       ssh "${ssh_options[@]}" "root@${child}" \
         "set -e; backup='${parent_backup}'; \
          if test -f \"\$backup/netdata.conf.exists\"; then cp -a \"\$backup/netdata.conf\" /etc/netdata/netdata.conf; else rm -f /etc/netdata/netdata.conf; fi; \
          if test -f \"\$backup/stream.conf.exists\"; then cp -a \"\$backup/stream.conf\" /etc/netdata/stream.conf; else rm -f /etc/netdata/stream.conf; fi; \
          systemctl restart netdata" || true
+    done
+    for satellite in "${satellites[@]}"; do
+      ssh "${ssh_options[@]}" "$satellite" \
+        "sudo -n env BACKUP='${parent_backup}' bash -s" <<'REMOTE_ROLLBACK' || true
+set -e
+if test -f "$BACKUP/netdata.conf.exists"; then
+  cp -a "$BACKUP/netdata.conf" /etc/netdata/netdata.conf
+else
+  rm -f /etc/netdata/netdata.conf
+fi
+if test -f "$BACKUP/stream.conf.exists"; then
+  cp -a "$BACKUP/stream.conf" /etc/netdata/stream.conf
+else
+  rm -f /etc/netdata/stream.conf
+fi
+systemctl restart netdata
+REMOTE_ROLLBACK
     done
   fi
   if (( backup_started == 1 )); then
@@ -116,14 +133,16 @@ trap rollback_configs ERR
 
 echo "Preflighting child hosts and the parent streaming endpoint."
 curl -fsS --max-time 10 "http://127.0.0.1:19999/api/v1/info" >/dev/null
-for child in "${children[@]}"; do
+for child in "${pve_children[@]}"; do
   ssh "${ssh_options[@]}" "root@${child}" \
     "test \"\$(hostname)\" = '${child}'; curl -fsS --max-time 10 http://${parent_ip}:19999/api/v1/info >/dev/null"
 done
-ssh "${ssh_options[@]}" "${ops_satellite}" \
-  "test \"\$(hostname)\" = '${ops_satellite}'; \
-   sudo -n systemctl is-active --quiet netdata; \
-   curl -fsS --max-time 10 http://${parent_ip}:19999/api/v1/info >/dev/null"
+for satellite in "${satellites[@]}"; do
+  ssh "${ssh_options[@]}" "$satellite" \
+    "test \"\$(hostname)\" = '${satellite}'; \
+     sudo -n true; \
+     curl -fsS --max-time 10 http://${parent_ip}:19999/api/v1/info >/dev/null"
+done
 
 install -d -m 0700 "$parent_backup"
 for item in \
@@ -141,7 +160,7 @@ done
 systemctl is-enabled netdata >"${parent_backup}/netdata.enabled" 2>&1 || true
 systemctl is-active netdata >"${parent_backup}/netdata.active" 2>&1 || true
 
-for child in "${children[@]}"; do
+for child in "${pve_children[@]}"; do
   ssh "${ssh_options[@]}" "root@${child}" \
     "set -e; backup='${parent_backup}'; install -d -m 0700 \"\$backup\"; \
      if test -e /etc/netdata/netdata.conf; then cp -a /etc/netdata/netdata.conf \"\$backup/netdata.conf\"; : >\"\$backup/netdata.conf.exists\"; fi; \
@@ -151,10 +170,31 @@ for child in "${children[@]}"; do
      systemctl is-enabled netdata >\"\$backup/netdata.enabled\" 2>&1 || true; \
      systemctl is-active netdata >\"\$backup/netdata.active\" 2>&1 || true"
 done
+for satellite in "${satellites[@]}"; do
+  ssh "${ssh_options[@]}" "$satellite" \
+    "sudo -n env BACKUP='${parent_backup}' bash -s" <<'REMOTE_BACKUP'
+set -euo pipefail
+install -d -m 0700 "$BACKUP"
+if test -e /etc/netdata/netdata.conf; then
+  cp -a /etc/netdata/netdata.conf "$BACKUP/netdata.conf"
+  : >"$BACKUP/netdata.conf.exists"
+fi
+if test -e /etc/netdata/stream.conf; then
+  cp -a /etc/netdata/stream.conf "$BACKUP/stream.conf"
+  : >"$BACKUP/stream.conf.exists"
+fi
+if test -d /var/lib/netdata/cloud.d; then
+  cp -a /var/lib/netdata/cloud.d "$BACKUP/cloud.d"
+fi
+dpkg-query -W -f='${Package}\t${Version}\n' 'netdata*' >"$BACKUP/packages.tsv" 2>/dev/null || true
+systemctl is-enabled netdata >"$BACKUP/netdata.enabled" 2>&1 || true
+systemctl is-active netdata >"$BACKUP/netdata.active" 2>&1 || true
+REMOTE_BACKUP
+done
 backup_started=1
 
 echo "Aligning Netdata edge packages on the four Debian 13 Proxmox hosts."
-for child in "${children[@]}"; do
+for child in "${pve_children[@]}"; do
   scp "${scp_options[@]}" /usr/share/keyrings/netdata-archive-keyring.gpg "root@${child}:/tmp/netdata-archive-keyring.gpg"
   ssh "${ssh_options[@]}" "root@${child}" 'bash -s' <<'REMOTE_INSTALL'
 set -euo pipefail
@@ -189,6 +229,39 @@ systemctl enable netdata >/dev/null
 REMOTE_INSTALL
 done
 
+echo "Installing or aligning signed Netdata edge packages on the Ubuntu satellites."
+for satellite in "${satellites[@]}"; do
+  scp "${scp_options[@]}" /usr/share/keyrings/netdata-archive-keyring.gpg \
+    "${satellite}:/tmp/netdata-archive-keyring.gpg"
+  ssh "${ssh_options[@]}" "$satellite" 'sudo -n bash -s' <<'REMOTE_UBUNTU_INSTALL'
+set -euo pipefail
+install -m 0444 -o root -g root /tmp/netdata-archive-keyring.gpg /usr/share/keyrings/netdata-archive-keyring.gpg
+rm -f /tmp/netdata-archive-keyring.gpg
+cat >/etc/apt/sources.list.d/netdata-edge.sources <<'EOF'
+X-Repolib-Name: Netdata edge repository
+Types: deb
+URIs: http://repository.netdata.cloud/repos/edge/ubuntu/
+Suites: noble/
+Signed-By: /usr/share/keyrings/netdata-archive-keyring.gpg
+By-Hash: Yes
+Enabled: Yes
+
+X-Repolib-Name: Netdata repository configuration repository
+Types: deb
+URIs: http://repository.netdata.cloud/repos/repoconfig/ubuntu/
+Suites: noble/
+Signed-By: /usr/share/keyrings/netdata-archive-keyring.gpg
+By-Hash: Yes
+Enabled: Yes
+EOF
+chmod 0644 /etc/apt/sources.list.d/netdata-edge.sources
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y netdata-repo-edge netdata
+systemctl enable netdata >/dev/null
+REMOTE_UBUNTU_INSTALL
+done
+
 if [[ -s /etc/netdata/edsys-compute-stream.key ]] && \
    grep -Eq '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' \
      /etc/netdata/edsys-compute-stream.key; then
@@ -212,7 +285,7 @@ cat >"${tmpdir}/parent-stream.conf" <<EOF
 [${stream_key}]
     type = api
     enabled = yes
-    allow from = 192.168.50.51 192.168.50.52 192.168.50.53 192.168.50.54 192.168.50.79
+    allow from = 192.168.50.51 192.168.50.52 192.168.50.53 192.168.50.54 192.168.50.79 192.168.50.80
     db = dbengine
     health enabled = auto
     postpone alerts on connect = 1m
@@ -248,7 +321,7 @@ done
 curl -fsS --max-time 3 "http://127.0.0.1:19999/api/v1/info" >/dev/null
 
 echo "Configuring and starting the four Netdata children."
-for child in "${children[@]}"; do
+for child in "${pve_children[@]}"; do
   cat >"${tmpdir}/${child}-netdata.conf" <<EOF
 # Managed by EdSys deploy-netdata-compute.sh.
 [global]
@@ -276,7 +349,42 @@ EOF
      systemctl restart netdata; systemctl is-active --quiet netdata"
 done
 
-echo "Waiting for all five child streams to become reachable on 9950x."
+echo "Configuring and starting the two Ubuntu satellite children."
+for satellite in "${satellites[@]}"; do
+  cat >"${tmpdir}/${satellite}-netdata.conf" <<EOF
+# Managed by EdSys deploy-netdata-compute.sh.
+[global]
+    hostname = ${satellite}
+
+[host labels]
+    group = ${group_name}
+
+[web]
+    bind to = 127.0.0.1
+EOF
+  cat >"${tmpdir}/${satellite}-stream.conf" <<EOF
+# Managed by EdSys deploy-netdata-compute.sh. Contains a private streaming key.
+[stream]
+    enabled = yes
+    destination = ${parent_ip}:19999
+    api key = ${stream_key}
+    enable compression = yes
+    buffer size = 10MiB
+    reconnect delay = 15s
+EOF
+  scp "${scp_options[@]}" "${tmpdir}/${satellite}-netdata.conf" \
+    "${satellite}:/tmp/netdata.conf.edsys"
+  scp "${scp_options[@]}" "${tmpdir}/${satellite}-stream.conf" \
+    "${satellite}:/tmp/stream.conf.edsys"
+  ssh "${ssh_options[@]}" "$satellite" \
+    "sudo -n bash -c 'set -e; \
+     install -m 0644 -o root -g root /tmp/netdata.conf.edsys /etc/netdata/netdata.conf; \
+     install -m 0600 -o root -g root /tmp/stream.conf.edsys /etc/netdata/stream.conf; \
+     rm -f /tmp/netdata.conf.edsys /tmp/stream.conf.edsys; \
+     systemctl restart netdata; systemctl is-active --quiet netdata'"
+done
+
+echo "Waiting for all six child streams to become reachable on 9950x."
 for _ in {1..90}; do
   if python3 "$verify_script" >/dev/null 2>&1; then
     break

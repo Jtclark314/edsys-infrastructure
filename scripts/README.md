@@ -21,6 +21,9 @@ Scripts should:
 - `deploy/` - deployment preparation helpers such as the 9950x workhorse bootstrap.
 - `network/` - exact-address exposure helpers, including the FreeBind AI Tailnet socket proxy.
 - `ops/` - operational helpers and report-only scripts.
+- `sdr/` - reproducible EdCore SDR base packages, pinned decoder installers,
+  OpenWebRX+ profiles, USB arbitration, configuration sync, and strict
+  acceptance checks.
 - `kindle-drop/` - private Basecamp SMB-to-Kindle PDF dispatcher, authenticated
   Scribe-return capture, health repair, and verified 9950x backup pull.
 
