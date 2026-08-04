@@ -36,7 +36,7 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Principal $principal -Settings $settings -Description (
-        'Waits for Basecamp SMB readiness and restores the five persistent Nimo file drives with bounded retries.'
+        'Waits for Basecamp SMB readiness and restores the five persistent Foothills file drives with bounded retries.'
     ) -Force | Out-Null
 
 Start-ScheduledTask -TaskName $TaskName

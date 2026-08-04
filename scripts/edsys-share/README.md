@@ -202,6 +202,18 @@ keeps each profile persistent, and records a credential-free status JSON under
 `%LOCALAPPDATA%\EdSys`. This prevents a fast Windows logon from permanently
 losing all five mappings before Tailscale and Basecamp become reachable.
 
+The managed work laptop uses the identical eight-drive presentation while
+retaining its separately revocable `9950x\edsys-share-dell` identity. From the
+normal, non-elevated `THOMPSON\jclark` session on `THOMPSON-LC086`, run
+`windows\Run-WorkLaptopRemoteDriveSetup.cmd`. The wrapper installs the same four
+hidden reconnect tasks and exact `F:`, `I:`, `K:`, `Q:`, `R:`, `S:`, `T:`, and
+`U:` targets used on Nimo. It refuses conflicting drive letters and elevated or
+wrong-machine execution. If either approved Credential Manager entry is
+missing, Windows prompts for that password without storing it in the scripts.
+Final acceptance queries the live `Shell.Application` **This PC** namespace,
+requires every mapping to be reachable with an exact persistent profile, saves
+a credential-free report under `%LOCALAPPDATA%\EdSys`, and opens `R:`.
+
 For tasks that run under `InteractiveToken`, use `net use /persistent:yes` for
 the actual drive creation. `New-SmbMapping -Persistent $true` can write a
 correct `HKCU\Network` profile and pass `Get-SmbMapping`/`Test-Path` inside the
