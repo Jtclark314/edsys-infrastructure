@@ -6,9 +6,13 @@ executes explicit component transactions, proves rollback, runs capability
 benchmarks, and preserves observable evidence without reducing Codex authority.
 
 Codex remains configured for `danger-full-access`, network access, login
-shells, remote control, approval Never, `gpt-5.6-sol`, Ultra reasoning, and
-Priority processing. Fleet approvals protect owner intent and recovery
-integrity; they are not a sandbox or a reduced-permission profile.
+shells, remote control, approval Never, and `gpt-5.6-sol`. Interactive base
+configurations do not force a reasoning level or service tier; those two
+choices come from the prompt-window selectors. The stable `fast_mode` feature
+stays enabled only so the Fast option remains available to select. Fleet
+approvals protect owner intent and recovery integrity; they are not a sandbox
+or a reduced-permission profile. The scheduled weekly Ultra benchmark remains
+an explicit benchmark-only override and is not an interactive default.
 
 ## Architecture
 
