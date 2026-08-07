@@ -33,6 +33,21 @@ class BenchmarkError(RuntimeError):
     pass
 
 
+def classify_model_failure(result: subprocess.CompletedProcess[str]) -> str | None:
+    if result.returncode == 0:
+        return None
+    detail = f"{result.stdout}\n{result.stderr}".lower()
+    if "usage limit" in detail or "purchase more credits" in detail:
+        return "usage_limit"
+    if "invalid_grant" in detail or "unauthorized" in detail or "authentication" in detail:
+        return "authentication"
+    if "timed out" in detail or "timeout" in detail:
+        return "timeout"
+    if "network" in detail or "connection" in detail or "dns" in detail:
+        return "network"
+    return "runtime"
+
+
 class CapabilityBenchmark:
     def __init__(self, config: FleetConfig, runner: CommandRunner | None = None):
         self.config = config
@@ -586,6 +601,7 @@ Reply exactly EDSYS_ULTRA_BENCHMARK_OK only if every control passed, the tempora
             "-o", str(output), prompt,
         ]
         result = self._command(command, timeout=int(self.contract["timeouts"]["model_seconds"]))
+        model_failure_class = classify_model_failure(result)
         last = output.read_text(encoding="utf-8").strip() if output.exists() else ""
         model_evidence: dict[str, Any] = {}
         evidence_error = ""
@@ -638,6 +654,7 @@ Reply exactly EDSYS_ULTRA_BENCHMARK_OK only if every control passed, the tempora
             "service_tier": "priority",
             "exact_response": last,
             "returncode": result.returncode,
+            "failure_class": model_failure_class,
             "controls_passed": controls_passed,
             "model_cleanup_passed": model_cleanup_passed,
             "forced_cleanup": forced_cleanup,

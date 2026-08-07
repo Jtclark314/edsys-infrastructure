@@ -4,7 +4,20 @@ import json
 import subprocess
 from pathlib import Path
 
-from edsys_fleet.benchmark import CapabilityBenchmark
+from edsys_fleet.benchmark import CapabilityBenchmark, classify_model_failure
+
+
+def test_model_failure_classifier_is_bounded_and_actionable() -> None:
+    limited = subprocess.CompletedProcess(
+        ["codex"], 1, stdout="", stderr="You've hit your usage limit."
+    )
+    unknown = subprocess.CompletedProcess(
+        ["codex"], 1, stdout="", stderr="opaque provider failure"
+    )
+
+    assert classify_model_failure(limited) == "usage_limit"
+    assert classify_model_failure(unknown) == "runtime"
+    assert classify_model_failure(subprocess.CompletedProcess(["codex"], 0, "", "")) is None
 
 
 def test_daily_streak_counts_unique_scheduled_eastern_days_only() -> None:
