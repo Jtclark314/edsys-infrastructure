@@ -131,6 +131,20 @@ permissions.
 The Dell remains inventory-only until its employer policy, Windows support,
 local administration, and `AllowMutations` setting are explicitly accepted.
 
+Prepare its immutable outbound-agent bundle only from clean authoritative
+`main`; the builder cross-compiles the Windows executable, hashes every
+payload, signs the manifest with the existing private Fleet release identity,
+verifies that signature, and writes the bundle plus deterministic ZIP only to
+the private AI Store:
+
+```bash
+./tools/build-dell-agent-bundle.py
+```
+
+The displayed signer hash is the out-of-band installer trust pin. The bundle
+defaults to inventory-only; `AllowMutations` is enabled on the Dell only after
+the employer-policy inventory is accepted.
+
 ## Install, inspect, benchmark, and recover
 
 ```bash
