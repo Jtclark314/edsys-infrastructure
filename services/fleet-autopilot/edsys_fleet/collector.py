@@ -454,7 +454,7 @@ if($item){Get-Content $item.FullName -Raw}else{'{}'}
             capabilities.append("Ollama")
         if gpu_name:
             capabilities.append("NVIDIA GPU")
-        if str(raw.get("nvenc") or "").strip().lower() in {"1", "true", "yes"}:
+        if gpu_name and str(raw.get("nvenc") or "").strip().lower() in {"1", "true", "yes"}:
             capabilities.append("NVENC")
         if str(raw.get("vulkan") or "").strip().lower() in {"1", "true", "yes"}:
             capabilities.append("Vulkan")

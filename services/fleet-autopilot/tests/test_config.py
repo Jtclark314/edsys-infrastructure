@@ -73,3 +73,4 @@ def test_collector_publishes_graphics_and_media_capabilities():
     )
 
     assert normalized["capabilities"] == ["NVIDIA GPU", "NVENC", "Vulkan"]
+    assert "NVENC" not in collector._normalize_host({"nvenc": "yes"})["capabilities"]
