@@ -47,6 +47,8 @@ printf 'driver=%s\n' "$(nvidia-smi --query-gpu=driver_version --format=csv,nohea
 printf 'gpu_memory_total=%s\n' "$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -n1)"
 printf 'gpu_memory_used=%s\n' "$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -n1)"
 printf 'gpu_utilization=%s\n' "$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null | head -n1)"
+printf 'nvenc=%s\n' "$(ffmpeg -hide_banner -encoders 2>/dev/null | awk '/h264_nvenc/{print "yes";exit}')"
+printf 'vulkan=%s\n' "$(command -v vulkaninfo >/dev/null 2>&1 && timeout 20s vulkaninfo --summary >/dev/null 2>&1 && echo yes || echo no)"
 printf 'sudo=%s\n' "$(sudo -n true >/dev/null 2>&1 && echo yes || echo no)"
 """
 
@@ -63,6 +65,8 @@ $npmCmd=Get-Command npm -ErrorAction SilentlyContinue
 $dockerCmd=Get-Command docker -ErrorAction SilentlyContinue
 $ollamaCmd=Get-Command ollama -ErrorAction SilentlyContinue
 $nvidiaCmd=Get-Command nvidia-smi -ErrorAction SilentlyContinue
+$ffmpegCmd=Get-Command ffmpeg -ErrorAction SilentlyContinue
+$vulkanInfoCmd=Get-Command vulkaninfo -ErrorAction SilentlyContinue
 $firefoxCmd=Get-Command firefox -ErrorAction SilentlyContinue
 $codex=if($codexCmd){[string](& $codexCmd.Source --version 2>$null | Select-Object -First 1)}else{$null}
 $node=if($nodeCmd){[string](& $nodeCmd.Source --version 2>$null | Select-Object -First 1)}else{$null}
@@ -74,6 +78,8 @@ $firefox=if($firefoxCmd){[string](& $firefoxCmd.Source --version 2>$null | Selec
 $npmGlobal=if($npmCmd){[string](& $npmCmd.Source list -g --depth=0 --json 2>$null)}else{'{}'}
 $npmInventory=try{$npmGlobal | ConvertFrom-Json}catch{$null}
 $nvidia=if($nvidiaCmd){[string](& $nvidiaCmd.Source --query-gpu=name,driver_version,memory.total,memory.used,utilization.gpu --format=csv,noheader,nounits 2>$null | Select-Object -First 1)}else{$null}
+$nvenc=if($ffmpegCmd){[bool](& $ffmpegCmd.Source -hide_banner -encoders 2>$null | Select-String -SimpleMatch 'h264_nvenc' | Select-Object -First 1)}else{$false}
+$vulkan=if($vulkanInfoCmd){& $vulkanInfoCmd.Source --summary *> $null; $LASTEXITCODE -eq 0}else{$false}
 [pscustomobject]@{
  hostname=$env:COMPUTERNAME
  os="$($os.Caption) $($os.Version)"
@@ -97,6 +103,8 @@ $nvidia=if($nvidiaCmd){[string](& $nvidiaCmd.Source --query-gpu=name,driver_vers
  ollama=$(if($ollamaCmd){[string](& $ollamaCmd.Source --version 2>$null | Select-Object -First 1) -replace '^.*version\s+',''}else{$null})
  gpu=[string]$gpu.Name
  nvidia=$nvidia
+ nvenc=$nvenc
+ vulkan=$vulkan
  sudo='administrator'
 } | ConvertTo-Json -Compress
 """
@@ -446,6 +454,10 @@ if($item){Get-Content $item.FullName -Raw}else{'{}'}
             capabilities.append("Ollama")
         if gpu_name:
             capabilities.append("NVIDIA GPU")
+        if str(raw.get("nvenc") or "").strip().lower() in {"1", "true", "yes"}:
+            capabilities.append("NVENC")
+        if str(raw.get("vulkan") or "").strip().lower() in {"1", "true", "yes"}:
+            capabilities.append("Vulkan")
         if versions.get("codex"):
             capabilities.append("Codex")
         if versions.get("chrome"):

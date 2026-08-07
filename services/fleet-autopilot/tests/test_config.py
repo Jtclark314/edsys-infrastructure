@@ -57,3 +57,19 @@ def test_finalizer_reports_scheduled_before_result_exists(tmp_path, monkeypatch)
     value = collector.collect_finalizer()
     assert value["status"] == "scheduled"
     assert value["timer_active"] is True
+
+
+def test_collector_publishes_graphics_and_media_capabilities():
+    root = Path(__file__).resolve().parents[1]
+    collector = FleetCollector(load_config(root / "config" / "fleet-policy.yml"))
+
+    normalized = collector._normalize_host(
+        {
+            "hostname": "graphics-host",
+            "gpu": "NVIDIA Test GPU",
+            "nvenc": "yes",
+            "vulkan": True,
+        }
+    )
+
+    assert normalized["capabilities"] == ["NVIDIA GPU", "NVENC", "Vulkan"]
