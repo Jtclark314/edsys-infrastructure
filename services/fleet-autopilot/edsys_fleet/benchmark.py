@@ -229,17 +229,37 @@ class CapabilityBenchmark:
         return digest == hashlib.sha256(payload).hexdigest() and not path.exists(), {"sha256": digest}, "passed"
 
     def _authority(self, _: Path) -> tuple[bool, dict[str, Any], str]:
+        doctor_env = dict(os.environ)
+        # systemd/automation commonly supplies TERM=dumb, which makes Codex
+        # Doctor fail only its presentation check. Exercise Doctor with a
+        # capable noninteractive terminal identity so this probe measures Codex
+        # authority and health rather than the benchmark runner's UI choice.
+        doctor_env["TERM"] = "xterm-256color"
         checks = {
             "network": self._command(["curl", "-fsS", "--max-time", "15", "https://example.com"]),
             "login_shell": self._command(["bash", "-lc", "printf EDSYS_LOGIN_SHELL_OK"]),
             "admin": self._command(["sudo", "-n", "true"]),
-            "codex_doctor": self._command(["codex", "doctor", "--summary", "--ascii"], timeout=120),
+            "codex_doctor": self._command(
+                ["codex", "doctor", "--summary", "--ascii"],
+                timeout=120,
+                env=doctor_env,
+            ),
         }
-        passed = all(item.returncode == 0 for item in checks.values())
+        doctor_output = checks["codex_doctor"].stdout
+        doctor_contract = {
+            "unrestricted_filesystem_network": "unrestricted fs + enabled network" in doctor_output,
+            "approval_never": "approval Never" in doctor_output,
+            "zero_warn_fail": "0 warn | 0 fail" in doctor_output,
+        }
+        passed = all(item.returncode == 0 for item in checks.values()) and all(
+            doctor_contract.values()
+        )
         evidence = {
             name: {"returncode": item.returncode, "stdout_marker": item.stdout.strip()[-120:]}
             for name, item in checks.items()
         }
+        evidence["codex_doctor"]["contract"] = doctor_contract
+        evidence["codex_doctor"]["term"] = doctor_env["TERM"]
         return passed, evidence, "not_applicable"
 
     def _docker(self, _: Path) -> tuple[bool, dict[str, Any], str]:
