@@ -15,8 +15,7 @@ from .config import FleetConfig
 from .io import read_json, utc_now, write_json_atomic
 from .proxmox import ProxmoxClient
 from .runner import CommandRunner
-from .store import FleetStore, FleetStoreError, MUTATING_ACTIONS
-
+from .store import MUTATING_ACTIONS, FleetStore, FleetStoreError
 
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 SUPPORTED_ACTIONS = {"inspect", "verify", "upgrade", "rollback", "proxmox", "benchmark"}
@@ -42,12 +41,42 @@ class FleetJobRunner:
         self.reconcile_interrupted_jobs()
 
     def import_json_history(self) -> None:
-        for status in ("pending", "running", "awaiting-agent", "completed"):
+        ranks = {"pending": 0, "running": 1, "awaiting-agent": 2, "completed": 3}
+        mirrors: dict[str, list[tuple[int, Path, dict[str, Any]]]] = {}
+        for status in ranks:
             root = self.config.state_root / "queue" / status
             for path in root.glob("*.json") if root.exists() else []:
                 job = read_json(path, {})
                 if isinstance(job, dict) and job.get("id"):
-                    self.store.upsert_job(job, compatibility_path=str(path))
+                    mirrors.setdefault(str(job["id"]), []).append(
+                        (ranks[status], path, job)
+                    )
+        terminal = {
+            "complete",
+            "failed",
+            "cancelled",
+            "manual_intervention_required",
+        }
+        for job_id, candidates in mirrors.items():
+            candidates.sort(key=lambda item: (item[0], str(item[1])), reverse=True)
+            selected = candidates[0]
+            existing = self.store.get_job(job_id)
+            if existing is None:
+                self.store.upsert_job(selected[2], compatibility_path=str(selected[1]))
+                durable = self.store.get_job(job_id) or selected[2]
+            else:
+                durable = existing
+            completed = next(
+                (item for item in candidates if item[0] == ranks["completed"]),
+                None,
+            )
+            if str(durable.get("status")) not in terminal or completed is None:
+                continue
+            self.store.upsert_job(durable, compatibility_path=str(completed[1]))
+            if self.config.compatibility_json_queue:
+                for _, path, _ in candidates:
+                    if path != completed[1]:
+                        path.unlink(missing_ok=True)
 
     def reconcile_interrupted_jobs(self) -> None:
         running = self.config.state_root / "queue" / "running"
