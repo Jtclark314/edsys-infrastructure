@@ -1,0 +1,59 @@
+schema_version: 1
+name: EdSys Fleet Autopilot
+state_root: /opt/edsys-workhorse/edsys-ai-portal/data/fleet
+collector_interval_seconds: 300
+command_timeout_seconds: 24
+
+approved:
+  codex: 0.146.1
+  node: 24.19.0
+  npm: 12.0.2
+  playwright_mcp: 0.0.79
+  playwright: 1.62.1
+  chrome: 151.0.7922.75
+  vivaldi: 8.1.4087.61
+
+hosts:
+  - id: 9950x
+    label: 9950x Workhorse
+    role: canonical-hub
+    platform: linux
+    transport: local
+    accent: cyan
+    primary: true
+  - id: nimo
+    label: Nimo
+    role: controller
+    platform: windows
+    transport: ssh
+    ssh_alias: nimo-laptop
+    accent: violet
+  - id: basecamp
+    label: Basecamp
+    role: project-runtime
+    platform: windows
+    transport: ssh
+    ssh_alias: basecamp
+    accent: amber
+  - id: edcore-ops
+    label: EdCore Ops
+    role: operations-satellite
+    platform: linux
+    transport: ssh
+    ssh_alias: edcore-ops
+    accent: green
+  - id: work-laptop
+    label: Dell Work Laptop
+    role: mobile-controller
+    platform: windows
+    transport: ssh
+    ssh_alias: work-laptop
+    accent: blue
+
+proxmox:
+  control_alias: pve-node0
+  nodes:
+    - pve-node0
+    - pve-node1
+    - pve-node2
+    - pve-edcore

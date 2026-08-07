@@ -1,0 +1,14 @@
+[Unit]
+Description=EdSys Fleet Autopilot action worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/edsys-fleet-worker --watch --collect-on-start
+Restart=always
+RestartSec=3
+UMask=0027
+
+[Install]
+WantedBy=default.target

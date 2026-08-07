@@ -1,0 +1,8 @@
+[Unit]
+Description=Refresh EdSys Fleet Autopilot inventory
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/edsys-fleet collect
+UMask=0027

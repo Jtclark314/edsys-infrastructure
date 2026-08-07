@@ -18,6 +18,7 @@ This repo should describe how services are deployed, but it must not contain liv
 - [NetBox deployment](docker/netbox/README.md)
 - [NetBox synchronization](scripts/netbox/README.md)
 - [EdCore SDR deployment](scripts/sdr/README.md)
+- [Fleet Autopilot host agent and Proxmox MCP](services/fleet-autopilot/README.md)
 
 ## Folder Map
 
@@ -37,6 +38,9 @@ edsys-infrastructure/
 |   `-- README.md
 |-- scripts/
 |   `-- README.md
+|-- services/
+|   `-- fleet-autopilot/
+|       `-- README.md
 `-- templates/
     |-- docker-compose.service-template.yml
     |-- service.env.example
@@ -50,6 +54,7 @@ edsys-infrastructure/
 - Config templates with placeholders only.
 - `.env.example` files.
 - Service implementation docs.
+- Host-side service agents and private-control MCP implementations whose tracked configuration remains sanitized.
 - Operational commands that are safe to run after review.
 
 ## What Does Not Belong Here

@@ -1,0 +1,29 @@
+[project]
+name = "edsys-fleet-autopilot"
+version = "0.1.0"
+description = "Host-side fleet inventory, guarded action worker, and Proxmox MCP for EdSys"
+requires-python = ">=3.12"
+dependencies = [
+  "mcp==1.29.0",
+  "PyYAML==6.0.3",
+]
+
+[project.scripts]
+edsys-fleet = "edsys_fleet.cli:main"
+edsys-fleet-worker = "edsys_fleet.worker:main"
+edsys-proxmox-mcp = "edsys_fleet.mcp_server:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["edsys_fleet*"]
+
+[tool.setuptools.package-data]
+edsys_fleet = ["fleet-policy.yml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"

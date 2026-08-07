@@ -32,6 +32,7 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `NETDATA_COMPUTE.md` - authoritative eight-node Netdata Parent/Child deployment and recovery procedure.
 - `../docker/netbox/README.md` - production NetBox platform, access, backup, restore, and upgrade boundary.
 - `../scripts/netbox/README.md` - plan-gated discovery, reconciliation, validation, and sanitized export.
+- `../services/fleet-autopilot/README.md` - cross-host inventory/drift collector, guarded Portal action worker, and private Proxmox stdio MCP.
 
 ## Rule
 
