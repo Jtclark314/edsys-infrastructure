@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule EdSys Fleet deterministic benchmark at 05:00 Eastern
+
+[Timer]
+OnCalendar=*-*-* 05:00:00 America/New_York
+Persistent=true
+RandomizedDelaySec=3min
+Unit=edsys-fleet-benchmark-daily.service
+
+[Install]
+WantedBy=timers.target

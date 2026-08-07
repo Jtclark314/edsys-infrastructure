@@ -1,0 +1,10 @@
+{
+  "hub_url": "https://9950x.taile832fe.ts.net",
+  "agent_id": "dell-work-laptop",
+  "host_id": "work-laptop",
+  "state_root": "C:\\ProgramData\\EdSys\\FleetAgent",
+  "bundle_root": "C:\\ProgramData\\EdSys\\FleetAgent",
+  "trusted_signer_sha256": "set-by-the-verified-installer",
+  "allow_mutations": false,
+  "heartbeat_seconds": 60
+}

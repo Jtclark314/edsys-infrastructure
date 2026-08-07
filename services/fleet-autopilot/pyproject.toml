@@ -1,6 +1,6 @@
 [project]
 name = "edsys-fleet-autopilot"
-version = "0.1.0"
+version = "0.2.0"
 description = "Host-side fleet inventory, guarded action worker, and Proxmox MCP for EdSys"
 requires-python = ">=3.12"
 dependencies = [
@@ -14,7 +14,7 @@ edsys-fleet-worker = "edsys_fleet.worker:main"
 edsys-proxmox-mcp = "edsys_fleet.mcp_server:main"
 
 [build-system]
-requires = ["setuptools>=75"]
+requires = ["setuptools==80.9.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -22,7 +22,7 @@ where = ["."]
 include = ["edsys_fleet*"]
 
 [tool.setuptools.package-data]
-edsys_fleet = ["fleet-policy.yml"]
+edsys_fleet = ["fleet-policy.yml", "capability-contract.yml", "probes/*.cjs", "probes/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

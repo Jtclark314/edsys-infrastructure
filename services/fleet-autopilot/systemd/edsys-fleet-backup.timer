@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule Fleet encrypted database backup and restore test
+
+[Timer]
+OnCalendar=*-*-* 04:15:00 America/New_York
+Persistent=true
+RandomizedDelaySec=3min
+Unit=edsys-fleet-backup.service
+
+[Install]
+WantedBy=timers.target

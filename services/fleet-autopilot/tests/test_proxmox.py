@@ -35,6 +35,16 @@ def test_cluster_uses_official_pvesh_json_contract():
     assert runner.commands == ["pvesh get /cluster/status --output-format json"]
 
 
+def test_task_reference_extracts_upid_from_pvesh_warning_string():
+    value = (
+        'WARN: Systemd 257 detected. You may need to enable nesting.'
+        '"UPID:pve-edcore:001CF2B4:02220817:6A75534E:vzstart:390:root@pam:"'
+    )
+    assert ProxmoxClient._task_reference(value) == (
+        "UPID:pve-edcore:001CF2B4:02220817:6A75534E:vzstart:390:root@pam:"
+    )
+
+
 def test_guest_target_validation_rejects_unknown_node():
     try:
         ProxmoxClient(config(), FakeRunner()).guest_status("unknown", 321)

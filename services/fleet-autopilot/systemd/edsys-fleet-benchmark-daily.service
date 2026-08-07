@@ -1,0 +1,11 @@
+[Unit]
+Description=EdSys Fleet daily deterministic capability benchmark
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+UMask=0077
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/edsys-fleet benchmark --suite deterministic --host 9950x --triggered-by systemd-daily
+TimeoutStartSec=45min

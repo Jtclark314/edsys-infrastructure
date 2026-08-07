@@ -1,0 +1,10 @@
+[Unit]
+Description=Encrypt and isolated-restore-test the Fleet control database
+After=local-fs.target
+
+[Service]
+Type=oneshot
+UMask=0077
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/edsys-fleet db-backup-restore-test
+TimeoutStartSec=20min

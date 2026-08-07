@@ -1,8 +1,38 @@
-schema_version: 1
+schema_version: 2
+policy_version: 2.0.0
 name: EdSys Fleet Autopilot
 state_root: /opt/edsys-workhorse/edsys-ai-portal/data/fleet
+private_artifact_root: /mnt/ai-store/private/fleet-autopilot
 collector_interval_seconds: 300
 command_timeout_seconds: 24
+approval_ttl_minutes: 15
+event_retention_days: 730
+raw_benchmark_retention_days: 30
+benchmark_detail_retention_days: 730
+compatibility_json_queue: true
+
+x-full-lifecycle: &full_lifecycle
+  discover: true
+  resolve_candidate: true
+  preflight: true
+  checkpoint: true
+  apply: true
+  restart_or_reboot: true
+  verify: true
+  accept: true
+  rollback: true
+  cleanup: true
+x-inventory-lifecycle: &inventory_lifecycle
+  discover: true
+  resolve_candidate: false
+  preflight: true
+  checkpoint: false
+  apply: false
+  restart_or_reboot: false
+  verify: true
+  accept: false
+  rollback: false
+  cleanup: false
 
 approved:
   codex: 0.146.1
@@ -12,6 +42,341 @@ approved:
   playwright: 1.62.1
   chrome: 151.0.7922.75
   vivaldi: 8.1.4087.61
+
+components:
+  fleet-portal:
+    hosts: [9950x]
+    discovery: compose-image-digest
+    candidate_resolution: authoritative-main-signed-manifest
+    desired: authoritative-main
+    adapter: fleet-portal
+    risk_class: control-plane
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  fleet-host-agent:
+    hosts: [9950x]
+    discovery: installed-package
+    candidate_resolution: authoritative-main-signed-manifest
+    desired: authoritative-main
+    adapter: fleet-host-agent
+    risk_class: control-plane
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  fleet-windows-pull-agent:
+    hosts: [work-laptop]
+    discovery: signed-heartbeat
+    candidate_resolution: authoritative-main-signed-manifest
+    desired: authoritative-main
+    adapter: fleet-windows-pull-agent
+    risk_class: control-plane
+    absence: dormant
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  proxmox-mcp:
+    hosts: [9950x]
+    discovery: python-package
+    candidate_resolution: pinned-manifest
+    desired: 1.29.0
+    adapter: python-package
+    risk_class: infrastructure-control
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  proxmox-guest:
+    hosts: [pve-edcore]
+    discovery: official-pvesh-api
+    candidate_resolution: requested-lifecycle-operation
+    desired: controlled
+    adapter: proxmox-guest
+    risk_class: infrastructure-control
+    absence: not_applicable
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  codex-linux:
+    hosts: [9950x, edcore-ops]
+    inventory_key: codex
+    discovery: codex-parity
+    candidate_resolution: official-signed-release
+    desired: 0.146.1
+    adapter: codex-linux
+    risk_class: application
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: true
+  codex-windows:
+    hosts: [nimo, basecamp, work-laptop]
+    inventory_key: codex
+    discovery: desktop-and-standalone
+    candidate_resolution: official-signed-release
+    desired: 0.146.1
+    adapter: codex-windows
+    risk_class: application
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: true
+  curated-plugins:
+    hosts: [9950x, nimo, basecamp, edcore-ops, work-laptop]
+    discovery: codex-plugin-inventory
+    candidate_resolution: curated-marketplace-snapshot
+    desired: accepted-baseline
+    adapter: codex-plugins
+    risk_class: application
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: true
+  mcp-configurations:
+    hosts: [9950x, nimo, basecamp, edcore-ops, work-laptop]
+    discovery: codex-mcp-inventory
+    candidate_resolution: policy-manifest
+    desired: accepted-baseline
+    adapter: codex-mcps
+    risk_class: application
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: true
+  node-toolchain:
+    hosts: [9950x, nimo, edcore-ops, work-laptop]
+    inventory_keys: [node, npm]
+    discovery: atomic-node-npm
+    candidate_resolution: official-signed-release
+    desired: {node: 24.19.0, npm: 12.0.2}
+    adapter: node-toolchain
+    risk_class: developer-runtime
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  npm-global-tools:
+    hosts: [9950x, nimo, edcore-ops, work-laptop]
+    discovery: npm-global-manifest
+    candidate_resolution: immutable-lock-manifest
+    desired: accepted-manifest
+    adapter: npm-global-tools
+    risk_class: developer-runtime
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  playwright:
+    hosts: [9950x, nimo, edcore-ops, work-laptop]
+    inventory_keys: [playwright_mcp, playwright]
+    discovery: npm-package-manifest
+    candidate_resolution: official-npm-release
+    desired: {playwright_mcp: 0.0.79, playwright: 1.62.1}
+    adapter: playwright
+    risk_class: developer-runtime
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  chrome:
+    hosts: [9950x, nimo, basecamp, edcore-ops, work-laptop]
+    inventory_key: chrome
+    discovery: browser-version
+    candidate_resolution: official-stable-channel
+    desired: 151.0.7922.75
+    adapter: chrome
+    risk_class: browser
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  vivaldi:
+    hosts: [9950x]
+    inventory_key: vivaldi
+    discovery: browser-version
+    candidate_resolution: official-stable-channel
+    desired: 8.1.4087.61
+    adapter: vivaldi
+    risk_class: browser
+    absence: missing
+    preserve_launcher_byte_for_byte: /home/jeremy/.local/share/applications/vivaldi-optimized.desktop
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  firefox:
+    hosts: [9950x, nimo, basecamp, edcore-ops, work-laptop]
+    inventory_key: firefox
+    discovery: browser-version
+    candidate_resolution: official-stable-channel
+    desired: stable
+    adapter: firefox
+    risk_class: browser
+    absence: unsupported
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  browser-launchers:
+    hosts: [9950x, nimo]
+    discovery: launcher-and-profile-hash
+    candidate_resolution: policy-manifest
+    desired: accepted-manifest
+    adapter: browser-launchers
+    risk_class: browser
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  docker-engine:
+    hosts: [9950x, edcore-ops]
+    inventory_key: docker
+    discovery: engine-version
+    candidate_resolution: official-stable-channel
+    desired: stable
+    adapter: docker-engine
+    risk_class: container-runtime
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  docker-desktop:
+    hosts: [nimo, work-laptop]
+    inventory_key: docker
+    discovery: desktop-version
+    candidate_resolution: official-stable-channel
+    desired: stable
+    adapter: docker-desktop
+    risk_class: container-runtime
+    absence: unsupported
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  nvidia-container-toolkit:
+    hosts: [9950x]
+    discovery: package-and-runtime
+    candidate_resolution: official-signed-repository
+    desired: stable
+    adapter: nvidia-container-toolkit
+    risk_class: container-runtime
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  ollama:
+    hosts: [9950x, nimo, edcore-ops]
+    inventory_key: ollama
+    discovery: binary-service-model-inventory
+    candidate_resolution: official-signed-release
+    desired: stable
+    adapter: ollama
+    risk_class: ai-runtime
+    absence: unsupported
+    preserve_models: true
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  compose-stacks:
+    hosts: [9950x, edcore-ops]
+    discovery: compose-project-digests
+    candidate_resolution: digest-locked-manifest
+    desired: repository-manifest
+    adapter: compose-stack
+    risk_class: service-stack
+    absence: not_applicable
+    qualification_requires: [backup-hook, restore-hook, health-hook, acceptance-hook]
+    supports: *full_lifecycle
+    reboot_required: false
+    observation_required: false
+  linux-packages:
+    hosts: [9950x, edcore-ops]
+    discovery: dpkg-manifest
+    candidate_resolution: signed-apt-repositories
+    desired: approved-security-and-stable
+    adapter: linux-packages
+    risk_class: reboot
+    absence: not_applicable
+    supports: *full_lifecycle
+    reboot_required: conditional
+    observation_required: false
+  linux-kernel:
+    hosts: [9950x, edcore-ops]
+    discovery: kernel-and-boot-manifest
+    candidate_resolution: signed-apt-repositories
+    desired: approved-stable
+    adapter: linux-kernel
+    risk_class: reboot
+    absence: not_applicable
+    supports: *full_lifecycle
+    reboot_required: true
+    observation_required: false
+  nvidia-driver:
+    hosts: [9950x]
+    discovery: driver-kernel-runtime
+    candidate_resolution: signed-apt-repositories
+    desired: approved-production-branch
+    adapter: nvidia-driver
+    risk_class: driver
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: true
+    observation_required: false
+  windows-update:
+    hosts: [nimo]
+    discovery: windows-update-inventory
+    candidate_resolution: microsoft-update-catalog
+    desired: approved-stable
+    adapter: windows-update
+    risk_class: windows-update
+    absence: not_applicable
+    supports: *full_lifecycle
+    reboot_required: conditional
+    observation_required: false
+  dell-windows-update:
+    hosts: [work-laptop]
+    discovery: windows-update-inventory
+    candidate_resolution: employer-policy
+    desired: inventory-only
+    adapter: inventory-only
+    risk_class: windows-update
+    absence: not_applicable
+    employer_policy_required: true
+    supports: *inventory_lifecycle
+    reboot_required: conditional
+    observation_required: false
+  proxmox-packages:
+    hosts: [pve-node0, pve-node1, pve-node2, pve-edcore]
+    discovery: pve-package-manifest
+    candidate_resolution: signed-proxmox-repositories
+    desired: approved-stable
+    adapter: proxmox-packages
+    risk_class: proxmox-host
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: conditional
+    observation_required: false
+  proxmox-kernel:
+    hosts: [pve-node0, pve-node1, pve-node2, pve-edcore]
+    discovery: pve-kernel-boot-manifest
+    candidate_resolution: signed-proxmox-repositories
+    desired: approved-stable
+    adapter: proxmox-kernel
+    risk_class: proxmox-host
+    absence: missing
+    supports: *full_lifecycle
+    reboot_required: true
+    observation_required: false
+  host-reboot:
+    hosts: [9950x, nimo, edcore-ops, pve-node0, pve-node1, pve-node2, pve-edcore]
+    discovery: boot-identity
+    candidate_resolution: transaction-prerequisite
+    desired: controlled
+    adapter: host-reboot
+    risk_class: reboot
+    absence: not_applicable
+    supports: *full_lifecycle
+    reboot_required: true
+    observation_required: false
 
 hosts:
   - id: 9950x
@@ -46,14 +411,18 @@ hosts:
     label: Dell Work Laptop
     role: mobile-controller
     platform: windows
-    transport: ssh
-    ssh_alias: work-laptop
+    transport: signed-outbound-agent
+    agent_id: pending-enrollment
     accent: blue
+    offline_portable: true
 
 proxmox:
   control_alias: pve-node0
-  nodes:
-    - pve-node0
-    - pve-node1
-    - pve-node2
-    - pve-edcore
+  canary: {node: pve-edcore, vmid: 390, type: lxc, name: fleet-canary}
+  upgrade_order: [pve-node2, pve-node1, pve-edcore, pve-node0]
+  nodes: [pve-node0, pve-node1, pve-node2, pve-edcore]
+
+benchmarks:
+  contract_version: 2.0.0
+  daily: {schedule: '05:00 America/New_York', suite: deterministic}
+  weekly: {schedule: 'Sun 03:00 America/New_York', suite: ultra}

@@ -1,0 +1,29 @@
+schema_version: 2
+contract_version: 2.0.0
+timezone: America/New_York
+artifact_retention_days: 30
+detail_retention_days: 730
+trend_retention: indefinite
+timeouts:
+  command_seconds: 60
+  browser_seconds: 120
+  model_seconds: 1800
+container_images:
+  disposable: python:3.12-slim-bookworm@sha256:d50fb7611f86d04a3b0471b46d7557818d88983fc3136726336b2a4c657aa30b
+  nvidia: ollama/ollama:latest@sha256:46399ef084d97b381955b5dc585c5d836dbe7ed3f79f170d1c04660fed511e3a
+canaries:
+  private_url: https://9950x.taile832fe.ts.net/api/health
+  public_url: https://example.com
+  proxmox: {node: pve-edcore, vmid: 390, type: lxc, name: fleet-canary}
+suites:
+  deterministic:
+    model_call: false
+    categories: [browser, mcp, gpu_media, docker, remote_hosts, documents, infrastructure, codex_authority]
+  ultra:
+    model_call: true
+    model: gpt-5.6-sol
+    reasoning_effort: ultra
+    service_tier: priority
+    sandbox: danger-full-access
+    approval_policy: never
+    categories: [browser, mcp, gpu_media, docker, remote_hosts, documents, infrastructure, codex_authority]

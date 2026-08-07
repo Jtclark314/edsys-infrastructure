@@ -282,12 +282,14 @@ def cf_values(source: str, observed: str | None, confidence: str, raw: Any, **ex
     return result
 
 
-def inventory_tags(*, to_be_confirmed: bool = False):
+def inventory_tags(*, to_be_confirmed: bool = False, benchmark_canary: bool = False):
     result = [ref("tag:discovered")]
     if AUTHORITATIVE_CUTOVER:
         result.append(ref("tag:authoritative"))
     if to_be_confirmed:
         result.append(ref("tag:to-be-confirmed"))
+    if benchmark_canary:
+        result.append(ref("tag:benchmark-canary"))
     return result
 
 
@@ -298,6 +300,7 @@ def add_foundation(plan: Plan):
         "retired": ("9e9e9e", "Retired but retained for history."),
         "to-be-confirmed": ("ff9800", "Evidence is incomplete or conflicting."),
         "critical": ("f44336", "Critical EdSys infrastructure."),
+        "benchmark-canary": ("00bcd4", "Disposable Fleet capability benchmark canary."),
     }
     for name, (color, description) in tags.items():
         plan.upsert(
@@ -620,7 +623,11 @@ def add_virtualization(plan: Plan, network: dict[str, Any], live_resources: list
         name = vm.get("name") or f"vm-{vmid}"
         key = f"vm:{vmid}"
         ip = vm.get("guest_ip")
-        tag_refs = inventory_tags(to_be_confirmed=str(vm.get("confidence", "")).lower() not in {"high", "verified"})
+        is_benchmark_canary = vmid == 390 and name == "fleet-canary"
+        tag_refs = inventory_tags(
+            to_be_confirmed=str(vm.get("confidence", "")).lower() not in {"high", "verified"},
+            benchmark_canary=is_benchmark_canary,
+        )
         plan.upsert(
             key, "virtualization/virtual-machines/", {"cluster_id": ref("cluster:gadgetlab"), "name": name},
             {
@@ -634,23 +641,25 @@ def add_virtualization(plan: Plan, network: dict[str, Any], live_resources: list
                 "custom_fields": cf_values(vm.get("source", "Proxmox discovery"), vm.get("last_verified"), vm.get("confidence", "high"), vm, last_verified=(vm.get("last_verified") or TODAY)[:10], management_method="Proxmox read-only discovery"),
             },
         )
+        has_interface = bool(vm.get("bridge") or vm.get("mac") or valid_ip(ip))
         ifkey = f"vm-interface:{vmid}:net0"
-        plan.upsert(
-            ifkey, "virtualization/interfaces/", {"virtual_machine_id": ref(key), "name": "net0"},
-            {
-                "virtual_machine": ref(key), "name": "net0", "enabled": True,
-                "description": f"Proxmox bridge {vm.get('bridge', 'vmbr0')}", "tags": tag_refs,
-                "custom_fields": cf_values(
-                    vm.get("source", "Proxmox discovery"), vm.get("last_verified"), vm.get("confidence", "high"),
-                    {"vmid": vmid, "bridge": vm.get("bridge"), "mac": vm.get("mac")},
-                    last_verified=(vm.get("last_verified") or TODAY)[:10],
-                    management_method="Proxmox read-only discovery",
-                ),
-            },
-        )
-        if vm.get("mac"):
-            plan.upsert(f"vm-mac:{vmid}", "dcim/mac-addresses/", {"mac_address": vm["mac"]}, {"mac_address": vm["mac"], "assigned_object_type": "virtualization.vminterface", "assigned_object_id": ref(ifkey), "description": f"VMID {vmid} net0"})
-        if valid_ip(ip):
+        if has_interface:
+            plan.upsert(
+                ifkey, "virtualization/interfaces/", {"virtual_machine_id": ref(key), "name": "net0"},
+                {
+                    "virtual_machine": ref(key), "name": "net0", "enabled": True,
+                    "description": f"Proxmox bridge {vm.get('bridge') or 'to be confirmed'}", "tags": tag_refs,
+                    "custom_fields": cf_values(
+                        vm.get("source", "Proxmox discovery"), vm.get("last_verified"), vm.get("confidence", "high"),
+                        {"vmid": vmid, "bridge": vm.get("bridge"), "mac": vm.get("mac")},
+                        last_verified=(vm.get("last_verified") or TODAY)[:10],
+                        management_method="Proxmox read-only discovery",
+                    ),
+                },
+            )
+            if vm.get("mac"):
+                plan.upsert(f"vm-mac:{vmid}", "dcim/mac-addresses/", {"mac_address": vm["mac"]}, {"mac_address": vm["mac"], "assigned_object_type": "virtualization.vminterface", "assigned_object_id": ref(ifkey), "description": f"VMID {vmid} net0"})
+        if valid_ip(ip) and has_interface:
             ipkey = f"ip:{address_with_mask(ip)}"
             plan.upsert(
                 ipkey, "ipam/ip-addresses/", {"address": address_with_mask(ip)},
@@ -1038,7 +1047,12 @@ def validate_inventory(api: NetBoxAPI):
     for vm in objects["virtual_machines"]:
         if not vm.get("cluster"):
             errors.append(f"VM without cluster: {vm.get('name')}")
-        if not vm.get("primary_ip4"):
+        tags = {
+            str(tag.get("slug") or tag.get("name") or "").lower()
+            for tag in (vm.get("tags") or [])
+            if isinstance(tag, dict)
+        }
+        if not vm.get("primary_ip4") and "benchmark-canary" not in tags:
             errors.append(f"VM without primary IPv4: {vm.get('name')}")
     addresses = [item.get("address") for item in objects["ip_addresses"]]
     duplicates = sorted({address for address in addresses if address and addresses.count(address) > 1})

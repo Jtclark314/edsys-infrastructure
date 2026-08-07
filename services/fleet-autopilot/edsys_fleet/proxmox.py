@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import shlex
+import time
 from typing import Any, Literal
 
 from .config import FleetConfig
@@ -10,6 +11,8 @@ from .runner import CommandRunner
 
 
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_.:-]+$")
+SAFE_UPID = re.compile(r"^UPID:[A-Za-z0-9_.:@-]+$")
+EMBEDDED_UPID = re.compile(r"UPID:[A-Za-z0-9_.:@-]+")
 GuestAction = Literal["start", "stop", "shutdown", "reboot", "reset", "suspend", "resume"]
 
 
@@ -70,7 +73,9 @@ class ProxmoxClient:
         self._validate_target(node, vmid, guest_type)
         if action not in {"start", "stop", "shutdown", "reboot", "reset", "suspend", "resume"}:
             raise ProxmoxError("Unsupported guest action")
-        return self._call("create", f"/nodes/{node}/{guest_type}/{vmid}/status/{action}", timeout=90)
+        return self._task_reference(
+            self._call("create", f"/nodes/{node}/{guest_type}/{vmid}/status/{action}", timeout=90)
+        )
 
     def create_snapshot(
         self,
@@ -88,19 +93,55 @@ class ProxmoxClient:
         args = ["--snapname", name, "--description", description]
         if include_ram:
             args.extend(["--vmstate", "1"])
-        return self._call("create", f"/nodes/{node}/{guest_type}/{vmid}/snapshot", *args, timeout=300)
+        return self._task_reference(
+            self._call("create", f"/nodes/{node}/{guest_type}/{vmid}/snapshot", *args, timeout=300)
+        )
 
     def rollback_snapshot(self, node: str, vmid: int, name: str, guest_type: str = "qemu") -> Any:
         self._validate_target(node, vmid, guest_type)
         if not SAFE_NAME.fullmatch(name):
             raise ProxmoxError("Snapshot name contains unsafe characters")
-        return self._call("create", f"/nodes/{node}/{guest_type}/{vmid}/snapshot/{name}/rollback", timeout=300)
+        return self._task_reference(
+            self._call("create", f"/nodes/{node}/{guest_type}/{vmid}/snapshot/{name}/rollback", timeout=300)
+        )
 
     def delete_snapshot(self, node: str, vmid: int, name: str, guest_type: str = "qemu") -> Any:
         self._validate_target(node, vmid, guest_type)
         if not SAFE_NAME.fullmatch(name):
             raise ProxmoxError("Snapshot name contains unsafe characters")
-        return self._call("delete", f"/nodes/{node}/{guest_type}/{vmid}/snapshot/{name}", timeout=300)
+        return self._task_reference(
+            self._call("delete", f"/nodes/{node}/{guest_type}/{vmid}/snapshot/{name}", timeout=300)
+        )
+
+    @staticmethod
+    def _task_reference(value: Any) -> Any:
+        """Normalize pvesh task output that embeds a warning before the UPID."""
+
+        if isinstance(value, str):
+            match = EMBEDDED_UPID.search(value)
+            if match:
+                return match.group(0)
+        return value
+
+    def task_status(self, node: str, upid: str) -> dict[str, Any]:
+        if node not in set(map(str, self.config.proxmox.get("nodes") or [])):
+            raise ProxmoxError(f"Unknown Proxmox node: {node}")
+        if not SAFE_UPID.fullmatch(upid):
+            raise ProxmoxError("Invalid Proxmox task identifier")
+        return self._call("get", f"/nodes/{node}/tasks/{upid}/status")
+
+    def wait_task(self, node: str, upid: str, *, timeout: int = 600) -> dict[str, Any]:
+        deadline = time.monotonic() + max(1, timeout)
+        while True:
+            status = self.task_status(node, upid)
+            if str(status.get("status") or "").lower() == "stopped":
+                exitstatus = str(status.get("exitstatus") or "")
+                if exitstatus != "OK":
+                    raise ProxmoxError(f"Proxmox task failed: {exitstatus or 'unknown'}")
+                return status
+            if time.monotonic() >= deadline:
+                raise ProxmoxError("Proxmox task timed out")
+            time.sleep(1)
 
     def _validate_target(self, node: str, vmid: int, guest_type: str) -> None:
         nodes = set(map(str, self.config.proxmox.get("nodes") or []))

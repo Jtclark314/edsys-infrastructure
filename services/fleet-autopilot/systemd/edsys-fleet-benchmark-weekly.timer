@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule EdSys Fleet real Codex Ultra benchmark Sunday 03:00 Eastern
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00 America/New_York
+Persistent=true
+RandomizedDelaySec=3min
+Unit=edsys-fleet-benchmark-weekly.service
+
+[Install]
+WantedBy=timers.target

@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import base64
 import json
-import os
-import platform
-import shutil
 import socket
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .adapters import AdapterRegistry
 from .config import FleetConfig
 from .io import read_json, utc_now, write_json_atomic
 from .proxmox import ProxmoxClient, ProxmoxError
 from .runner import CommandResult, CommandRunner
+from .store import FleetStore
 
 
 LINUX_SCRIPT = r"""
@@ -39,6 +39,9 @@ printf 'docker=%s\n' "$(docker version --format '{{.Server.Version}}' 2>/dev/nul
 printf 'chrome=%s\n' "$(google-chrome --version 2>/dev/null | awk '{print $3}')"
 printf 'vivaldi=%s\n' "$(vivaldi --version 2>/dev/null | awk '{print $2}')"
 printf 'ollama=%s\n' "$(ollama --version 2>/dev/null | awk '{print $NF}')"
+printf 'firefox=%s\n' "$(firefox --version 2>/dev/null | awk '{print $3}')"
+printf 'playwright_mcp=%s\n' "$(npm list -g @playwright/mcp --depth=0 --json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{let j=JSON.parse(s);process.stdout.write(j.dependencies?.["@playwright/mcp"]?.version||"")}catch{}})' 2>/dev/null)"
+printf 'playwright=%s\n' "$(npm list -g @playwright/test --depth=0 --json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{let j=JSON.parse(s);process.stdout.write(j.dependencies?.["@playwright/test"]?.version||"")}catch{}})' 2>/dev/null)"
 printf 'gpu=%s\n' "$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -n1)"
 printf 'driver=%s\n' "$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -n1)"
 printf 'gpu_memory_total=%s\n' "$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -n1)"
@@ -60,12 +63,16 @@ $npmCmd=Get-Command npm -ErrorAction SilentlyContinue
 $dockerCmd=Get-Command docker -ErrorAction SilentlyContinue
 $ollamaCmd=Get-Command ollama -ErrorAction SilentlyContinue
 $nvidiaCmd=Get-Command nvidia-smi -ErrorAction SilentlyContinue
+$firefoxCmd=Get-Command firefox -ErrorAction SilentlyContinue
 $codex=if($codexCmd){[string](& $codexCmd.Source --version 2>$null | Select-Object -First 1)}else{$null}
 $node=if($nodeCmd){[string](& $nodeCmd.Source --version 2>$null | Select-Object -First 1)}else{$null}
 $npm=if($npmCmd){[string](& $npmCmd.Source --version 2>$null | Select-Object -First 1)}else{$null}
 $docker=if($dockerCmd){[string](& $dockerCmd.Source version --format '{{.Server.Version}}' 2>$null | Select-Object -First 1)}else{$null}
 $chromePath='C:\Program Files\Google\Chrome\Application\chrome.exe'
 $chrome=if(Test-Path $chromePath){(Get-Item $chromePath).VersionInfo.ProductVersion}else{$null}
+$firefox=if($firefoxCmd){[string](& $firefoxCmd.Source --version 2>$null | Select-Object -First 1) -replace '^.*\s',''}else{$null}
+$npmGlobal=if($npmCmd){[string](& $npmCmd.Source list -g --depth=0 --json 2>$null)}else{'{}'}
+$npmInventory=try{$npmGlobal | ConvertFrom-Json}catch{$null}
 $nvidia=if($nvidiaCmd){[string](& $nvidiaCmd.Source --query-gpu=name,driver_version,memory.total,memory.used,utilization.gpu --format=csv,noheader,nounits 2>$null | Select-Object -First 1)}else{$null}
 [pscustomobject]@{
  hostname=$env:COMPUTERNAME
@@ -83,6 +90,9 @@ $nvidia=if($nvidiaCmd){[string](& $nvidiaCmd.Source --query-gpu=name,driver_vers
  npm=$npm
  docker=$docker
  chrome=$chrome
+ firefox=$firefox
+ playwright_mcp=$(if($npmInventory){[string]$npmInventory.dependencies.'@playwright/mcp'.version}else{$null})
+ playwright=$(if($npmInventory){[string]$npmInventory.dependencies.'@playwright/test'.version}else{$null})
  vivaldi=$null
  ollama=$(if($ollamaCmd){[string](& $ollamaCmd.Source --version 2>$null | Select-Object -First 1) -replace '^.*version\s+',''}else{$null})
  gpu=[string]$gpu.Name
@@ -97,25 +107,32 @@ class FleetCollector:
         self.config = config
         self.runner = runner or CommandRunner(config.timeout)
         self.proxmox = ProxmoxClient(config, self.runner)
+        self.store = FleetStore(config.state_root)
+        self.adapters = AdapterRegistry(config)
 
     def collect(self) -> dict[str, Any]:
         started = time.monotonic()
+        self.store.expire_pending_agent_commands()
+        self.store.reconcile_stale_benchmarks()
         hosts = [self.collect_host(item) for item in self.config.hosts]
         proxmox = self.collect_proxmox()
         observations = self.collect_observations()
         drifts = [drift for host in hosts for drift in host.get("drift", [])]
-        online = sum(1 for host in hosts if host["status"] != "offline")
+        online = sum(1 for host in hosts if host["status"] not in {"offline", "dormant"})
+        dormant = sum(1 for host in hosts if host["status"] == "dormant")
         critical = sum(1 for item in drifts if item.get("severity") == "critical")
         warnings = sum(1 for item in drifts if item.get("severity") == "warning")
         snapshot = {
             "schema_version": 1,
+            "policy_version": self.config.policy_version,
             "generated_at": utc_now(),
             "collector": socket.gethostname(),
             "elapsed_ms": round((time.monotonic() - started) * 1000),
             "summary": {
                 "hosts_total": len(hosts),
                 "hosts_online": online,
-                "hosts_offline": len(hosts) - online,
+                "hosts_offline": sum(1 for host in hosts if host["status"] == "offline"),
+                "hosts_dormant": dormant,
                 "drift_total": len(drifts),
                 "critical_drift": critical,
                 "warning_drift": warnings,
@@ -123,9 +140,11 @@ class FleetCollector:
                 "proxmox_guests_running": sum(1 for guest in proxmox.get("guests", []) if guest.get("status") == "running"),
             },
             "approved": self.config.approved,
+            "components": self.adapters.describe_components(),
             "hosts": hosts,
             "proxmox": proxmox,
             "observations": observations,
+            "finalizer": self.collect_finalizer(),
             "capabilities": self._capabilities(hosts, proxmox),
         }
         write_json_atomic(self.config.state_root / "snapshot.json", snapshot, mode=0o640)
@@ -133,6 +152,8 @@ class FleetCollector:
 
     def collect_host(self, host: dict[str, Any]) -> dict[str, Any]:
         started = time.monotonic()
+        if host.get("transport") == "signed-outbound-agent":
+            return self._collect_agent_host(host, started)
         if host.get("transport") == "local":
             result = self.runner.run(["bash", "-lc", LINUX_SCRIPT])
             raw = self._parse_lines(result)
@@ -167,6 +188,73 @@ class FleetCollector:
             "reachable": True,
             "checked_at": utc_now(),
             "latency_ms": latency,
+            **normalized,
+            "drift": drift,
+        }
+
+    def _collect_agent_host(self, host: dict[str, Any], started: float) -> dict[str, Any]:
+        with self.store.connect() as connection:
+            enrollment = connection.execute(
+                "SELECT * FROM agent_enrollments WHERE host_id=?", (host["id"],)
+            ).fetchone()
+            heartbeat = None
+            if enrollment:
+                heartbeat = connection.execute(
+                    "SELECT * FROM agent_heartbeats WHERE agent_id=? ORDER BY received_at DESC LIMIT 1",
+                    (enrollment["agent_id"],),
+                ).fetchone()
+        latency = round((time.monotonic() - started) * 1000)
+        if not enrollment or not heartbeat:
+            return {
+                **host,
+                "status": "dormant",
+                "reachable": False,
+                "checked_at": utc_now(),
+                "latency_ms": latency,
+                "detail": "Awaiting signed outbound Fleet agent enrollment or heartbeat.",
+                "versions": {},
+                "metrics": {},
+                "hardware": {},
+                "capabilities": [],
+                "drift": [
+                    {
+                        "host": host["id"],
+                        "component": "fleet-windows-pull-agent",
+                        "severity": "warning",
+                        "current": "not-enrolled",
+                        "approved": "enrolled",
+                        "action": "enroll",
+                    }
+                ],
+            }
+        raw = json.loads(heartbeat["status_json"] or "{}")
+        normalized = self._normalize_host({**raw, **dict(raw.get("versions") or {})})
+        drift = self._drift(host["id"], normalized["versions"])
+        try:
+            heartbeat_age = max(
+                0,
+                int(
+                    (
+                        datetime.now(timezone.utc)
+                        - datetime.fromisoformat(str(heartbeat["received_at"]))
+                    ).total_seconds()
+                ),
+            )
+        except (TypeError, ValueError):
+            heartbeat_age = 999999
+        dormant = heartbeat_age > 180
+        return {
+            **host,
+            "status": "dormant" if dormant else ("warning" if drift else "ok"),
+            "reachable": not dormant,
+            "checked_at": heartbeat["received_at"],
+            "latency_ms": latency,
+            "detail": (
+                f"Portable host dormant; last signed heartbeat {heartbeat_age} seconds ago."
+                if dormant
+                else "Signed outbound Fleet agent heartbeat accepted."
+            ),
+            "heartbeat_age_seconds": heartbeat_age,
             **normalized,
             "drift": drift,
         }
@@ -252,6 +340,65 @@ if($item){Get-Content $item.FullName -Raw}else{'{}'}
             observations.append(self._observation("nimo", nimo_state))
         return observations
 
+    def collect_finalizer(self) -> dict[str, Any]:
+        path = (
+            Path.home()
+            / ".codex"
+            / "plugin-recovery"
+            / "20260806-post-observation-finalizer"
+            / "result.json"
+        )
+        value = read_json(path, {})
+        if not isinstance(value, dict):
+            value = {}
+        allowed = {
+            key: value.get(key)
+            for key in (
+                "status",
+                "hub_run",
+                "nimo_run",
+                "expected_samples",
+                "expected_version",
+                "rollback_version",
+                "scheduled_for",
+                "checked_at",
+                "finished_at",
+            )
+            if value.get(key) is not None
+        }
+        timer = self.runner.run(
+            ["systemctl", "--user", "is-active", "edsys-codex-post-observation-cleanup.timer"],
+            timeout=10,
+        )
+        service = self.runner.run(
+            ["systemctl", "--user", "is-active", "edsys-codex-post-observation-cleanup.service"],
+            timeout=10,
+        )
+        scheduled = self.runner.run(
+            [
+                "systemctl", "--user", "show",
+                "edsys-codex-post-observation-cleanup.timer",
+                "--property=NextElapseUSecRealtime", "--value",
+            ],
+            timeout=10,
+        )
+        timer_active = timer.ok and timer.stdout == "active"
+        service_active = service.ok and service.stdout in {"activating", "active"}
+        if value.get("status") in {"accepted", "blocked"}:
+            finalizer_status = str(value["status"])
+        elif service_active or value.get("status") == "checking":
+            finalizer_status = "running"
+        elif timer_active:
+            finalizer_status = "scheduled"
+        else:
+            finalizer_status = "not_scheduled"
+        allowed["status"] = finalizer_status
+        allowed["timer_active"] = timer_active
+        allowed["service_active"] = service_active
+        if scheduled.ok and scheduled.stdout and scheduled.stdout != "n/a":
+            allowed.setdefault("scheduled_for", scheduled.stdout)
+        return allowed
+
     def _powershell(self, alias: str, script: str) -> CommandResult:
         encoded = base64.b64encode(script.encode("utf-16le")).decode()
         return self.runner.ssh(alias, f"powershell.exe -NoProfile -NonInteractive -EncodedCommand {encoded}")
@@ -266,7 +413,21 @@ if($item){Get-Content $item.FullName -Raw}else{'{}'}
         return output
 
     def _normalize_host(self, raw: dict[str, Any]) -> dict[str, Any]:
-        versions = {key: self._clean_version(raw.get(key)) for key in ("codex", "node", "npm", "docker", "chrome", "vivaldi", "ollama")}
+        versions = {
+            key: self._clean_version(raw.get(key))
+            for key in (
+                "codex",
+                "node",
+                "npm",
+                "docker",
+                "chrome",
+                "vivaldi",
+                "firefox",
+                "ollama",
+                "playwright_mcp",
+                "playwright",
+            )
+        }
         versions = {key: value for key, value in versions.items() if value}
         total_mem = self._int(raw.get("memory_total"))
         avail_mem = self._int(raw.get("memory_available"))
@@ -284,7 +445,7 @@ if($item){Get-Content $item.FullName -Raw}else{'{}'}
         if versions.get("ollama"):
             capabilities.append("Ollama")
         if gpu_name:
-            capabilities.extend(["NVIDIA GPU", "NVENC", "Vulkan"])
+            capabilities.append("NVIDIA GPU")
         if versions.get("codex"):
             capabilities.append("Codex")
         if versions.get("chrome"):
@@ -319,21 +480,53 @@ if($item){Get-Content $item.FullName -Raw}else{'{}'}
         }
 
     def _drift(self, host_id: str, versions: dict[str, str]) -> list[dict[str, Any]]:
-        output = []
-        for component, approved in self.config.approved.items():
-            if component not in versions:
+        output: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for policy_name, policy in self.config.components.items():
+            if host_id not in list(policy.get("hosts") or []):
                 continue
-            current = versions[component]
-            if current != approved:
-                ahead = self._version_key(current) > self._version_key(approved)
-                output.append({
-                    "host": host_id,
-                    "component": component,
-                    "severity": "info" if ahead else "warning",
-                    "current": current,
-                    "approved": approved,
-                    "action": "review" if ahead else "upgrade",
-                })
+            keys = [str(policy["inventory_key"])] if policy.get("inventory_key") else [
+                str(item) for item in (policy.get("inventory_keys") or [])
+            ]
+            desired = policy.get("desired")
+            desired_map = desired if isinstance(desired, dict) else {}
+            for key in keys:
+                if key in seen:
+                    continue
+                seen.add(key)
+                approved = str(desired_map.get(key) if desired_map else desired)
+                current = versions.get(key)
+                if not current:
+                    absence = str(policy.get("absence") or "missing")
+                    if absence == "missing":
+                        output.append(
+                            {
+                                "host": host_id,
+                                "component": key,
+                                "policy_component": policy_name,
+                                "severity": "warning",
+                                "current": "missing",
+                                "approved": approved,
+                                "absence": absence,
+                                "action": "install",
+                            }
+                        )
+                    continue
+                if approved in {"stable", "approved-stable", "unknown", "None"}:
+                    continue
+                if current != approved:
+                    ahead = self._version_key(current) > self._version_key(approved)
+                    output.append(
+                        {
+                            "host": host_id,
+                            "component": key,
+                            "policy_component": policy_name,
+                            "severity": "info" if ahead else "warning",
+                            "current": current,
+                            "approved": approved,
+                            "action": "review" if ahead else "upgrade",
+                        }
+                    )
         return output
 
     @staticmethod
@@ -347,7 +540,7 @@ if($item){Get-Content $item.FullName -Raw}else{'{}'}
     @staticmethod
     def _clean_version(value: Any) -> str:
         text = str(value or "").strip()
-        return text.removeprefix("v")
+        return "" if text.lower() in {"", "unavailable", "unknown", "none", "null"} else text.removeprefix("v")
 
     @staticmethod
     def _int(value: Any) -> int:
