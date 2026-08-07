@@ -109,6 +109,16 @@ quorum plus VMID 390 snapshot rollback/cleanup. VMID 390 `fleet-canary` is an
 unprivileged, networkless, no-production-data LXC on `pve-edcore`; it is also
 tagged as a benchmark canary in NetBox.
 
+The real-model suite additionally creates a challenge-bound artifact spec.
+`edsys-fleet artifact-canary` turns that model-authored spec into editable
+OpenXML XLSX/PPTX evidence, independently reopens the packages, renders every
+sheet/slide through an isolated headless office profile, verifies formulas,
+page counts, rendered challenge text, and file hashes, and retains the bounded
+raw artifacts. This benchmark-only fallback keeps weekly document coverage
+deterministic when the optional Codex workspace artifact runtime is not
+available to an ephemeral CLI task; it does not replace the richer interactive
+artifact skills.
+
 Raw benchmark artifacts are retained 30 days, detailed results and audit
 events two years, and compact trends/transaction summaries indefinitely. The
 first critical failure uses the configured private EdSys notification path.

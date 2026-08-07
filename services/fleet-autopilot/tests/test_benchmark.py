@@ -70,6 +70,14 @@ def test_ultra_requires_complete_model_evidence_and_cleanup(tmp_path, monkeypatc
         "presentation", "cleanup",
     ]
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(
+        "edsys_fleet.benchmark.validate_retained_canary",
+        lambda retained_dir, challenge: {
+            "status": "passed",
+            "workbook_sheets": 2,
+            "presentation_slides": 3,
+        },
+    )
 
     def fake_command(argv, timeout=60, env=None):
         del timeout, env
@@ -99,4 +107,5 @@ def test_ultra_requires_complete_model_evidence_and_cleanup(tmp_path, monkeypatc
     assert passed is True
     assert cleanup == "passed"
     assert evidence["controls_passed"] is True
+    assert evidence["artifact_canary"]["status"] == "passed"
     assert evidence["cleanup_passed"] is True

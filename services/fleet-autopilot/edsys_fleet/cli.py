@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
-from .collector import FleetCollector
-from .benchmark import CapabilityBenchmark
+from .artifact_canary import run_artifact_canary
 from .backup import encrypted_backup_and_restore_test
+from .benchmark import CapabilityBenchmark
+from .collector import FleetCollector
 from .config import load_config
 from .io import read_json
 from .jobs import FleetJobRunner, list_jobs, queue_job
@@ -39,6 +41,11 @@ def main() -> None:
     benchmark.add_argument("--suite", choices=["deterministic", "ultra"], required=True)
     benchmark.add_argument("--host", default="9950x")
     benchmark.add_argument("--triggered-by", default="cli")
+    artifact_canary = sub.add_parser("artifact-canary")
+    artifact_canary.add_argument("--workspace", required=True)
+    artifact_canary.add_argument("--retained-dir", required=True)
+    artifact_canary.add_argument("--challenge", required=True)
+    artifact_canary.add_argument("--spec", required=True)
     sub.add_parser("db-check")
     sub.add_parser("db-backup-restore-test")
     sub.add_parser("gates")
@@ -86,6 +93,13 @@ def main() -> None:
         )
     elif args.command == "benchmark":
         value = CapabilityBenchmark(config).run(args.suite, args.host, args.triggered_by)
+    elif args.command == "artifact-canary":
+        value = run_artifact_canary(
+            Path(args.workspace),
+            Path(args.retained_dir),
+            args.challenge,
+            Path(args.spec),
+        )
     elif args.command == "db-check":
         value = {"status": store.quick_check(), "path": str(store.path)}
     elif args.command == "db-backup-restore-test":

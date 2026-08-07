@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 import fcntl
+import hashlib
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -15,13 +16,13 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
+from .artifact_canary import ArtifactCanaryError, validate_retained_canary
 from .config import FleetConfig
 from .io import write_json_atomic
 from .notify import notify_critical_failure
 from .proxmox import ProxmoxClient
 from .runner import CommandRunner
 from .store import FleetStore, sanitize_evidence
-
 
 CONTRACT_PATH = Path(__file__).with_name("capability-contract.yml")
 BROWSER_PROBE = Path(__file__).with_name("probes") / "browser_probe.cjs"
@@ -539,6 +540,9 @@ class CapabilityBenchmark:
         workspace = Path.home() / ".local" / "state" / "edsys-fleet-benchmark" / (
             f"ultra-{os.getpid()}"
         )
+        retained_dir = artifact_dir / "ultra-artifacts"
+        challenge = secrets.token_hex(8)
+        spec_path = workspace / "artifact-canary-spec.json"
         required = [
             "browser_mcp",
             "proxmox_mcp",
@@ -561,7 +565,15 @@ class CapabilityBenchmark:
 
 Use these enabled paths for one safe read each: Playwright/browser MCP, Proxmox MCP cluster status, EdSys code-intelligence index status, authenticated GitHub profile, authenticated Cloudflare account list, and OpenAI Developer Docs search. Also prove a login shell, an outbound HTTPS request, a disposable Docker operation, NVIDIA GPU access, and a temporary file outside the repository.
 
-Under the dedicated temporary directory {workspace}, generate a DOCX, PDF, spreadsheet, and presentation. Validate each artifact, including rendering the document, PDF, and presentation and opening/inspecting the spreadsheet. Remove that entire temporary directory after validation. Do not place temporary artifacts anywhere else and do not modify tracked source or production services.
+Under the dedicated temporary directory {workspace}, generate and validate a DOCX and PDF, including rendering and visually inspecting both.
+
+For the spreadsheet and presentation controls, use the owner-approved Fleet operational canary rather than the optional Codex workspace artifact runtime. Create {spec_path} with this exact JSON contract: challenge={challenge}; nonempty title and headline; three to five metrics with label, integer value 0-100, and status passed, verified, or ready; and exactly three slides, each with a concise title and body. Then run exactly:
+
+edsys-fleet artifact-canary --workspace {workspace} --retained-dir {retained_dir} --challenge {challenge} --spec {spec_path}
+
+This benchmark-only helper authors editable, challenge-bound OpenXML XLSX and PPTX files, reopens their packages, renders them headlessly, verifies rendered challenge text and formulas/page counts, and retains bounded raw evidence for 30-day policy cleanup. Inspect its JSON report. Mark spreadsheet and presentation passed only if the helper exits zero and reports status passed. Do not substitute a claim or handcrafted evidence for this command.
+
+Remove the entire temporary directory after all validation. Do not place temporary artifacts anywhere else and do not modify tracked source or production services. Retained files under {retained_dir} are permitted benchmark evidence and must not be deleted.
 
 Write one retained, sanitized JSON evidence file to {evidence_path}. It must be smaller than 32 KiB and have exactly this shape: {{"schema_version":1,"controls":[{{"id":"control_id","status":"passed|failed","detail":"short non-secret evidence"}}],"cleanup_passed":true|false}}. Include each of these control IDs exactly once: {", ".join(required)}. Never include credentials, tokens, auth headers, private account identifiers, environment values, raw prompts, or file contents. This evidence file is a permitted benchmark artifact and must not be deleted.
 
@@ -599,13 +611,21 @@ Reply exactly EDSYS_ULTRA_BENCHMARK_OK only if every control passed, the tempora
         controls_passed = bool(model_evidence) and all(
             item.get("status") == "passed" for item in model_evidence.get("controls", [])
         )
+        artifact_canary: dict[str, Any] = {}
+        artifact_canary_error = ""
+        try:
+            artifact_canary = validate_retained_canary(retained_dir, challenge)
+        except ArtifactCanaryError as exc:
+            artifact_canary_error = str(exc)
         model_cleanup_passed = bool(model_evidence.get("cleanup_passed")) and not workspace.exists()
         passed = (
             result.returncode == 0
             and last == "EDSYS_ULTRA_BENCHMARK_OK"
             and controls_passed
+            and bool(artifact_canary)
             and model_cleanup_passed
             and not evidence_error
+            and not artifact_canary_error
         )
         forced_cleanup = workspace.exists()
         if forced_cleanup:
@@ -623,7 +643,10 @@ Reply exactly EDSYS_ULTRA_BENCHMARK_OK only if every control passed, the tempora
             "forced_cleanup": forced_cleanup,
             "cleanup_passed": cleanup_passed,
             "model_evidence": model_evidence,
+            "artifact_canary": artifact_canary,
         }
         if evidence_error:
             evidence["evidence_error"] = evidence_error
+        if artifact_canary_error:
+            evidence["artifact_canary_error"] = artifact_canary_error
         return passed, evidence, "passed" if cleanup_passed else "failed"
