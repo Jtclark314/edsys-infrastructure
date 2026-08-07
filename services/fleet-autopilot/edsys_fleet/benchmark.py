@@ -20,7 +20,7 @@ from .io import write_json_atomic
 from .notify import notify_critical_failure
 from .proxmox import ProxmoxClient
 from .runner import CommandRunner
-from .store import FleetStore
+from .store import FleetStore, sanitize_evidence
 
 
 CONTRACT_PATH = Path(__file__).with_name("capability-contract.yml")
@@ -535,7 +535,37 @@ class CapabilityBenchmark:
 
     def _ultra(self, artifact_dir: Path) -> tuple[bool, dict[str, Any], str]:
         output = artifact_dir / "ultra-last-message.txt"
-        prompt = """Run the EdSys Fleet weekly capability control. Use the enabled browser, Proxmox, code-intelligence, GitHub, Cloudflare, and OpenAI documentation MCP paths for one safe read each. Prove a login shell, network, Docker, NVIDIA GPU, and a temporary file outside this repository. Generate a temporary DOCX, PDF, spreadsheet, and presentation, validate each, then delete every temporary artifact. Do not change production state. Reply exactly EDSYS_ULTRA_BENCHMARK_OK only after every control and cleanup passes; otherwise reply EDSYS_ULTRA_BENCHMARK_FAILED."""
+        evidence_path = artifact_dir / "ultra-evidence.json"
+        workspace = Path.home() / ".local" / "state" / "edsys-fleet-benchmark" / (
+            f"ultra-{os.getpid()}"
+        )
+        required = [
+            "browser_mcp",
+            "proxmox_mcp",
+            "code_intelligence_mcp",
+            "github_mcp",
+            "cloudflare_mcp",
+            "openai_docs_mcp",
+            "login_shell",
+            "network",
+            "docker",
+            "nvidia_gpu",
+            "outside_project_file",
+            "docx",
+            "pdf",
+            "spreadsheet",
+            "presentation",
+            "cleanup",
+        ]
+        prompt = f"""Run the EdSys Fleet weekly real-model capability control without changing production state.
+
+Use these enabled paths for one safe read each: Playwright/browser MCP, Proxmox MCP cluster status, EdSys code-intelligence index status, authenticated GitHub profile, authenticated Cloudflare account list, and OpenAI Developer Docs search. Also prove a login shell, an outbound HTTPS request, a disposable Docker operation, NVIDIA GPU access, and a temporary file outside the repository.
+
+Under the dedicated temporary directory {workspace}, generate a DOCX, PDF, spreadsheet, and presentation. Validate each artifact, including rendering the document, PDF, and presentation and opening/inspecting the spreadsheet. Remove that entire temporary directory after validation. Do not place temporary artifacts anywhere else and do not modify tracked source or production services.
+
+Write one retained, sanitized JSON evidence file to {evidence_path}. It must be smaller than 32 KiB and have exactly this shape: {{"schema_version":1,"controls":[{{"id":"control_id","status":"passed|failed","detail":"short non-secret evidence"}}],"cleanup_passed":true|false}}. Include each of these control IDs exactly once: {", ".join(required)}. Never include credentials, tokens, auth headers, private account identifiers, environment values, raw prompts, or file contents. This evidence file is a permitted benchmark artifact and must not be deleted.
+
+Reply exactly EDSYS_ULTRA_BENCHMARK_OK only if every control passed, the temporary directory is absent, and the evidence file is valid. Otherwise still write the evidence with the exact failed control and reply exactly EDSYS_ULTRA_BENCHMARK_FAILED."""
         command = [
             "codex", "exec", "--ephemeral", "--skip-git-repo-check",
             "--dangerously-bypass-approvals-and-sandbox", "-m", "gpt-5.6-sol",
@@ -545,6 +575,55 @@ class CapabilityBenchmark:
         ]
         result = self._command(command, timeout=int(self.contract["timeouts"]["model_seconds"]))
         last = output.read_text(encoding="utf-8").strip() if output.exists() else ""
-        passed = result.returncode == 0 and last == "EDSYS_ULTRA_BENCHMARK_OK"
+        model_evidence: dict[str, Any] = {}
+        evidence_error = ""
+        try:
+            if evidence_path.stat().st_size > 32768:
+                raise ValueError("model evidence exceeded 32 KiB")
+            value = json.loads(evidence_path.read_text(encoding="utf-8"))
+            if not isinstance(value, dict) or value.get("schema_version") != 1:
+                raise ValueError("model evidence schema is invalid")
+            controls = value.get("controls")
+            if not isinstance(controls, list):
+                raise ValueError("model evidence controls are missing")
+            rows = {
+                str(item.get("id")): item
+                for item in controls
+                if isinstance(item, dict) and item.get("id")
+            }
+            if len(rows) != len(controls) or set(rows) != set(required):
+                raise ValueError("model evidence control inventory is invalid")
+            model_evidence = sanitize_evidence(value)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            evidence_error = f"{type(exc).__name__}: {exc}"
+        controls_passed = bool(model_evidence) and all(
+            item.get("status") == "passed" for item in model_evidence.get("controls", [])
+        )
+        model_cleanup_passed = bool(model_evidence.get("cleanup_passed")) and not workspace.exists()
+        passed = (
+            result.returncode == 0
+            and last == "EDSYS_ULTRA_BENCHMARK_OK"
+            and controls_passed
+            and model_cleanup_passed
+            and not evidence_error
+        )
+        forced_cleanup = workspace.exists()
+        if forced_cleanup:
+            shutil.rmtree(workspace)
         output.unlink(missing_ok=True)
-        return passed, {"model": "gpt-5.6-sol", "reasoning": "ultra", "service_tier": "priority", "exact_response": last, "returncode": result.returncode}, "passed" if not output.exists() else "failed"
+        cleanup_passed = not workspace.exists() and not output.exists()
+        evidence = {
+            "model": "gpt-5.6-sol",
+            "reasoning": "ultra",
+            "service_tier": "priority",
+            "exact_response": last,
+            "returncode": result.returncode,
+            "controls_passed": controls_passed,
+            "model_cleanup_passed": model_cleanup_passed,
+            "forced_cleanup": forced_cleanup,
+            "cleanup_passed": cleanup_passed,
+            "model_evidence": model_evidence,
+        }
+        if evidence_error:
+            evidence["evidence_error"] = evidence_error
+        return passed, evidence, "passed" if cleanup_passed else "failed"
