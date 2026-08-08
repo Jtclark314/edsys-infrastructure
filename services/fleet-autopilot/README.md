@@ -28,6 +28,7 @@ Workhorse AI Portal (loopback backend behind Tailscale Serve HTTPS)
                               v
 9950x user services
   edsys-fleet-worker       exclusive mutation locks and phase reconciliation
+  edsys-codex-portal-gateway narrow authenticated bridge to managed app-server
   edsys-fleet-collect      five-minute inventory and offline-agent cleanup
   edsys-fleet-benchmark-*  deterministic daily / real Codex Ultra weekly
   edsys-fleet-backup       encrypted backup plus isolated restore test
@@ -40,7 +41,9 @@ Workhorse AI Portal (loopback backend behind Tailscale Serve HTTPS)
 ```
 
 The Portal container never receives SSH keys, Proxmox credentials, the Docker
-socket, or host administration mounts. Runtime databases, candidate bundles,
+socket, the managed app-server socket, or host administration mounts. It sees
+only the group-protected Codex gateway runtime directory containing a
+boot-scoped capability token and proxy socket. Runtime databases, candidate bundles,
 signing keys, benchmark artifacts, logs, and rollback material remain private
 and outside Git.
 
@@ -204,6 +207,29 @@ The installed `edsys-proxmox-mcp` exposes:
 It validates nodes, VMIDs, guest types, actions, and snapshot names, then uses
 the official `pvesh` interface over the existing key-only administrative
 route. No API token is stored in the repository or Portal.
+
+## Embedded Codex gateway and Fleet control MCP
+
+`edsys-codex-portal-gateway.service` is a user service between the Portal and
+the already managed Codex app-server. It owns the app-server initialize
+handshake, accepts only a boot-scoped token over a mode-`0660` Unix socket,
+bounds every frame, and never logs prompts, tokens, or raw tool payloads. The
+Portal reconnects and resumes tracked tasks after either side restarts. The
+browser receives only sanitized API/SSE events and never sees the token,
+socket path, or host attachment path.
+
+The installed `edsys-fleet-control-mcp` gives native Codex focused Fleet tools:
+
+- current status, component qualification, jobs, transactions, and benchmarks;
+- queueing read-only inspections and capability benchmarks;
+- creating frozen upgrade or explicit recovery-point rollback plans;
+- safe-boundary transaction cancellation.
+
+It intentionally has **no approval tool**. Codex can inspect and prepare the
+highest-quality plan while the verified owner identity still approves the
+immutable hash in Fleet. Approval protects intent and rollback integrity; it
+does not reduce Codex filesystem, network, shell, browser, MCP, GPU, Docker, or
+remote-host authority.
 
 ## Validation
 

@@ -1,0 +1,16 @@
+[Unit]
+Description=EdSys private Portal bridge to the managed Codex app-server
+After=edsys-codex-app-server.service
+Wants=edsys-codex-app-server.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/edsys-codex-gateway
+Restart=always
+RestartSec=3
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

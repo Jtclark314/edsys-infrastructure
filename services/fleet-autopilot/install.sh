@@ -21,11 +21,12 @@ if [[ ! -w "${state_parent}" ]]; then
   sudo -n install -d -o "$(id -u)" -g "$(id -g)" -m 2770 \
     "${state_root}" "${state_root}/queue" "${state_root}/queue/pending" \
     "${state_root}/queue/running" "${state_root}/queue/completed" \
-    "${state_root}/queue/awaiting-agent" "${state_root}/recovery"
+    "${state_root}/queue/awaiting-agent" "${state_root}/recovery" \
+    "${state_root}/codex-uploads"
   sudo -n chown -R "$(id -u):$(id -g)" "${state_root}"
 else
-  mkdir -p "${state_root}/queue/pending" "${state_root}/queue/running" "${state_root}/queue/completed" "${state_root}/queue/awaiting-agent" "${state_root}/recovery"
-  chmod 2770 "${state_root}" "${state_root}/queue" "${state_root}/queue/pending" "${state_root}/queue/running" "${state_root}/queue/completed" "${state_root}/queue/awaiting-agent" "${state_root}/recovery"
+  mkdir -p "${state_root}/queue/pending" "${state_root}/queue/running" "${state_root}/queue/completed" "${state_root}/queue/awaiting-agent" "${state_root}/recovery" "${state_root}/codex-uploads"
+  chmod 2770 "${state_root}" "${state_root}/queue" "${state_root}/queue/pending" "${state_root}/queue/running" "${state_root}/queue/completed" "${state_root}/queue/awaiting-agent" "${state_root}/recovery" "${state_root}/codex-uploads"
 fi
 
 sudo -n install -d -o "$(id -u)" -g "$(id -g)" -m 0700 \

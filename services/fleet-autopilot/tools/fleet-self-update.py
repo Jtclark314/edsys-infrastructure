@@ -16,9 +16,16 @@ from pathlib import Path
 from typing import Any
 
 
-COMMANDS = ("edsys-fleet", "edsys-fleet-worker", "edsys-proxmox-mcp")
+COMMANDS = (
+    "edsys-fleet",
+    "edsys-fleet-worker",
+    "edsys-proxmox-mcp",
+    "edsys-fleet-control-mcp",
+    "edsys-codex-gateway",
+)
 UNITS = (
     "edsys-fleet-worker.service",
+    "edsys-codex-portal-gateway.service",
     "edsys-fleet-collect.service",
     "edsys-fleet-collect.timer",
     "edsys-fleet-benchmark-daily.service",
@@ -221,17 +228,29 @@ def switch_to_release(release: Path, install_root: Path, bin_dir: Path) -> None:
 
 def systemd_refresh(*, restart: bool) -> None:
     run(["systemctl", "--user", "daemon-reload"], timeout=30)
+    available_services = [
+        name
+        for name in ("edsys-fleet-worker.service", "edsys-codex-portal-gateway.service")
+        if run(["systemctl", "--user", "cat", name], check=False, timeout=20).returncode == 0
+    ]
     available_timers = [
         name
         for name in TIMER_UNITS
         if run(["systemctl", "--user", "cat", name], check=False, timeout=20).returncode == 0
     ]
     run(
-        ["systemctl", "--user", "enable", "edsys-fleet-worker.service", *available_timers],
+        [
+            "systemctl",
+            "--user",
+            "enable",
+            *available_services,
+            *available_timers,
+        ],
         timeout=60,
     )
     if restart:
-        run(["systemctl", "--user", "restart", "edsys-fleet-worker.service"], timeout=90)
+        for service in available_services:
+            run(["systemctl", "--user", "restart", service], timeout=90)
         for timer in available_timers:
             run(["systemctl", "--user", "start", timer], timeout=30)
 
@@ -254,11 +273,23 @@ def validate_release(release: Path, state_root: Path) -> dict[str, Any]:
     ).stdout.strip()
     if active != "active":
         raise UpdateError("Fleet worker did not remain active")
+    gateway = run(
+        ["systemctl", "--user", "is-active", "edsys-codex-portal-gateway.service"],
+        timeout=30,
+    ).stdout.strip()
+    if gateway != "active":
+        raise UpdateError("Codex Portal gateway did not remain active")
+    runtime = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
+    gateway_socket = runtime / "edsys-codex-gateway/gateway.sock"
+    gateway_token = runtime / "edsys-codex-gateway/gateway.token"
+    if not gateway_socket.is_socket() or not gateway_token.is_file():
+        raise UpdateError("Codex Portal gateway runtime contract is incomplete")
     return {
         "db_check": "ok",
         "policy_version": snapshot.get("policy_version"),
         "components": len(components),
         "worker": active,
+        "codex_gateway": gateway,
         "finalizer": (snapshot.get("finalizer") or {}).get("status"),
     }
 
