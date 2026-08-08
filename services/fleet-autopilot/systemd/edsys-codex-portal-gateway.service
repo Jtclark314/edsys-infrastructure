@@ -8,6 +8,7 @@ Type=simple
 ExecStart=%h/.local/bin/edsys-codex-gateway
 Restart=always
 RestartSec=3
+TimeoutStopSec=10
 UMask=0007
 NoNewPrivileges=true
 PrivateTmp=true

@@ -82,6 +82,7 @@ class CodexGateway:
         self.token = ""
         self.server: asyncio.AbstractServer | None = None
         self.started = asyncio.Event()
+        self.client_writers: set[asyncio.StreamWriter] = set()
 
     async def start(self) -> None:
         self.token = ensure_runtime_token(self.token_path)
@@ -104,7 +105,17 @@ class CodexGateway:
     async def close(self) -> None:
         if self.server:
             self.server.close()
-            await self.server.wait_closed()
+        writers = list(self.client_writers)
+        for writer in writers:
+            writer.close()
+        if writers:
+            await asyncio.gather(
+                *(self._wait_closed(writer) for writer in writers),
+                return_exceptions=True,
+            )
+        if self.server:
+            with suppress(TimeoutError):
+                await asyncio.wait_for(self.server.wait_closed(), timeout=3)
         self.socket_path.unlink(missing_ok=True)
 
     async def serve(self) -> None:
@@ -118,6 +129,7 @@ class CodexGateway:
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
+        self.client_writers.add(writer)
         try:
             hello = await asyncio.wait_for(reader.readline(), timeout=8)
             if not hello or len(hello) > 64 * 1024:
@@ -167,8 +179,13 @@ class CodexGateway:
             LOGGER.exception("Unexpected Codex gateway client failure")
         finally:
             writer.close()
-            with suppress(Exception):
-                await writer.wait_closed()
+            await self._wait_closed(writer)
+            self.client_writers.discard(writer)
+
+    @staticmethod
+    async def _wait_closed(writer: asyncio.StreamWriter) -> None:
+        with suppress(Exception, asyncio.CancelledError):
+            await asyncio.wait_for(writer.wait_closed(), timeout=2)
 
     async def _initialize_app_server(
         self,

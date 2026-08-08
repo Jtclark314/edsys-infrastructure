@@ -114,6 +114,41 @@ async def test_gateway_rejects_invalid_token_without_connecting(tmp_path: Path) 
     await gateway.close()
 
 
+@pytest.mark.asyncio
+async def test_gateway_close_disconnects_active_client_promptly(tmp_path: Path) -> None:
+    fake = FakeAppServer()
+
+    @asynccontextmanager
+    async def connector(_: Path):
+        yield fake
+
+    gateway = CodexGateway(
+        socket_path=tmp_path / "gateway/gateway.sock",
+        token_path=tmp_path / "gateway/gateway.token",
+        app_server_socket=tmp_path / "app-server.sock",
+        connector=connector,
+    )
+    await gateway.start()
+    reader, writer = await asyncio.open_unix_connection(str(gateway.socket_path))
+    writer.write(
+        json.dumps(
+            {
+                "type": "connect",
+                "token": gateway.token,
+                "clientInfo": {"name": "test", "title": "Test", "version": "1"},
+            }
+        ).encode()
+        + b"\n"
+    )
+    await writer.drain()
+    assert json.loads(await asyncio.wait_for(reader.readline(), timeout=2))["type"] == "ready"
+
+    await asyncio.wait_for(gateway.close(), timeout=3)
+    assert await asyncio.wait_for(reader.readline(), timeout=2) == b""
+    writer.close()
+    await writer.wait_closed()
+
+
 def test_runtime_token_is_long_private_and_stable(tmp_path: Path) -> None:
     path = tmp_path / "runtime/gateway.token"
     first = ensure_runtime_token(path)
