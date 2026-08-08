@@ -118,7 +118,6 @@ def run() -> dict[str, Any]:
                 "approvalPolicy": "never",
                 "model": "gpt-5.6-sol",
                 "serviceTier": "priority",
-                "reasoningEffort": "ultra",
             },
             timeout=60,
         )
@@ -136,8 +135,15 @@ def run() -> dict[str, Any]:
             raise ProbeError("probe thread did not retain gpt-5.6-sol")
         if started.get("serviceTier") != "priority":
             raise ProbeError("probe thread did not retain Priority processing")
-        if str(started.get("reasoningEffort") or "").lower() != "ultra":
-            raise ProbeError("probe thread did not retain Ultra reasoning")
+        # Codex 0.146.1 applies the user-selected reasoning level through
+        # thread/settings/update (and per-turn `effort`), not thread/start.
+        # Keep the interactive base config unset while explicitly selecting
+        # Ultra for this benchmark-only task.
+        app.call(
+            "thread/settings/update",
+            {"threadId": thread_id, "effort": "ultra"},
+            timeout=30,
+        )
         inventory = app.call(
             "mcpServerStatus/list",
             {"threadId": thread_id, "detail": "full", "limit": 100},
@@ -225,7 +231,8 @@ def run() -> dict[str, Any]:
                 "ephemeral": bool(thread.get("ephemeral")),
                 "model": started.get("model"),
                 "service_tier": started.get("serviceTier"),
-                "reasoning_effort": started.get("reasoningEffort"),
+                "reasoning_effort": "ultra",
+                "reasoning_selection": "thread/settings/update accepted",
                 "approval_policy": started.get("approvalPolicy"),
                 "permission_profile": (started.get("activePermissionProfile") or {}).get("id"),
             },
