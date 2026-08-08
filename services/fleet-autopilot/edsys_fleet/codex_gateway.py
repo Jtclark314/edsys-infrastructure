@@ -285,11 +285,23 @@ async def run_gateway(args: argparse.Namespace) -> None:
             loop.add_signal_handler(sig, stop.set)
     task = asyncio.create_task(gateway.serve())
     await gateway.started.wait()
-    await stop.wait()
-    task.cancel()
-    with suppress(asyncio.CancelledError):
-        await task
-    await gateway.close()
+    stop_task = asyncio.create_task(stop.wait())
+    try:
+        done, _pending = await asyncio.wait(
+            {task, stop_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        if task in done:
+            task.result()
+    finally:
+        # Disconnect clients before cancelling serve_forever. Cancelling the
+        # server context first can otherwise wait indefinitely for clients.
+        await gateway.close()
+        task.cancel()
+        stop_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        with suppress(asyncio.CancelledError):
+            await stop_task
 
 
 def main() -> None:

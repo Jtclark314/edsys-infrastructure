@@ -128,7 +128,8 @@ async def test_gateway_close_disconnects_active_client_promptly(tmp_path: Path) 
         app_server_socket=tmp_path / "app-server.sock",
         connector=connector,
     )
-    await gateway.start()
+    serve_task = asyncio.create_task(gateway.serve())
+    await gateway.started.wait()
     reader, writer = await asyncio.open_unix_connection(str(gateway.socket_path))
     writer.write(
         json.dumps(
@@ -145,6 +146,9 @@ async def test_gateway_close_disconnects_active_client_promptly(tmp_path: Path) 
 
     await asyncio.wait_for(gateway.close(), timeout=3)
     assert await asyncio.wait_for(reader.readline(), timeout=2) == b""
+    serve_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await serve_task
     writer.close()
     await writer.wait_closed()
 
