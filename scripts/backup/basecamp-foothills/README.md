@@ -6,11 +6,14 @@ configuration on Basecamp before the normal encrypted EdSys Restic snapshot.
 ## Recovery chain
 
 1. Basecamp creates `C:\Foothills\OffsiteBackup\current` with:
-   - SQLite online backups for Task List, ASI, Observation, Speakr, and the
-     Agent DVR file database;
+   - SQLite online backups for Task List, ASI, active Observation Tracker V3,
+     retained Observation Tracker V2 rollback, Speakr, and the Agent DVR file
+     database;
    - the latest verified Unit Selections and Kindle Drop archives;
    - Unit Selections intake and configuration;
-   - Task List, ASI, Observation, Portal, camera, Agent DVR, and Speakr files;
+   - Task List, ASI, Observation Tracker V3 evidence/derivatives/reports,
+     verified V3 backups, V3 recovery configuration/operations, retained V2
+     rollback files, Portal, camera, Agent DVR, and Speakr files;
    - portal content and media;
    - scheduled-task XML, service definitions, firewall rules, SMB share
      definitions, OpenSSH host configuration and keys, and other encrypted-only
@@ -26,6 +29,13 @@ configuration on Basecamp before the normal encrypted EdSys Restic snapshot.
 The Basecamp and 9950x stages contain private runtime data and credentials.
 They must remain access-restricted and must never enter Git, RAG, ordinary
 Google Drive folders, or unencrypted archives.
+
+Observation Tracker recovery paths deliberately keep the active V3 database at
+`apps/observation-tracker/data/observation_tracker.sqlite3` so existing restore
+and verification tooling continues to find the production source of truth.
+The disabled V2 database and files are isolated below
+`apps/observation-tracker/legacy-v2/` until that rollback runtime is explicitly
+retired.
 
 ## Schedule and ordering
 

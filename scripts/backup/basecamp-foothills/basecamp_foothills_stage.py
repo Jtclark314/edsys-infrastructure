@@ -113,7 +113,10 @@ def copy_file_stable(source: Path, destination: Path, retries: int = 4) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     last_error: Exception | None = None
     for attempt in range(retries):
-        partial = destination.with_name(f".{destination.name}.partial-{os.getpid()}")
+        # Keep the temporary name short. Prefixing the full destination filename
+        # pushed otherwise valid backup paths over Windows MAX_PATH.
+        name_hash = hashlib.sha256(destination.name.encode("utf-8")).hexdigest()[:12]
+        partial = destination.with_name(f".partial-{os.getpid()}-{name_hash}")
         try:
             before = source.stat()
             shutil.copy2(source, partial)
@@ -338,20 +341,54 @@ def default_copy_sources(recovery_source: Path | None) -> list[CopySource]:
             PurePosixPath("apps/asi-tracker/recovery/scripts"),
             "asi-tracker",
         ),
+        # Observation Tracker V3 is the active production runtime. Its database
+        # is captured separately through SQLite's online backup API below.
+        CopySource(
+            Path(r"C:\Foothills\ObservationTrackerV3\runtime\evidence"),
+            PurePosixPath("apps/observation-tracker/data/evidence"),
+            "observation-tracker-v3",
+        ),
+        CopySource(
+            Path(r"C:\Foothills\ObservationTrackerV3\runtime\derivatives"),
+            PurePosixPath("apps/observation-tracker/data/derivatives"),
+            "observation-tracker-v3",
+        ),
+        CopySource(
+            Path(r"C:\Foothills\ObservationTrackerV3\runtime\reports"),
+            PurePosixPath("apps/observation-tracker/data/reports"),
+            "observation-tracker-v3",
+        ),
+        CopySource(
+            Path(r"C:\Foothills\ObservationTrackerV3\runtime\backups"),
+            PurePosixPath("apps/observation-tracker/verified-backups"),
+            "observation-tracker-v3",
+        ),
+        CopySource(
+            Path(r"C:\Foothills\ObservationTrackerV3\config"),
+            PurePosixPath("apps/observation-tracker/recovery/config"),
+            "observation-tracker-v3",
+        ),
+        CopySource(
+            Path(r"C:\Foothills\ObservationTrackerV3\operations"),
+            PurePosixPath("apps/observation-tracker/recovery/operations"),
+            "observation-tracker-v3",
+        ),
+        # Preserve the disabled V2 runtime as an explicit rollback set until it
+        # is retired through a separate reviewed operation.
         CopySource(
             Path(r"C:\Foothills\ObservationTracker\data\uploads"),
-            PurePosixPath("apps/observation-tracker/data/uploads"),
-            "observation-tracker",
+            PurePosixPath("apps/observation-tracker/legacy-v2/data/uploads"),
+            "observation-tracker-v2-rollback",
         ),
         CopySource(
             Path(r"C:\Foothills\ObservationTracker\backups"),
-            PurePosixPath("apps/observation-tracker/legacy-backups"),
-            "observation-tracker",
+            PurePosixPath("apps/observation-tracker/legacy-v2/backups"),
+            "observation-tracker-v2-rollback",
         ),
         CopySource(
             Path(r"C:\Foothills\ObservationTracker\scripts"),
-            PurePosixPath("apps/observation-tracker/recovery/scripts"),
-            "observation-tracker",
+            PurePosixPath("apps/observation-tracker/legacy-v2/scripts"),
+            "observation-tracker-v2-rollback",
         ),
         CopySource(
             Path(r"C:\Foothills\UnitSelections\intake"),
@@ -486,9 +523,18 @@ def default_database_sources() -> list[DatabaseSource]:
             "asi-tracker",
         ),
         DatabaseSource(
-            Path(r"C:\Foothills\ObservationTracker\data\observation_tracker.sqlite3"),
+            Path(
+                r"C:\Foothills\ObservationTrackerV3\runtime\database\observation_tracker.sqlite3"
+            ),
             PurePosixPath("apps/observation-tracker/data/observation_tracker.sqlite3"),
-            "observation-tracker",
+            "observation-tracker-v3",
+        ),
+        DatabaseSource(
+            Path(r"C:\Foothills\ObservationTracker\data\observation_tracker.sqlite3"),
+            PurePosixPath(
+                "apps/observation-tracker/legacy-v2/data/observation_tracker.sqlite3"
+            ),
+            "observation-tracker-v2-rollback",
         ),
         DatabaseSource(
             Path(r"C:\EdSys\Speakr\instance\transcriptions.db"),
