@@ -17,6 +17,7 @@ from pathlib import Path
 PROTECTED_FILES = (
     "/mnt/ai-store/foothills-basecamp-offsite/current/manifest.json",
     "/mnt/ai-store/foothills-basecamp-offsite/current/apps/task-list/data/tasks.sqlite3",
+    "/mnt/ai-store/foothills-basecamp-offsite/current/apps/observation-tracker/data/observation_tracker.sqlite3",
     "/mnt/ai-store/foothills-basecamp-offsite/current/apps/project-portal/current-site/data/portal-content.json",
     "/mnt/ai-store/foothills-project/00-FOOTHILLS-WORKING-MEMORY.md",
     "/srv/edsys-backup/staging/foothills-project/current/manifest.json",
@@ -157,16 +158,30 @@ def main() -> int:
         ):
             raise RuntimeError("Restored Task List database does not match its manifest")
 
-        portal = json.loads(restored[PROTECTED_FILES[2]].read_text(encoding="utf-8-sig"))
+        observation_relative = (
+            "apps/observation-tracker/data/observation_tracker.sqlite3"
+        )
+        observation_database = restored[PROTECTED_FILES[2]]
+        observation_entry = manifest_entries.get(observation_relative)
+        if (
+            observation_entry is None
+            or int(observation_entry["size"]) != observation_database.stat().st_size
+            or observation_entry["sha256"] != sha256(observation_database)
+        ):
+            raise RuntimeError(
+                "Restored Observation Tracker database does not match its manifest"
+            )
+
+        portal = json.loads(restored[PROTECTED_FILES[3]].read_text(encoding="utf-8-sig"))
         if not isinstance(portal, (dict, list)):
             raise RuntimeError("Restored portal content has an unsupported JSON type")
 
         catalog_manifest = json.loads(
-            restored[PROTECTED_FILES[4]].read_text(encoding="utf-8-sig")
+            restored[PROTECTED_FILES[5]].read_text(encoding="utf-8-sig")
         )
         catalog_entries = {item["file"]: item for item in catalog_manifest["databases"]}
         database_results = []
-        for protected in PROTECTED_FILES[5:]:
+        for protected in PROTECTED_FILES[6:]:
             database = restored[protected]
             result = sqlite_check(database)
             expected = catalog_entries.get(database.name)
@@ -188,9 +203,10 @@ def main() -> int:
             "restored_file_count": len(restored),
             "basecamp_generation": basecamp_manifest["generation"],
             "task_database": sqlite_check(task_database),
+            "observation_database": sqlite_check(observation_database),
             "project_databases": database_results,
             "portal_json": "ok",
-            "working_memory_sha256": sha256(restored[PROTECTED_FILES[3]]),
+            "working_memory_sha256": sha256(restored[PROTECTED_FILES[4]]),
             "temporary_restore_removed": True,
         }
     arguments.status_file.parent.mkdir(parents=True, exist_ok=True)

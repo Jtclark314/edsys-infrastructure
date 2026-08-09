@@ -82,4 +82,7 @@ Do not call the chain healthy until all of these pass:
 6. The local Restic snapshot contains the Basecamp stage and Foothills tree.
 7. Google Drive contains that exact Restic snapshot ID.
 8. A full `rclone check` and isolated restore of representative Basecamp and
-   Foothills project files directly from Google Drive pass.
+   Foothills project files directly from Google Drive pass. The recurring
+   restore test validates both the Task List and active Observation Tracker V3
+   databases against the staged manifest and reruns SQLite integrity and
+   foreign-key checks.
