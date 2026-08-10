@@ -51,3 +51,40 @@ def test_rag_enrichment_writes_metadata_sqlite(tmp_path) -> None:
     with sqlite3.connect(db_path) as conn:
         row = conn.execute("select title, status, summary from documents").fetchone()
     assert row == ("Demo", "current", "Current service note.")
+
+
+def test_anythingllm_verifier_accepts_single_healthy_workspace() -> None:
+    verifier = load_script("anythingllm-rag-verify.py")
+    workspace = dict(verifier.EXPECTED_WORKSPACE)
+    stats = {
+        "document_count": 41,
+        "non_managed_document_count": 0,
+        "documents_without_vectors": 0,
+        "vector_count": 386,
+        "orphan_vector_count": 0,
+    }
+    manifest = {
+        "workspaceSlug": "edsys-rag-current",
+        "documents": {f"doc-{index}": {} for index in range(41)},
+    }
+    assert verifier.validate_inventory([workspace], stats, manifest) == []
+
+
+def test_anythingllm_verifier_rejects_extra_workspace_and_drift() -> None:
+    verifier = load_script("anythingllm-rag-verify.py")
+    workspace = dict(verifier.EXPECTED_WORKSPACE)
+    workspace["similarityThreshold"] = 0.25
+    stats = {
+        "document_count": 1,
+        "non_managed_document_count": 0,
+        "documents_without_vectors": 0,
+        "vector_count": 1,
+        "orphan_vector_count": 0,
+    }
+    manifest = {"workspaceSlug": "edsys-rag-current", "documents": {"doc": {}}}
+
+    failures = verifier.validate_inventory([workspace], stats, manifest)
+    assert any("similarityThreshold" in failure for failure in failures)
+    assert verifier.validate_inventory([workspace, workspace], stats, manifest) == [
+        "expected one AnythingLLM workspace, found 2"
+    ]

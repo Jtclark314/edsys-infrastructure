@@ -1,0 +1,560 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+API_URL="${API_URL:-http://127.0.0.1:3002}"
+WORKSPACE_SLUG="${WORKSPACE_SLUG:-edsys-rag-current}"
+SRC="${SRC:-/mnt/ai-store/rag/docs/EdSysVault_RAG}"
+DB="${DB:-/mnt/ai-store/anythingllm/anythingllm.db}"
+STORAGE_DOCS="${STORAGE_DOCS:-/mnt/ai-store/anythingllm/documents}"
+STATE="${STATE:-/mnt/ai-store/rag/state/anythingllm-rag-current-manifest.json}"
+LOG="${LOG:-$HOME/rag-upload-edsys.log}"
+LOCK="${LOCK:-/tmp/anythingllm-upload-edsys-rag.lock}"
+DRY_RUN="${DRY_RUN:-0}"
+
+if [ "$WORKSPACE_SLUG" != "edsys-rag-current" ]; then
+  echo "ERROR EdSys-RAG-Current is the only managed AnythingLLM workspace." >&2
+  exit 2
+fi
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "missing required command: $1" >&2
+    exit 1
+  }
+}
+
+slugify_filename() {
+  local name="$1"
+  name="${name// /-}"
+  name="${name//&/and}"
+  name="$(printf '%s' "$name" | tr -cd '[:alnum:]._-' | sed -E 's/-+/-/g; s/^-//; s/-$//')"
+  printf '%s' "$name"
+}
+
+sql_quote() {
+  printf '%s' "$1" | sed "s/'/''/g"
+}
+
+log() {
+  printf '%s %s\n' "$(date -Is)" "$*" | tee -a "$LOG"
+}
+
+api_key() {
+  if [ -n "${ANYTHINGLLM_API_KEY:-}" ]; then
+    printf '%s' "$ANYTHINGLLM_API_KEY"
+    return
+  fi
+
+  if [ -r "$DB" ]; then
+    sqlite3 -noheader "$DB" \
+      "select secret from api_keys where secret is not null and length(secret) > 0 order by id limit 1;"
+    return
+  fi
+
+  echo "ANYTHINGLLM_API_KEY is not set and $DB is not readable." >&2
+  exit 1
+}
+
+workspace_exists() {
+  curl -fsS -H "Authorization: Bearer $KEY" \
+    "$API_URL/api/v1/workspaces" |
+    jq -e --arg slug "$WORKSPACE_SLUG" '.workspaces[]? | select(.slug == $slug)' >/dev/null
+}
+
+workspace_docs_for_source() {
+  local rel_path="$1"
+  local title="$2"
+  local title_with_ext="$3"
+  local filename_prefix="$4"
+  local rel_q title_q title_ext_q prefix_q workspace_q
+
+  rel_q="$(sql_quote "$rel_path")"
+  title_q="$(sql_quote "$title")"
+  title_ext_q="$(sql_quote "$title_with_ext")"
+  prefix_q="$(sql_quote "$filename_prefix")"
+  workspace_q="$(sql_quote "$WORKSPACE_SLUG")"
+
+  sqlite3 -json "$DB" "
+    select
+      wd.id,
+      wd.docId,
+      wd.docpath,
+      wd.filename,
+      json_extract(wd.metadata, '\$.title') as title,
+      json_extract(wd.metadata, '\$.description') as description,
+      json_extract(wd.metadata, '\$.docSource') as docSource
+    from workspace_documents wd
+    join workspaces w on w.id = wd.workspaceId
+    where w.slug = '$workspace_q'
+      and (
+        json_extract(wd.metadata, '\$.description') = '$rel_q'
+        or json_extract(wd.metadata, '\$.title') = '$title_q'
+        or json_extract(wd.metadata, '\$.title') = '$title_ext_q'
+        or wd.filename like '$prefix_q-%'
+      )
+    order by wd.id;"
+}
+
+workspace_doc_vector_count() {
+  local doc_location="$1"
+  local loc_q workspace_q
+
+  loc_q="$(sql_quote "$doc_location")"
+  workspace_q="$(sql_quote "$WORKSPACE_SLUG")"
+
+  sqlite3 -noheader "$DB" "
+    select count(dv.id)
+    from workspace_documents wd
+    join workspaces w on w.id = wd.workspaceId
+    left join document_vectors dv on dv.docId = wd.docId
+    where w.slug = '$workspace_q'
+      and wd.docpath = '$loc_q';"
+}
+
+managed_workspace_docs() {
+  local workspace_q
+  workspace_q="$(sql_quote "$WORKSPACE_SLUG")"
+
+  sqlite3 -json "$DB" "
+    select
+      wd.id,
+      wd.docId,
+      wd.docpath,
+      wd.filename,
+      json_extract(wd.metadata, '\$.title') as title,
+      json_extract(wd.metadata, '\$.description') as description,
+      json_extract(wd.metadata, '\$.docSource') as docSource
+    from workspace_documents wd
+    join workspaces w on w.id = wd.workspaceId
+    where w.slug = '$workspace_q'
+      and json_extract(wd.metadata, '\$.docSource') = 'EdSysVault_RAG'
+    order by wd.id;"
+}
+
+processed_doc_hash() {
+  local docpath="$1"
+  local full="$STORAGE_DOCS/$docpath"
+
+  [ -r "$full" ] || return 1
+  jq -erj '.pageContent' "$full" | sha256sum | awk '{print $1}'
+}
+
+init_manifest() {
+  mkdir -p "$(dirname "$STATE")"
+
+  if [ -s "$STATE" ] && jq -e \
+    --arg workspace "$WORKSPACE_SLUG" \
+    --arg sourceRoot "$SRC" \
+    'type == "object"
+      and (.documents | type == "object")
+      and .workspaceSlug == $workspace
+      and .sourceRoot == $sourceRoot' \
+    "$STATE" >/dev/null 2>&1; then
+    return
+  fi
+
+  if [ -e "$STATE" ]; then
+    local backup
+    backup="$STATE.invalid-$(date +%Y%m%d-%H%M%S)"
+    mv "$STATE" "$backup"
+    log "WARN invalid manifest moved to $backup"
+  fi
+
+  jq -n \
+    --arg workspace "$WORKSPACE_SLUG" \
+    --arg sourceRoot "$SRC" \
+    --arg createdAt "$(date -Is)" \
+    '{
+      version: 1,
+      tool: "anythingllm-upload-edsys-rag",
+      workspaceSlug: $workspace,
+      sourceRoot: $sourceRoot,
+      createdAt: $createdAt,
+      updatedAt: $createdAt,
+      documents: {}
+    }' > "$STATE"
+}
+
+manifest_hash() {
+  local rel_path="$1"
+  jq -r --arg rel "$rel_path" '.documents[$rel].sha256 // empty' "$STATE"
+}
+
+manifest_set_entry() {
+  local rel_path="$1"
+  local sha256="$2"
+  local doc_location="$3"
+  local title="$4"
+  local status="$5"
+  local file="$6"
+  local tmp size mtime now
+
+  size="$(stat -c '%s' "$file")"
+  mtime="$(stat -c '%Y' "$file")"
+  now="$(date -Is)"
+  tmp="$(mktemp)"
+
+  jq \
+    --arg rel "$rel_path" \
+    --arg sha256 "$sha256" \
+    --arg docLocation "$doc_location" \
+    --arg title "$title" \
+    --arg status "$status" \
+    --arg now "$now" \
+    --argjson size "$size" \
+    --argjson mtime "$mtime" \
+    '.updatedAt = $now
+      | .documents[$rel] = {
+          sha256: $sha256,
+          docLocation: $docLocation,
+          title: $title,
+          status: $status,
+          sourceSizeBytes: $size,
+          sourceMtimeEpoch: $mtime,
+          updatedAt: $now
+        }' "$STATE" > "$tmp"
+  mv "$tmp" "$STATE"
+}
+
+manifest_delete_entry() {
+  local rel_path="$1"
+  local tmp now
+
+  now="$(date -Is)"
+  tmp="$(mktemp)"
+  jq --arg rel "$rel_path" --arg now "$now" '.updatedAt = $now | del(.documents[$rel])' "$STATE" > "$tmp"
+  mv "$tmp" "$STATE"
+}
+
+remove_docpaths_json() {
+  local docpaths_json="$1"
+  local count response_json
+
+  count="$(jq 'length' <<< "$docpaths_json")"
+  [ "${count:-0}" -gt 0 ] || return 0
+
+  if [ "$DRY_RUN" = "1" ]; then
+    log "DRY_RUN would remove workspace attachments: $(jq -r 'join(", ")' <<< "$docpaths_json")"
+    return 0
+  fi
+
+  response_json="$(mktemp)"
+  if ! jq -n --argjson deletes "$docpaths_json" '{deletes: $deletes}' |
+    curl -fsS \
+      -H "Authorization: Bearer $KEY" \
+      -H "Content-Type: application/json" \
+      -d @- \
+      "$API_URL/api/v1/workspace/$WORKSPACE_SLUG/update-embeddings" > "$response_json"; then
+    log "FAILED deletion request for: $(jq -r 'join(", ")' <<< "$docpaths_json")"
+    rm -f "$response_json"
+    return 1
+  fi
+
+  if ! jq -e --arg slug "$WORKSPACE_SLUG" '.workspace.slug == $slug' "$response_json" >/dev/null 2>&1; then
+    log "FAILED deletion response for: $(jq -r 'join(", ")' <<< "$docpaths_json")"
+    jq -c . "$response_json" >> "$LOG" || cat "$response_json" >> "$LOG"
+    rm -f "$response_json"
+    return 1
+  fi
+
+  rm -f "$response_json"
+}
+
+archive_stale_generated_documents() {
+  local active_list stale_list stale_count archive_dir rel
+
+  if [ ! -d "$STORAGE_DOCS/custom-documents" ]; then
+    log "CLEANUP stale generated RAG documents: custom-documents missing"
+    return 0
+  fi
+
+  active_list="$(mktemp)"
+  stale_list="$(mktemp)"
+
+  sqlite3 -noheader "$DB" \
+    "select docpath from workspace_documents where docpath like 'custom-documents/%';" | sort -u > "$active_list"
+
+  find "$STORAGE_DOCS/custom-documents" -maxdepth 1 -type f \
+    \( -iname '*rag-summary*.json' -o -iname '*rag-summary.md*.json' \) \
+    -printf 'custom-documents/%f\n' | sort -u | while IFS= read -r rel; do
+      if ! grep -Fxq "$rel" "$active_list"; then
+        printf '%s\n' "$rel"
+      fi
+    done > "$stale_list"
+
+  stale_count="$(wc -l < "$stale_list" | tr -d '[:space:]')"
+  if [ "${stale_count:-0}" -eq 0 ]; then
+    log "CLEANUP stale generated RAG documents=0"
+    rm -f "$active_list" "$stale_list"
+    return 0
+  fi
+
+  archive_dir="$STORAGE_DOCS/_archive/stale-rag-custom-documents-$(date +%Y%m%d-%H%M%S)"
+  if [ "$DRY_RUN" = "1" ]; then
+    log "DRY_RUN would archive stale generated RAG documents=$stale_count archive=$archive_dir"
+    rm -f "$active_list" "$stale_list"
+    return 0
+  fi
+
+  mkdir -p "$archive_dir/custom-documents"
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    if [ -e "$STORAGE_DOCS/$rel" ]; then
+      mv -- "$STORAGE_DOCS/$rel" "$archive_dir/$rel"
+    fi
+  done < "$stale_list"
+
+  log "CLEANUP archived stale generated RAG documents=$stale_count archive=$archive_dir"
+  rm -f "$active_list" "$stale_list"
+}
+
+upload_and_embed() {
+  local file="$1"
+  local rel_path="$2"
+  local title="$3"
+  local sha256="$4"
+  local upload_json embed_json doc_location
+
+  if [ "$DRY_RUN" = "1" ]; then
+    UPLOADED_DOC_LOCATION="dry-run/$rel_path"
+    return 0
+  fi
+
+  upload_json="$(mktemp)"
+  embed_json="$(mktemp)"
+
+  if ! jq -n \
+    --rawfile text "$file" \
+    --arg title "$title" \
+    --arg description "$rel_path" \
+    --arg sha256 "$sha256" \
+    '{
+      textContent: $text,
+      metadata: {
+        title: $title,
+        description: $description,
+        docAuthor: "Jeremy",
+        docSource: "EdSysVault_RAG",
+        chunkSource: $description,
+        edsysRagRelPath: $description,
+        edsysRagSha256: $sha256
+      }
+    }' |
+    curl -fsS \
+      -H "Authorization: Bearer $KEY" \
+      -H "Content-Type: application/json" \
+      -d @- \
+      "$API_URL/api/v1/document/raw-text" > "$upload_json"; then
+    log "FAILED upload request: $rel_path"
+    rm -f "$upload_json" "$embed_json"
+    return 1
+  fi
+
+  if ! jq -e '.success == true' "$upload_json" >/dev/null 2>&1; then
+    log "FAILED upload response: $rel_path"
+    jq -c . "$upload_json" >> "$LOG" || cat "$upload_json" >> "$LOG"
+    rm -f "$upload_json" "$embed_json"
+    return 1
+  fi
+
+  doc_location="$(jq -r '.documents[0].location // empty' "$upload_json")"
+  if [ -z "$doc_location" ]; then
+    log "FAILED missing document location: $rel_path"
+    jq -c . "$upload_json" >> "$LOG" || cat "$upload_json" >> "$LOG"
+    rm -f "$upload_json" "$embed_json"
+    return 1
+  fi
+
+  if ! jq -n --arg loc "$doc_location" '{adds: [$loc]}' |
+    curl -fsS \
+      -H "Authorization: Bearer $KEY" \
+      -H "Content-Type: application/json" \
+      -d @- \
+      "$API_URL/api/v1/workspace/$WORKSPACE_SLUG/update-embeddings" > "$embed_json"; then
+    log "FAILED embedding request: $rel_path"
+    rm -f "$upload_json" "$embed_json"
+    return 1
+  fi
+
+  if ! jq -e --arg slug "$WORKSPACE_SLUG" '.workspace.slug == $slug' "$embed_json" >/dev/null 2>&1; then
+    log "FAILED embedding response: $rel_path"
+    jq -c . "$embed_json" >> "$LOG" || cat "$embed_json" >> "$LOG"
+    rm -f "$upload_json" "$embed_json"
+    return 1
+  fi
+
+  vector_count="$(workspace_doc_vector_count "$doc_location" | tr -d '[:space:]')"
+  if [ "${vector_count:-0}" -le 0 ]; then
+    log "FAILED embedding verification: $rel_path attached no vectors for $doc_location"
+    jq -c . "$embed_json" >> "$LOG" || cat "$embed_json" >> "$LOG"
+    rm -f "$upload_json" "$embed_json"
+    return 1
+  fi
+
+  UPLOADED_DOC_LOCATION="$doc_location"
+  rm -f "$upload_json" "$embed_json"
+}
+
+require_cmd awk
+require_cmd curl
+require_cmd find
+require_cmd flock
+require_cmd jq
+require_cmd sed
+require_cmd sha256sum
+require_cmd sort
+require_cmd sqlite3
+require_cmd stat
+
+mkdir -p "$(dirname "$LOG")" "$(dirname "$STATE")"
+: > "$LOG"
+
+exec 9>"$LOCK"
+if ! flock -n 9; then
+  log "another upload run is active; exiting"
+  exit 0
+fi
+
+if [ ! -d "$SRC" ]; then
+  log "ERROR source directory does not exist: $SRC"
+  exit 1
+fi
+
+KEY="$(api_key)"
+if [ -z "$KEY" ]; then
+  log "ERROR no AnythingLLM API key found"
+  exit 1
+fi
+
+workspace_exists || {
+  log "ERROR AnythingLLM workspace not found: $WORKSPACE_SLUG"
+  exit 1
+}
+
+init_manifest
+
+current_files="$(mktemp)"
+current_rels="$(mktemp)"
+cleanup() {
+  rm -f "$current_files" "$current_rels"
+}
+trap cleanup EXIT
+
+find "$SRC" -type f -name '*RAG Summary.md' | sort > "$current_files"
+: > "$current_rels"
+while IFS= read -r file; do
+  printf '%s\n' "${file#$SRC/}" >> "$current_rels"
+done < "$current_files"
+
+uploaded=0
+adopted=0
+skipped=0
+replaced=0
+removed_stale=0
+failed=0
+
+managed_json="$(managed_workspace_docs)"
+while IFS= read -r row; do
+  description="$(jq -r '.description // empty' <<< "$row")"
+  docpath="$(jq -r '.docpath // empty' <<< "$row")"
+
+  [ -n "$description" ] || continue
+  if grep -Fxq "$description" "$current_rels"; then
+    continue
+  fi
+
+  log "REMOVE stale managed workspace attachment: $description"
+  if remove_docpaths_json "$(jq -nc --arg docpath "$docpath" '[$docpath]')"; then
+    manifest_delete_entry "$description"
+    removed_stale=$((removed_stale + 1))
+  else
+    failed=$((failed + 1))
+  fi
+done < <(printf '%s' "$managed_json" | jq -c '.[]?')
+
+while IFS= read -r file; do
+  rel_path="${file#$SRC/}"
+  title="$(basename "$file" .md)"
+  title_with_ext="$(basename "$file")"
+  filename_prefix="$(slugify_filename "$title_with_ext")"
+  sha256="$(sha256sum "$file" | awk '{print $1}')"
+  existing_json="$(workspace_docs_for_source "$rel_path" "$title" "$title_with_ext" "$filename_prefix")"
+  existing_count="$(jq 'length' <<< "$existing_json")"
+  existing_docpaths_json="$(jq -c '[.[].docpath]' <<< "$existing_json")"
+  existing_docpath="$(jq -r '.[0].docpath // empty' <<< "$existing_json")"
+  existing_hash=""
+  existing_vector_count=0
+  known_hash="$(manifest_hash "$rel_path")"
+
+  if [ ! -s "$file" ]; then
+    if [ "${existing_count:-0}" -gt 0 ]; then
+      log "REMOVE empty source attachment: $rel_path"
+      if remove_docpaths_json "$existing_docpaths_json"; then
+        manifest_delete_entry "$rel_path"
+        removed_stale=$((removed_stale + 1))
+      else
+        failed=$((failed + 1))
+      fi
+    else
+      log "SKIP empty: $rel_path"
+      manifest_delete_entry "$rel_path"
+      skipped=$((skipped + 1))
+    fi
+    continue
+  fi
+
+  if [ "${existing_count:-0}" -eq 1 ]; then
+    existing_hash="$(processed_doc_hash "$existing_docpath" || true)"
+    existing_vector_count="$(workspace_doc_vector_count "$existing_docpath" | tr -d '[:space:]')"
+    existing_vector_count="${existing_vector_count:-0}"
+  fi
+
+  if [ "${existing_count:-0}" -eq 1 ] && [ "$existing_hash" = "$sha256" ] && [ "$existing_vector_count" -gt 0 ]; then
+    if [ "$known_hash" = "$sha256" ]; then
+      log "SKIP unchanged: $rel_path"
+      skipped=$((skipped + 1))
+    else
+      log "ADOPT current attachment into hash manifest: $rel_path"
+      adopted=$((adopted + 1))
+    fi
+    manifest_set_entry "$rel_path" "$sha256" "$existing_docpath" "$title" "current" "$file"
+    continue
+  fi
+
+  if [ "${existing_count:-0}" -gt 0 ]; then
+    if [ "${existing_count:-0}" -gt 1 ]; then
+      log "REPLACE duplicate workspace attachments: $rel_path"
+    elif [ -z "$existing_hash" ]; then
+      log "REPLACE unreadable processed document: $rel_path"
+    elif [ "${existing_vector_count:-0}" -le 0 ]; then
+      log "REPLACE missing vectors: $rel_path"
+    else
+      log "REPLACE hash changed: $rel_path old=${existing_hash:0:12} new=${sha256:0:12}"
+    fi
+
+    if remove_docpaths_json "$existing_docpaths_json"; then
+      replaced=$((replaced + 1))
+    else
+      failed=$((failed + 1))
+      continue
+    fi
+  else
+    log "UPLOAD missing workspace attachment: $rel_path"
+  fi
+
+  if upload_and_embed "$file" "$rel_path" "$title" "$sha256"; then
+    manifest_set_entry "$rel_path" "$sha256" "$UPLOADED_DOC_LOCATION" "$title" "current" "$file"
+    log "OK: $rel_path -> $UPLOADED_DOC_LOCATION"
+    uploaded=$((uploaded + 1))
+  else
+    failed=$((failed + 1))
+  fi
+done < "$current_files"
+
+archive_stale_generated_documents
+
+log "Done uploaded=$uploaded replaced=$replaced adopted=$adopted skipped=$skipped removed_stale=$removed_stale failed=$failed state=$STATE log=$LOG"
+
+if [ "$failed" -gt 0 ]; then
+  exit 1
+fi

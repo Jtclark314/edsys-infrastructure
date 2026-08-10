@@ -1,0 +1,11 @@
+[Unit]
+Description=Build EdSys RAG mirror from Syncthing canonical vault
+Documentation=file:/srv/edsys/edsys-infrastructure/scripts/ops/README.md
+After=syncthing.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/jeremy/bin/edsys-rag-sync
+ExecStartPost=/home/jeremy/bin/edsys-grounding-index
+ExecStartPost=/home/jeremy/bin/anythingllm-upload-edsys-rag
+ExecStartPost=/home/jeremy/bin/anythingllm-rag-verify.py --quick

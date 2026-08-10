@@ -1,6 +1,6 @@
 services:
   anythingllm:
-    image: mintplexlabs/anythingllm@sha256:2be879706ac122c5e75fdb7c2ae3b60881c606445a4e8bbd1034e08c4aac386d
+    image: mintplexlabs/anythingllm@sha256:00903f6311607b661d40f9e1d0e027d61e28a7b002ea9d1b7cad7763d26099f9
     container_name: anythingllm
     restart: unless-stopped
     networks: [ai-net]

@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh EdSys RAG mirror every five minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=edsys-rag-sync.service
+
+[Install]
+WantedBy=timers.target

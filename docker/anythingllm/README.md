@@ -6,6 +6,7 @@ Sanitized deployable source for the existing AnythingLLM Compose project.
 - Persistent application state and the read-only reviewed RAG source live under `/mnt/ai-store`.
 - Runtime provider and broker settings are read from root-managed files under `/etc/edsys-secrets`; their contents never belong in Git.
 - The external `ai-net` network provides private service-name access to Ollama.
+- The legacy convenience path `/home/jeremy/stacks/anythingllm/docker-compose.yml` is a symlink to this tracked Compose file so it cannot drift into a second deployment definition.
 
 ```bash
 docker compose --project-name anythingllm -f docker/anythingllm/compose.yaml config --quiet
@@ -15,7 +16,9 @@ docker compose --project-name anythingllm -f docker/anythingllm/compose.yaml ps
 
 Use project name `anythingllm` so this source manages the existing Compose project. Confirm `/mnt/ai-store` and both private env files before recovery. Do not create replacement env files in the repository.
 
-The image is pinned to the digest verified live on 2026-07-13. Upgrade only in
-a separate maintenance gate: review a candidate, pull its exact digest, test it
-against the retained data and both managed workspaces, and update the tracked
-pin only after acceptance. Do not run an unreviewed `docker compose pull`.
+The image is pinned to AnythingLLM `1.15.0`, digest
+`sha256:00903f6311607b661d40f9e1d0e027d61e28a7b002ea9d1b7cad7763d26099f9`,
+verified live on 2026-08-10. Upgrade only in a separate maintenance gate:
+back up the retained data, review and pull a candidate by exact digest, then
+test it against the sole managed `EdSys-RAG-Current` workspace before updating
+the tracked pin. Do not run an unreviewed `docker compose pull`.
