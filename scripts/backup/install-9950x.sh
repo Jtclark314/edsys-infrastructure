@@ -144,6 +144,10 @@ ensure_exact_selection_line \
   "The canonical Foothills project tree is part of the critical backup set."
 ensure_exact_selection_line \
   /etc/edsys-backup/includes.txt \
+  /mnt/ai-store/foothills-schedule-procurement \
+  "The Foothills schedule/procurement runtime and verified online backups are part of the critical backup set."
+ensure_exact_selection_line \
+  /etc/edsys-backup/includes.txt \
   /mnt/ai-store/foothills-basecamp-offsite \
   "The verified all-application Basecamp recovery stage is part of the critical backup set."
 ensure_exact_selection_line \

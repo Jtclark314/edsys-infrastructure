@@ -1,0 +1,20 @@
+[Unit]
+Description=Foothills Schedule Procurement verified online backup and restore test
+After=docker.service
+RequiresMountsFor=/mnt/ai-store
+
+[Service]
+Type=oneshot
+User=jeremy
+Group=jeremy
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /srv/edsys/edsys-infrastructure/scripts/schedule-procurement/schedule_procurement_backup.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/mnt/ai-store/foothills-schedule-procurement/backups
+ReadOnlyPaths=/mnt/ai-store/foothills-schedule-procurement/database
+
+[Install]
+WantedBy=multi-user.target

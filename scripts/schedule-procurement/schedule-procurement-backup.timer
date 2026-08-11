@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Foothills Schedule Procurement verified backup
+
+[Timer]
+OnCalendar=*-*-* 00:50:00 America/New_York
+Persistent=true
+RandomizedDelaySec=5m
+Unit=schedule-procurement-backup.service
+
+[Install]
+WantedBy=timers.target

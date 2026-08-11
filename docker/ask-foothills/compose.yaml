@@ -15,6 +15,7 @@ services:
       FOOTHILLS_QUERY_SCRIPT: /srv/foothills/project/.agents/skills/foothills-query/scripts/foothills_query.py
       FOOTHILLS_CATALOG_DB: /srv/foothills/project/project-management/project-controls/foothills-catalog.sqlite3
       FOOTHILLS_QUERY_DB: /srv/foothills/project/project-management/project-controls/foothills-query-index.sqlite3
+      FOOTHILLS_OPERATIONAL_SNAPSHOT_DB: /srv/foothills/operational/current.sqlite3
       ASK_FOOTHILLS_AUDIT_DB: /var/lib/ask-foothills/audit.sqlite3
       FOOTHILLS_QUERY_MODEL: foothills-query-best
       ASK_FOOTHILLS_DEV_AUTH: "false"
@@ -24,6 +25,7 @@ services:
     volumes:
       - ${FOOTHILLS_PROJECT_ROOT:-/home/jeremy/projects/foothills}:/srv/foothills/project:ro
       - ${ASK_FOOTHILLS_AUDIT_DIR:-/var/lib/ask-foothills}:/var/lib/ask-foothills:rw
+      - ${SCHEDULE_PROCUREMENT_PUBLICATION_DIR:-/mnt/ai-store/foothills-schedule-procurement/publications}:/srv/foothills/operational:ro
     read_only: true
     tmpfs:
       - /tmp:size=256m,mode=1777

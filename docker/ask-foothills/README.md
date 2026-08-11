@@ -56,3 +56,12 @@ automatic host-reboot recovery. The audit database is metadata-only and purges
 records older than 90 days; it still belongs in the encrypted 9950x backup
 manifest. Do not back up or persist rendered PDF pages, selected evidence,
 prompts, answers, or conversation state.
+The optional schedule/procurement provider mounts only the publication
+directory read-only so atomic replacement of `current.sqlite3` is visible
+without restarting Ask. The source is
+`/mnt/ai-store/foothills-schedule-procurement/publications/`; no other runtime
+directory is mounted.
+It is exposed through the authenticated deterministic
+`GET /api/operational/search` endpoint. Ask never mounts the operational
+schedule/procurement database, immutable publication history, audits, user
+table, uploads, reports, or imports.
