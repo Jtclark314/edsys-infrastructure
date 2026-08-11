@@ -10,11 +10,28 @@ import pytest
 
 
 MODULE_PATH = Path(__file__).parents[1] / "arr-transfer-arbiter.py"
+ENV_PATH = Path(__file__).parents[1] / "arr-transfer-arbiter.env.example"
+UNIT_PATH = Path(__file__).parents[1] / "systemd/arr-transfer-arbiter.service"
 SPEC = importlib.util.spec_from_file_location("arr_transfer_arbiter", MODULE_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
+
+
+def test_watchdog_budget_exceeds_two_bounded_docker_calls():
+    env = dict(
+        line.split("=", 1)
+        for line in ENV_PATH.read_text().splitlines()
+        if line and not line.startswith("#")
+    )
+    unit = UNIT_PATH.read_text()
+    watchdog = int(unit.split("WatchdogSec=", 1)[1].splitlines()[0])
+    command_timeout = int(env["ARR_TRANSFER_COMMAND_TIMEOUT_SECONDS"])
+    poll_seconds = int(env["ARR_TRANSFER_POLL_SECONDS"])
+
+    assert poll_seconds >= 5
+    assert watchdog >= (2 * command_timeout) + poll_seconds
 
 
 def config(tmp_path: Path, idle_grace: float = 60) -> MODULE.Config:

@@ -53,7 +53,7 @@ proof and forces a new fail-closed handoff.
 
 ## Automatic behavior
 
-The daemon polls every two seconds. In `auto` mode:
+The daemon polls every five seconds. In `auto` mode:
 
 1. If the SAB queue or post-processing has work, qBittorrent is quiesced and
    SAB is released.
@@ -153,8 +153,13 @@ sudo arr-transfer-arbiter status --check
 docker inspect -f '{{.State.Status}} paused={{.State.Paused}} restart={{.HostConfig.RestartPolicy.Name}}' qbittorrent
 ```
 
-The main unit uses `Type=notify`, a 30-second systemd watchdog, bounded API and
-Docker calls, `Restart=always`, and an `ExecStopPost` fail-safe. The health
+The main unit uses `Type=notify`, a 60-second systemd watchdog, bounded API and
+Docker calls, `Restart=always`, and an `ExecStopPost` fail-safe. The watchdog
+window intentionally exceeds two consecutive bounded 15-second Docker calls,
+so a transient Docker control-plane stall can be recorded as degraded and the
+fail-closed posture can be reconciled before systemd kills the controller. The
+five-second poll interval also avoids unnecessary Docker inspection pressure
+during sustained download and post-processing I/O. The health
 timer makes a latched or degraded controller visible as a failed oneshot unit
 even when the long-running process remains alive to enforce the hold.
 External notification routing for that failed-unit surface remains to be

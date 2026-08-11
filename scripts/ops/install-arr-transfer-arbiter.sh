@@ -127,9 +127,7 @@ python3 "$source_script" configure-boot-safety >/dev/null
 
 install -m 0755 "$source_script" "$runtime_script"
 install -D -m 0644 "$source_doc" "$runtime_doc"
-if [[ ! -e "$runtime_env" ]]; then
-  install -m 0644 "$source_env" "$runtime_env"
-fi
+install -m 0644 "$source_env" "$runtime_env"
 install -m 0644 "${source_units}/arr-transfer-arbiter.service" \
   "${unit_dir}/arr-transfer-arbiter.service"
 install -m 0644 "${source_units}/arr-transfer-arbiter-health.service" \
