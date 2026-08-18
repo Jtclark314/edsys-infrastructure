@@ -9,11 +9,11 @@ used after a Docker daemon restart or host reboot.
 - Existing containers are required before a tier is started.
 - Recovery uses `docker compose start`, which can only start existing containers.
 - Already-running healthy services are skipped rather than restarted or
-  blocked on Docker health state reinitialization.
-- Docker live restore is deliberately disabled. On a host shutdown, dockerd
-  must stop containers before systemd tears down network namespaces and the
-  external Docker data-root mount; restart policies and this ordered recovery
-  controller restore the approved services on the next boot.
+  blocked on Docker health state reinitialization, except for the explicit
+  Docker-socket consumer allowlist when its bind points to a stale socket inode.
+- Docker live restore remains enabled so daemon-only maintenance preserves
+  ordinary workloads. After Docker returns, the controller compares the host
+  socket identity with each approved consumer and restarts only stale consumers.
 - Dockerd receives a 120-second container shutdown budget, while systemd gives
   the daemon three minutes to complete that work before escalation.
 - Missing containers, mounts, or blocking health gates stop the sequence.
@@ -35,8 +35,8 @@ sudo /usr/local/sbin/edsys-container-recovery recover --dry-run --force
 sudo /usr/local/sbin/edsys-container-recovery audit
 ```
 
-The installer validates `daemon.json`, deliberately disables Docker live
-restore for shutdown safety, sets bounded `json-file` defaults (`50m` with
+The installer validates `daemon.json`, keeps Docker live restore enabled, sets
+bounded `json-file` defaults (`50m` with
 three retained files) for newly created containers, reloads the daemon,
 installs the recovery/audit units, and enables the audit timer. It does not
 restart Docker or recreate containers; existing containers keep their current

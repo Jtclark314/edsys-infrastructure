@@ -116,6 +116,126 @@ def docker_ready(wait_seconds: int) -> bool:
     return False
 
 
+def live_restore_error(manifest: dict[str, Any]) -> str | None:
+    expected = manifest.get("expected_live_restore")
+    if expected is None:
+        return None
+    result = run(["docker", "info", "--format", "{{.LiveRestoreEnabled}}"], timeout=10)
+    if result.returncode != 0:
+        return "could not read Docker live-restore state"
+    actual = result.stdout.strip().lower() == "true"
+    if actual != bool(expected):
+        return f"Docker live-restore is {actual}, expected {bool(expected)}"
+    return None
+
+
+def docker_socket_consumer_state(
+    manifest: dict[str, Any],
+    *,
+    inspected: list[dict[str, Any]] | None = None,
+    stat_fn: Any = None,
+    stopped_is_error: bool = True,
+) -> tuple[list[str], list[str]]:
+    config = manifest.get("docker_socket_rebind") or {}
+    consumers = list(config.get("consumers") or [])
+    if not consumers:
+        return [], []
+    if stat_fn is None:
+        stat_fn = os.stat
+    if inspected is None:
+        result = run(["docker", "inspect", *consumers], timeout=60)
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip().splitlines()[-1:]
+            return [], [
+                "could not inspect approved Docker socket consumers: "
+                + (detail[0] if detail else "no detail")
+            ]
+        inspected = json.loads(result.stdout)
+
+    by_name = {
+        str(item.get("Name", "")).lstrip("/"): item
+        for item in inspected
+        if item.get("Name")
+    }
+    try:
+        host_socket = stat_fn("/var/run/docker.sock")
+        host_identity = (host_socket.st_dev, host_socket.st_ino)
+    except OSError as exc:
+        return [], [f"host Docker socket stat failed: {type(exc).__name__}"]
+
+    stale: list[str] = []
+    errors: list[str] = []
+    for name in consumers:
+        item = by_name.get(name)
+        if not item:
+            errors.append(f"approved Docker socket consumer missing: {name}")
+            continue
+        state = item.get("State") or {}
+        if state.get("Status") != "running":
+            if stopped_is_error:
+                errors.append(f"approved Docker socket consumer is not running: {name}")
+            continue
+        mounts = item.get("Mounts") or []
+        if not any(
+            mount.get("Destination") == "/var/run/docker.sock"
+            and mount.get("Type") == "bind"
+            for mount in mounts
+        ):
+            errors.append(f"approved Docker socket consumer lacks the expected bind: {name}")
+            continue
+        pid = int(state.get("Pid") or 0)
+        if pid <= 0:
+            errors.append(f"approved Docker socket consumer has no running PID: {name}")
+            continue
+        try:
+            inside_socket = stat_fn(f"/proc/{pid}/root/var/run/docker.sock")
+        except OSError as exc:
+            errors.append(f"{name}: container Docker socket stat failed: {type(exc).__name__}")
+            continue
+        if (inside_socket.st_dev, inside_socket.st_ino) != host_identity:
+            stale.append(name)
+    return stale, errors
+
+
+def rebind_docker_socket_consumers(
+    manifest: dict[str, Any], *, dry_run: bool
+) -> list[str]:
+    stale, errors = docker_socket_consumer_state(manifest, stopped_is_error=False)
+    if errors:
+        return errors
+    if not stale:
+        log("Docker socket consumers already reference the current host socket")
+        return []
+    config = manifest.get("docker_socket_rebind") or {}
+    timeout = int(config.get("restart_timeout_seconds", 30))
+    command = ["docker", "restart", "--timeout", str(timeout), *stale]
+    log("PLAN " + shlex.join(command))
+    if dry_run:
+        return []
+    result = run(command, timeout=max(120, timeout * len(stale)))
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip().splitlines()[-1:]
+        return [
+            "Docker socket consumer restart failed: "
+            + (detail[0] if detail else "no detail")
+        ]
+    deadline = time.monotonic() + int(config.get("verify_timeout_seconds", 90))
+    last_stale: list[str] = stale
+    last_errors: list[str] = []
+    while time.monotonic() < deadline:
+        last_stale, last_errors = docker_socket_consumer_state(
+            manifest, stopped_is_error=False
+        )
+        if not last_stale and not last_errors:
+            log("Docker socket consumer rebind complete")
+            return []
+        time.sleep(2)
+    return last_errors + [
+        "Docker socket consumer still references a stale socket: " + name
+        for name in last_stale
+    ]
+
+
 def exact_mount_ready(path: str) -> bool:
     result = run(["findmnt", "--mountpoint", path, "--noheadings"], timeout=10)
     return result.returncode == 0
@@ -254,6 +374,14 @@ def audit(manifest: dict[str, Any]) -> tuple[bool, list[str]]:
     errors: list[str] = []
     if not docker_ready(int(manifest.get("docker_wait_seconds", 60))):
         return False, ["Docker API did not become ready"]
+    if error := live_restore_error(manifest):
+        errors.append(error)
+    stale_consumers, socket_errors = docker_socket_consumer_state(manifest)
+    errors.extend(socket_errors)
+    errors.extend(
+        f"Docker socket consumer references a stale socket: {name}"
+        for name in stale_consumers
+    )
     for mount in manifest.get("required_mounts", []):
         if not exact_mount_ready(mount):
             errors.append(f"required mount is not mounted: {mount}")
@@ -279,19 +407,24 @@ def recover(manifest: dict[str, Any], *, dry_run: bool, force: bool) -> tuple[bo
     if maintenance_flag.exists() and not force:
         log(f"maintenance flag present at {maintenance_flag}; automatic recovery suppressed")
         return True, []
-    if cooldown_active(manifest) and not force:
-        log("recovery cooldown is active; refusing a restart storm")
-        return True, []
-    if not dry_run:
-        record_attempt("recover")
     if not docker_ready(int(manifest.get("docker_wait_seconds", 60))):
         return False, ["Docker API did not become ready"]
     errors: list[str] = []
+    if error := live_restore_error(manifest):
+        errors.append(error)
     for mount in manifest.get("required_mounts", []):
         if not exact_mount_ready(mount):
             errors.append(f"required mount is not mounted: {mount}")
     if errors:
         return False, errors
+    errors.extend(rebind_docker_socket_consumers(manifest, dry_run=dry_run))
+    if errors:
+        return False, errors
+    if cooldown_active(manifest) and not force:
+        log("recovery cooldown is active; refusing a restart storm")
+        return True, []
+    if not dry_run:
+        record_attempt("recover")
 
     for tier_number, tier in enumerate(manifest["tiers"], start=1):
         tier_name = tier["name"]

@@ -2,10 +2,24 @@ version: 1
 host: 9950x
 docker_wait_seconds: 90
 cooldown_seconds: 300
+expected_live_restore: true
 maintenance_flag: /run/edsys/container-recovery.disabled
 notification_url_file: /etc/edsys-container-recovery/notify-url
 required_mounts:
   - /mnt/data-500g
+docker_socket_rebind:
+  restart_timeout_seconds: 30
+  verify_timeout_seconds: 90
+  consumers:
+    - homepage
+    - homepage-workhorse
+    - homepage-foothills
+    - portainer
+    - workhorse-dozzle
+    - workhorse-alloy
+    - workhorse-crowdsec
+    - telegraf-9950x
+    - edsys-portal
 
 tiers:
   - name: operator-visibility
@@ -29,6 +43,12 @@ tiers:
         services: [homepage-workhorse]
         healthchecks:
           - url: http://127.0.0.1:3019/api/services
+            codes: [200]
+      - name: homepage-foothills
+        files: [/srv/homepage-foothills/docker-compose.yml]
+        services: [homepage-foothills]
+        healthchecks:
+          - url: http://127.0.0.1:3021/api/services
             codes: [200]
       - name: uptime-kuma
         files: [/home/jeremy/stacks/uptime-kuma/docker-compose.yml]
@@ -182,7 +202,7 @@ tiers:
         files: [/home/jeremy/code/edsys-ai-portal/docker-compose.yml]
         services: [edsys-ai-portal]
         healthchecks:
-          - url: http://192.168.50.50:3020/api/health
+          - url: http://127.0.0.1:3020/api/health
             codes: [200]
       - name: mailbrain
         files: [/srv/edsys/edsys-infrastructure/docker/mailbrain/compose.yaml]
