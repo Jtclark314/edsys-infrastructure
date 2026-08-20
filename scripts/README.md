@@ -18,6 +18,9 @@ Scripts should:
 - `backup/` - Restic/rclone backup tooling for 9950x, including the unified
   Basecamp Foothills application/service stage, off-host verification, Drive
   parity monitoring, and isolated recovery tests.
+- `codex/` - sanitized, endpoint-restricted Codex controller audit and reviewed
+  setup helpers; private reports, backups, installers, and credential state
+  remain outside Git.
 - `deploy/` - deployment preparation helpers such as the 9950x workhorse bootstrap.
 - `network/` - exact-address exposure helpers, including the FreeBind AI Tailnet socket proxy.
 - `ops/` - operational helpers and report-only scripts.
