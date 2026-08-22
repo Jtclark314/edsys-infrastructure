@@ -45,7 +45,7 @@ CRITICAL_TIMERS=(
   edsys-share-gdrive-prune.timer
 )
 
-AI_PROXY_PORTS=(3000 3002 6333 7997 8015 8020 8099 11434)
+AI_PROXY_PORTS=(3002 6333 7997 8015 8020 8099 11434)
 PACKAGES=(containerd.io netdata-user trivy vivaldi-stable)
 SHARE_MOUNT_CHECK="${EDSYS_SHARE_MOUNT_CHECK:-/usr/local/libexec/edsys-share/edsys-share-mount-check}"
 AI_PROXY_CHECK="${EDSYS_AI_PROXY_CHECK:-/usr/local/sbin/edsys-ai-tailnet-proxy-check}"

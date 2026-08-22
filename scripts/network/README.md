@@ -7,7 +7,6 @@ connection to its LAN-bound peer:
 
 | TCP | Service |
 | ---: | --- |
-| 3000 | Open WebUI |
 | 3002 | AnythingLLM |
 | 6333 | Qdrant HTTP |
 | 7997 | Infinity embeddings |
@@ -26,7 +25,8 @@ interface.
 
 The template is not an unrestricted forwarding primitive. A root-owned marker
 must exist for the instance port, and the installer creates markers only for
-the eight reviewed ports. Piper `10200`, Whisper `10300`, and OpenWakeWord
+the seven reviewed ports. Open WebUI `3000` is cold-stopped with its prior
+proxy marker/socket disabled during observation. Piper `10200`, Whisper `10300`, and OpenWakeWord
 `10400` remain Docker-published only on loopback and LAN and never receive
 Tailnet proxy instances.
 
@@ -59,7 +59,7 @@ After a full host reboot, run the checker before declaring boot recovery
 accepted. Also verify local dependencies and service-specific health, then test
 the Tailnet URLs from Nimo and Basecamp. A voice-port probe from a Tailnet-only
 client must still fail. `systemctl status
-edsys-ai-tailnet-proxy@3000.socket` is the model for inspecting one instance.
+edsys-ai-tailnet-proxy@3002.socket` is the model for inspecting one instance.
 
 ## Rollback
 
@@ -68,7 +68,7 @@ Every installer run writes root-private prior files and unit state under
 layer without deleting application data:
 
 ```bash
-for port in 3000 3002 6333 7997 8015 8020 8099 11434; do
+for port in 3002 6333 7997 8015 8020 8099 11434; do
   sudo systemctl disable --now "edsys-ai-tailnet-proxy@${port}.socket"
 done
 ```

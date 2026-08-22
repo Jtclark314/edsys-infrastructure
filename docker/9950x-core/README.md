@@ -7,8 +7,11 @@ Plex, Tautulli, and Open WebUI.
 Images are pinned to the digests verified during the 2026-07-12 recovery work.
 Runtime environment values, including Open WebUI service credentials, remain
 under `/etc/edsys-container-recovery/env/` and are never committed.
-Open WebUI publishes directly only on loopback/LAN; its exact Tailnet listener
-is the FreeBind proxy documented in `../../scripts/network/README.md`.
+Open WebUI remains defined with loopback/LAN publication for reversible use,
+but is cold-stopped for the owner-approved 14-30 day observation begun on
+2026-08-22. Its prior exact Tailnet proxy instance is disabled during that
+window; the retained proxy framework is documented in
+`../../scripts/network/README.md`.
 
 Plex receives the host NVIDIA GPU through a Compose device reservation. The
 host therefore requires a working NVIDIA driver and NVIDIA Container Toolkit.
@@ -35,8 +38,12 @@ docker inspect --format '{{json .HostConfig.DeviceRequests}}' plex
 docker exec plex nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
 curl -fsS http://127.0.0.1:32400/identity
 curl -fsS http://127.0.0.1:8181/status
-curl -fsS http://127.0.0.1:3000/health
 ```
+
+Do not expect the Open WebUI health path during the current observation. If the
+owner later approves reactivation, restore the retained service intentionally
+and validate `http://127.0.0.1:3000/health` before restoring any monitoring or
+Tailnet proxy state.
 
 For an end-to-end Plex check, force a temporary video conversion from a client
 and verify that the Plex Dashboard displays `(hw)` for the video transcode.

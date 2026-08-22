@@ -3,7 +3,7 @@ set -euo pipefail
 
 TAILSCALE_IP="${EDSYS_AI_TAILSCALE_IP:-100.87.137.47}"
 LAN_IP="${EDSYS_AI_LAN_IP:-192.168.50.50}"
-PORTS=(3000 3002 6333 7997 8015 8020 8099 11434)
+PORTS=(3002 6333 7997 8015 8020 8099 11434)
 MODE=install-only
 
 usage() {
@@ -14,7 +14,7 @@ Usage: sudo install-9950x-ai-tailnet-proxy.sh [--install-only|--enable]
                   active. This is the safe first install before Docker
                   Tailnet publications have been removed.
   --enable        Transactionally install/reload units, refuse listener
-                  conflicts, and enable all eight approved socket instances.
+                  conflicts, and enable all seven approved socket instances.
 EOF
 }
 

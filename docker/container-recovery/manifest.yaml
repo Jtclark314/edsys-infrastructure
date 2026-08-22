@@ -88,7 +88,6 @@ tiers:
           - langfuse-redis
           - langfuse-clickhouse
           - langfuse-minio
-          - karakeep-meilisearch
           - searxng-redis
           - loki
           - alloy
@@ -110,18 +109,12 @@ tiers:
           - /home/jeremy/stacks/n8n/docker-compose.yml
           - /home/jeremy/stacks/n8n/docker-compose.override.yml
         services: [postgres]
-      - name: sentinel
-        files: [/opt/stacks/sentinel/docker-compose.yml]
-        services: [postgres, redis, minio]
       - name: edsys-finance
         files: [/srv/edsys-finance/docker-compose.yml]
         services: [db]
       - name: spending-ledger
         files: [/srv/ssd1/docker/stacks/spending-ledger/docker-compose.yml]
         services: [spending-db]
-      - name: penpot
-        files: [/mnt/data-500g/docker/stacks/penpot/docker-compose.yml]
-        services: [penpot-postgres, penpot-valkey, penpot-mailcatch]
 
   - name: primary-services
     blocking: true
@@ -134,12 +127,6 @@ tiers:
           - url: http://127.0.0.1:32400/identity
             codes: [200]
           - url: http://127.0.0.1:8181/status
-            codes: [200]
-      - name: jellyfin
-        files: [/home/jeremy/stacks/jellyfin/docker-compose.yml]
-        services: [jellyfin]
-        healthchecks:
-          - url: http://127.0.0.1:8096/health
             codes: [200]
       - name: frigate
         files: [/opt/stacks/frigate/docker-compose.yml]
@@ -154,15 +141,9 @@ tiers:
         healthchecks:
           - url: http://127.0.0.1:5010/
             codes: [200, 302]
-      - name: audiobookshelf
-        files: [/srv/ssd1/docker/stacks/audiobookshelf/docker-compose.yml]
-        services: [audiobookshelf]
-        healthchecks:
-          - url: http://127.0.0.1:13378/
-            codes: [200]
       - name: 9950x-workhorse
         files: [/srv/edsys/edsys-infrastructure/docker/9950x-workhorse/compose.yaml]
-        services: [litellm, langfuse-worker, langfuse, karakeep-chrome, karakeep, searxng]
+        services: [litellm, langfuse-worker, langfuse, searxng]
         wait_timeout_seconds: 300
         healthchecks:
           - url: http://192.168.50.50:4000/health/liveliness
@@ -186,12 +167,6 @@ tiers:
   - name: dependent-applications
     blocking: false
     projects:
-      - name: 9950x-core
-        files: [/srv/edsys/edsys-infrastructure/docker/9950x-core/compose.yaml]
-        services: [openwebui]
-        healthchecks:
-          - url: http://127.0.0.1:3000/health
-            codes: [200]
       - name: anythingllm
         files: [/srv/edsys/edsys-infrastructure/docker/anythingllm/compose.yaml]
         services: [anythingllm]
@@ -240,33 +215,3 @@ tiers:
         healthchecks:
           - url: http://192.168.50.50:3011/
             codes: [200, 302]
-      - name: penpot
-        files: [/mnt/data-500g/docker/stacks/penpot/docker-compose.yml]
-        services: [penpot-backend, penpot-exporter, penpot-frontend]
-        healthchecks:
-          - url: http://127.0.0.1:9002/
-            codes: [200]
-      - name: sentinel
-        files: [/opt/stacks/sentinel/docker-compose.yml]
-        services: [sentinel-api, vault-connector]
-
-  - name: secondary-and-development
-    blocking: false
-    projects:
-      - name: exercise-routine-server
-        files: [/home/jeremy/exercise-routine-server/docker-compose.yml]
-        services: [exercise-routine]
-        healthchecks:
-          - url: http://127.0.0.1:8095/health
-            codes: [200]
-      - name: factorio
-        files: [/srv/ssd1/docker/stacks/factorio/compose.yaml]
-        services: [factorio]
-      - name: the-last-relay
-        files: [/home/jeremy/code/the-last-relay/docker-compose.yml]
-        services: [api, web]
-        healthchecks:
-          - url: http://127.0.0.1:8000/api/v1/ready
-            codes: [200]
-          - url: http://127.0.0.1:4173/healthz
-            codes: [200]
