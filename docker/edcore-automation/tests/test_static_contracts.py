@@ -1482,13 +1482,13 @@ class OperatorAssetContractTestCase(unittest.TestCase):
 
         for contract in (
             "local identity=$1 client_id=$2 audit_client_id=$3 topic=$4",
-            'mqtt_base command-audit "$audit_client_id" mosquitto_sub',
+            'MQTT_ALLOCATE_TTY=true mqtt_base command-audit "$audit_client_id" mosquitto_sub',
             '-W 10 -C 1',
             "-F 'EDSYS-AUDIT-DELIVERY:%p' -t \"$topic\"",
-            '>"$audit_trace" 2>"$audit_error" &',
+            '>"$audit_trace" 2>&1 &',
             'mqtt_session_was_authenticated \\\n      "$audit_client_id" command-audit "$audit_started"',
-            'grep -Fqx "Client $audit_client_id received SUBACK" "$audit_trace"',
-            "grep -Fqx 'Subscribed (mid: 1): 1' \"$audit_trace\"",
+            'grep -Fq "Client $audit_client_id received SUBACK" "$audit_trace"',
+            "grep -Fq 'Subscribed (mid: 1): 1' \"$audit_trace\"",
             'kill -0 "$audit_pid"',
             'mqtt_base "$identity" "$client_id" mosquitto_pub',
             '-d -h mosquitto -p 8883 -V mqttv5 -q 1 -t "$topic"',
@@ -1499,7 +1499,7 @@ class OperatorAssetContractTestCase(unittest.TestCase):
             '[[ $audit_rc -eq 27 ]]',
             '! grep -Fq "Client $audit_client_id received PUBLISH " "$audit_trace"',
             "! grep -Fq 'EDSYS-AUDIT-DELIVERY:' \"$audit_trace\"",
-            'mqtt_timeout_was_authenticated \\\n        "$audit_error" "$audit_client_id" command-audit',
+            'mqtt_timeout_was_authenticated \\\n        "$audit_trace" "$audit_client_id" command-audit',
         ):
             with self.subTest(acl_contract=contract):
                 self.assertIn(contract, acl_helper)

@@ -276,6 +276,7 @@ curl --fail --silent --show-error --cacert "$secret_root/pki/ca/ca.crt" \
 
 mqtt_base() {
   local identity=$1 client_id=$2 command=$3
+  local -a docker_args=(run --rm)
   shift 3
   [[ $client_id =~ ^[a-z0-9][a-z0-9-]{0,22}$ ]] || {
     echo "Unsafe or overlong MQTT client ID: $client_id" >&2
@@ -285,7 +286,13 @@ mqtt_base() {
     echo "Unsupported MQTT probe command: $command" >&2
     return 64
   }
-  docker run --rm --network "$network" \
+  # The subscriber CLI block-buffers debug output when stdout is a file.
+  # The ACL audit uses a pseudo-TTY so its SUBACK is observable before the
+  # protected publication. Other probes retain ordinary separated streams.
+  if [[ ${MQTT_ALLOCATE_TTY:-false} == true ]]; then
+    docker_args+=(-t)
+  fi
+  docker "${docker_args[@]}" --network "$network" \
     -v "$secret_root/pki/ca/ca.crt:/run/identity/ca.crt:ro" \
     -v "$secret_root/pki/clients/$identity.crt:/run/identity/client.crt:ro" \
     -v "$secret_root/pki/clients/$identity.key:/run/identity/client.key:ro" \
@@ -333,15 +340,14 @@ mqtt_acl_publish_must_fail() {
   local publisher_output="$scratch/acl-$client_id.publisher.log"
   local publisher_broker_log="$scratch/acl-$client_id.broker.log"
   local audit_trace="$scratch/acl-$client_id.audit.trace"
-  local audit_error="$scratch/acl-$client_id.audit.err"
   local audit_broker_log="$scratch/acl-$client_id.audit.log"
   local audit_started publisher_started audit_pid audit_rc
 
   audit_started=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
-  mqtt_base command-audit "$audit_client_id" mosquitto_sub \
+  MQTT_ALLOCATE_TTY=true mqtt_base command-audit "$audit_client_id" mosquitto_sub \
     -d -h mosquitto -p 8883 -V mqttv5 -q 1 -W 10 -C 1 \
     -F 'EDSYS-AUDIT-DELIVERY:%p' -t "$topic" \
-    >"$audit_trace" 2>"$audit_error" &
+    >"$audit_trace" 2>&1 &
   audit_pid=$!
 
   # Do not publish until the exact read-only audit identity has both an
@@ -357,8 +363,8 @@ mqtt_acl_publish_must_fail() {
   fi
   local readiness_deadline=$((SECONDS + 5))
   while ! {
-    grep -Fqx "Client $audit_client_id received SUBACK" "$audit_trace" &&
-      grep -Fqx 'Subscribed (mid: 1): 1' "$audit_trace"
+    grep -Fq "Client $audit_client_id received SUBACK" "$audit_trace" &&
+      grep -Fq 'Subscribed (mid: 1): 1' "$audit_trace"
   }; do
     if (( SECONDS >= readiness_deadline )) || ! kill -0 "$audit_pid" 2>/dev/null; then
       kill "$audit_pid" 2>/dev/null || true
@@ -405,7 +411,7 @@ mqtt_acl_publish_must_fail() {
       ! grep -Fq "Client $audit_client_id received PUBLISH " "$audit_trace" &&
       ! grep -Fq 'EDSYS-AUDIT-DELIVERY:' "$audit_trace" &&
       mqtt_timeout_was_authenticated \
-        "$audit_error" "$audit_client_id" command-audit \
+        "$audit_trace" "$audit_client_id" command-audit \
         "$audit_started" "$audit_broker_log"
   }; then
     echo "$identity command write was delivered or its authenticated audit timed out incorrectly." >&2
