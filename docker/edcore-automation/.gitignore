@@ -1,0 +1,9 @@
+.env
+backups/
+coverage/
+*.jsonl
+*.sqlite3
+*.age
+identity.txt
+__pycache__/
+*.pyc

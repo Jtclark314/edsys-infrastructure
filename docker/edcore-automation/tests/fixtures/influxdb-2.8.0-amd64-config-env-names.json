@@ -1,0 +1,16 @@
+{
+  "image": "docker.io/library/influxdb:2.8.0@sha256:09a5361809c771d863bcfa844a09598a82a6d9bbba1c9a9e2fa312e310572a14",
+  "platform": "linux/amd64",
+  "config_env_names": [
+    "PATH",
+    "GOSU_VER",
+    "INFLUXDB_VERSION",
+    "INFLUXDB_PR",
+    "INFLUXDB_PV",
+    "INFLUX_CLI_VERSION",
+    "INFLUX_CONFIGS_PATH",
+    "INFLUXD_INIT_PORT",
+    "INFLUXD_INIT_PING_ATTEMPTS",
+    "DOCKER_INFLUXDB_INIT_CLI_CONFIG_NAME"
+  ]
+}

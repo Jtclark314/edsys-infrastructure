@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly verified EdCore Automation backup pull before Restic
+
+[Timer]
+OnCalendar=*-*-* 01:55:00 America/New_York
+Persistent=true
+AccuracySec=1m
+Unit=edsys-edcore-automation-backup-pull.service
+
+[Install]
+WantedBy=timers.target

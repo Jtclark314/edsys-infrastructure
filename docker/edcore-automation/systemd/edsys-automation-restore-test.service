@@ -1,0 +1,19 @@
+[Unit]
+Description=Weekly isolated EdSys EdCore automation restore test
+Requires=docker.service
+After=docker.service edsys-automation-backup.service
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/edsys-secrets/edcore-automation/healthchecks/restore-test.env
+ExecStartPre=/usr/local/sbin/edsys-automation-source-guard --runtime
+ExecStart=/srv/edsys/edsys-infrastructure/docker/edcore-automation/scripts/restore-test.sh
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/edcore-automation /var/lib/docker /run/docker.sock /var/tmp

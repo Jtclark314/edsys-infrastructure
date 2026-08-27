@@ -1,0 +1,18 @@
+# Port 8884 is Compose-internal. Node-RED submits requests with retain=false;
+# only automation-runtime can publish production HA commands, also retain=false.
+
+user nodered
+topic read edsys/v1/telemetry/#
+topic read edsys/v1/state/#
+topic read edsys/v1/availability/#
+topic read edsys/v1/automation/ack/#
+topic read edsys/test/v1/replay/#
+topic write edsys/v1/automation/request/nodered
+topic write edsys/v1/state/derived/#
+topic write edsys/v1/availability/edcore-automation/nodered/#
+
+user automation-runtime
+topic read edsys/v1/automation/request/#
+topic write edsys/v1/command/ha/#
+topic write edsys/v1/automation/ack/#
+topic write edsys/v1/availability/edcore-automation/automation-runtime

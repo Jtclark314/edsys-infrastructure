@@ -1,0 +1,17 @@
+[Unit]
+Description=EdSys EdCore automation Docker Compose stack
+Requires=docker.service network-online.target edsys-automation-firewall.service
+After=docker.service network-online.target edsys-automation-firewall.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/srv/edsys/edsys-infrastructure/docker/edcore-automation
+ExecStartPre=/usr/local/sbin/edsys-automation-source-guard --runtime
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose stop -t 90
+TimeoutStartSec=420
+TimeoutStopSec=180
+
+[Install]
+WantedBy=multi-user.target

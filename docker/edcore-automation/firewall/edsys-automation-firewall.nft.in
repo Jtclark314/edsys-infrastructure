@@ -1,0 +1,35 @@
+# Rendered and applied only through edsys-automation-firewall.
+table inet edsys_automation_filter {
+  chain input {
+    type filter hook input priority filter; policy drop;
+    iifname "lo" accept
+    ct state established,related accept
+    iifname "br-ed-ingress" counter drop
+    ip protocol icmp accept
+    ip6 nexthdr ipv6-icmp accept
+    iifname "@LAN_IFACE@" ip saddr 192.168.50.0/24 tcp dport 8883 accept
+    iifname "@LAN_IFACE@" ip saddr 192.168.50.50 tcp dport { 22, 1880, 8086 } accept
+  }
+
+  chain forward {
+    type filter hook forward priority filter; policy accept;
+    ct state established,related accept
+    iifname "@LAN_IFACE@" ip saddr 192.168.50.0/24 ct original ip daddr 192.168.50.82 ip daddr 172.31.82.18 tcp dport 8883 accept
+    iifname "@LAN_IFACE@" ip saddr 192.168.50.50 ct original ip daddr 192.168.50.82 ip daddr 172.31.82.2 tcp dport 1880 accept
+    iifname "@LAN_IFACE@" ip saddr 192.168.50.50 ct original ip daddr 192.168.50.82 ip daddr 172.31.82.19 tcp dport 8086 accept
+    ct status dnat ct original ip daddr 192.168.50.82 tcp dport { 1880, 8086, 8883 } drop
+    oifname "br-ed-ingress" counter drop
+    ip daddr 172.31.82.16/29 counter drop
+    iifname "br-ed-ingress" limit rate 5/minute log prefix "edsys-ingress-drop " counter drop
+    iifname "br-ed-ingress" counter drop
+    iifname "br-edsys-egress" ip saddr 172.31.82.2 ip daddr { 192.168.50.5, 192.168.50.6 } udp dport 53 accept
+    iifname "br-edsys-egress" ip saddr 172.31.82.2 ip daddr { 192.168.50.5, 192.168.50.6 } tcp dport 53 accept
+    iifname "br-edsys-egress" ip saddr 172.31.82.2 ip daddr 192.168.50.75 tcp dport 8123 accept
+    iifname "br-edsys-egress" limit rate 5/minute log prefix "edsys-egress-drop " counter drop
+    iifname "br-edsys-egress" counter drop
+  }
+
+  chain output {
+    type filter hook output priority filter; policy accept;
+  }
+}

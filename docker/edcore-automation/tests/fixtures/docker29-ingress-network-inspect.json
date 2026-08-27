@@ -1,0 +1,55 @@
+[
+  {
+    "Name": "edsys-edcore-automation-ingress",
+    "Id": "0000000000000000000000000000000000000000000000000000000000000082",
+    "Created": "2000-01-01T00:00:00Z",
+    "Scope": "local",
+    "Driver": "bridge",
+    "EnableIPv4": true,
+    "EnableIPv6": false,
+    "IPAM": {
+      "Driver": "default",
+      "Options": null,
+      "Config": [
+        {
+          "Subnet": "172.31.82.16/29",
+          "IPRange": "",
+          "Gateway": "172.31.82.17"
+        }
+      ]
+    },
+    "Internal": false,
+    "Attachable": false,
+    "Ingress": false,
+    "ConfigFrom": {
+      "Network": ""
+    },
+    "ConfigOnly": false,
+    "Containers": {
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+        "Name": "edsys-edcore-automation-mosquitto-1",
+        "EndpointID": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "MacAddress": "02:00:00:00:00:12",
+        "IPv4Address": "172.31.82.18/29",
+        "IPv6Address": ""
+      },
+      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+        "Name": "edsys-edcore-automation-influxdb-1",
+        "EndpointID": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "MacAddress": "02:00:00:00:00:13",
+        "IPv4Address": "172.31.82.19/29",
+        "IPv6Address": ""
+      }
+    },
+    "Options": {
+      "com.docker.network.bridge.enable_icc": "false",
+      "com.docker.network.bridge.name": "br-ed-ingress"
+    },
+    "Labels": {
+      "com.docker.compose.config-hash": "sanitized-fixture",
+      "com.docker.compose.network": "ingress",
+      "com.docker.compose.project": "edsys-edcore-automation",
+      "com.docker.compose.version": "sanitized-fixture"
+    }
+  }
+]

@@ -1,0 +1,40 @@
+name: EdCore Automation Fabric
+description: Dedicated production MQTT, orchestration, selected telemetry, validation, and safe event-replay stack.
+host: edcore-automation (VMID 324 at 192.168.50.82; application acceptance to be confirmed)
+runtime: Docker Compose inside a dedicated Ubuntu Proxmox guest on pve-edcore
+ports:
+  - 8883/tcp exact LAN bind for mutual-TLS MQTT
+  - 1880/tcp exact LAN bind for HTTPS Node-RED editor and admin API
+  - 8086/tcp exact LAN bind for HTTPS InfluxDB; guest firewall limits it to 9950x
+volumes:
+  - Mosquitto persistence
+  - Node-RED project and encrypted credential state
+  - InfluxDB engine and configuration state
+  - command-gate SQLite replay ledger
+  - sanitized event-harness traces (runtime only; never Git)
+environment:
+  - non-secret bind address, DNS name, InfluxDB organization/bucket/retention, and Node-RED login name in .env
+  - fail-closed reviewed command authorization in runtime/config/policy.json
+network_boundaries:
+  - internal broker plane for Mosquitto, runtime, Node-RED, and Telegraf
+  - internal data plane for InfluxDB, Node-RED, and Telegraf
+  - publication-only IPv4 ingress plane on IFNAMSIZ-safe bridge br-ed-ingress for fixed Mosquitto and InfluxDB host mappings; IPv6, ICC, and all new ingress-originated forwarding are denied
+  - deliberate egress plane for Node-RED only
+secrets_required:
+  - offline age-encrypted certificate authority recovery escrow; no steady online CA key
+  - distinct server/internal-client TLS private keys; external HA/Frigate keys remain only on their clients and in encrypted escrow
+  - Node-RED administrator password hash and Project credential encryption key
+  - InfluxDB bootstrap password/admin token and scoped Telegraf/Grafana tokens
+backup:
+  - nightly application-consistent Mosquitto, Node-RED, InfluxDB, and command-ledger backup with hashes
+  - separately cold-tested age ciphertext containing recovery-critical secrets; the age identity exists only on 9950x
+  - verified pull to 9950x before encrypted off-host backup
+  - weekly isolated restore rehearsal
+monitoring:
+  - Docker health for all five always-on services
+  - Netdata child on the guest
+  - LAN/TLS endpoint and MQTT publish probes from the monitoring hub
+  - optional Healthchecks heartbeats for backup and restore timers
+restore_notes: Restore only on an internal Docker network first; validate hashes, broker startup, Node-RED project integrity, InfluxDB metadata, and SQLite integrity before any production promotion.
+owner: Jeremy
+last_verified: to be confirmed after production acceptance

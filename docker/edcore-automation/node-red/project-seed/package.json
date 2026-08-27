@@ -1,0 +1,13 @@
+{
+  "name": "edcore-automation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Reviewed EdCore production orchestration project",
+  "dependencies": {},
+  "node-red": {
+    "settings": {
+      "flowFile": "flows.json",
+      "credentialsFile": "flows_cred.json"
+    }
+  }
+}

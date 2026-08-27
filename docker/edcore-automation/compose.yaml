@@ -1,0 +1,353 @@
+name: edsys-edcore-automation
+
+x-logging: &bounded-logging
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "3"
+
+x-security: &default-security
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  mosquitto:
+    image: docker.io/library/eclipse-mosquitto:2.1.2-alpine@sha256:6f8d8a947c506f8a2290ec65cd4bd2bc7cb4d43fb5f6271f861cb013e2ef9797
+    restart: unless-stopped
+    user: "1883:0"
+    ports:
+      - "${LAN_BIND_ADDRESS:?set LAN_BIND_ADDRESS}:8883:8883/tcp"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/aclfile:/mosquitto/config/aclfile:ro
+      - ./mosquitto/aclfile-internal:/mosquitto/config/aclfile-internal:ro
+      - mosquitto-data:/mosquitto/data
+    secrets:
+      - automation_ca_cert
+      - mosquitto_server_cert
+      - mosquitto_server_key
+      - source: mqtt_health_client_cert
+        target: mqtt_health_client_cert
+      - source: mqtt_health_client_key
+        target: mqtt_health_client_key
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    <<: *default-security
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mosquitto_pub -h mosquitto -p 8883
+          --cafile /run/secrets/automation_ca_cert
+          --cert /run/secrets/mqtt_health_client_cert
+          --key /run/secrets/mqtt_health_client_key
+          -i "mqtt-health-$${HOSTNAME}"
+          -t "edsys/test/v1/health/mqtt-health/$${HOSTNAME}"
+          -m '{"status":"probe"}' -q 1
+      start_period: 15s
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    logging: *bounded-logging
+    networks:
+      broker:
+      ingress:
+        ipv4_address: 172.31.82.18
+    pids_limit: 128
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 1.0
+
+  influxdb:
+    image: docker.io/library/influxdb:2.8.0@sha256:09a5361809c771d863bcfa844a09598a82a6d9bbba1c9a9e2fa312e310572a14
+    restart: unless-stopped
+    user: "1000:0"
+    ports:
+      - "${LAN_BIND_ADDRESS:?set LAN_BIND_ADDRESS}:8086:8086/tcp"
+    environment:
+      INFLUXD_TLS_CERT: /run/secrets/influxdb_tls_cert
+      INFLUXD_TLS_KEY: /run/secrets/influxdb_tls_key
+      INFLUXD_HTTP_BIND_ADDRESS: :8086
+      INFLUXD_REPORTING_DISABLED: "true"
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+    secrets:
+      - influxdb_tls_cert
+      - influxdb_tls_key
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    <<: *default-security
+    healthcheck:
+      test: ["CMD", "influx", "ping", "--host", "https://127.0.0.1:8086", "--skip-verify"]
+      start_period: 60s
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    logging: *bounded-logging
+    networks:
+      data:
+      ingress:
+        ipv4_address: 172.31.82.19
+    pids_limit: 256
+    mem_limit: 3g
+    mem_reservation: 1g
+    cpus: 2.0
+
+  automation-runtime:
+    image: localhost/edsys/edcore-automation-runtime:1.0.0
+    build:
+      context: ./runtime
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "8884"
+      AUTOMATION_POLICY_PATH: /app/config/policy.json
+      AUTOMATION_STATE_DB: /var/lib/automation-runtime/seen.sqlite3
+      AUTOMATION_MAX_CLOCK_SKEW_SECONDS: "${AUTOMATION_MAX_CLOCK_SKEW_SECONDS:-30}"
+    volumes:
+      - ./runtime/config:/app/config:ro
+      - automation-runtime-data:/var/lib/automation-runtime
+    secrets:
+      - automation_ca_cert
+      - source: automation_runtime_client_cert
+        target: mqtt_client_cert
+      - source: automation_runtime_client_key
+        target: mqtt_client_key
+    group_add:
+      - "0"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m,uid=10001,gid=0,mode=0770
+    <<: *default-security
+    healthcheck:
+      test: ["CMD", "python", "-m", "automation_runtime.healthcheck", "--max-age", "30"]
+      start_period: 20s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *bounded-logging
+    networks: [broker]
+    pids_limit: 128
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 1.0
+
+  node-red:
+    image: localhost/edsys/edcore-automation-node-red:4.1.13-1
+    build:
+      context: ./node-red
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+      automation-runtime:
+        condition: service_healthy
+    ports:
+      - "${LAN_BIND_ADDRESS:?set LAN_BIND_ADDRESS}:1880:1880/tcp"
+    environment:
+      NODE_RED_ADMIN_USERNAME: "${NODE_RED_ADMIN_USERNAME:?set NODE_RED_ADMIN_USERNAME}"
+    volumes:
+      - node-red-data:/data
+    secrets:
+      - automation_ca_cert
+      - node_red_admin_password_hash
+      - node_red_credential_secret
+      - node_red_tls_cert
+      - node_red_tls_key
+      - source: nodered_client_cert
+        target: mqtt_client_cert
+      - source: nodered_client_key
+        target: mqtt_client_key
+    group_add:
+      - "0"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,uid=1000,gid=0,mode=0770
+    <<: *default-security
+    healthcheck:
+      test: ["CMD", "node", "/opt/edsys/healthcheck.js"]
+      start_period: 45s
+      interval: 15s
+      timeout: 5s
+      retries: 8
+    logging: *bounded-logging
+    networks:
+      broker:
+      data:
+      egress:
+        ipv4_address: 172.31.82.2
+    pids_limit: 256
+    mem_limit: 1g
+    mem_reservation: 256m
+    cpus: 1.5
+
+  telegraf:
+    image: docker.io/library/telegraf:1.39.3-alpine@sha256:45b80cfd354299c5c1c38e472922e0e2f0a8e8ac2b614531a1f634ab06e84297
+    pull_policy: always
+    restart: unless-stopped
+    user: "1000:0"
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - >-
+        export INFLUX_TOKEN="$$(cat /run/secrets/influxdb_telegraf_token)";
+        exec /entrypoint.sh telegraf --strict-env-handling --config /etc/telegraf/telegraf.conf
+    environment:
+      INFLUX_ORG: "${INFLUXDB_ORG:?set INFLUXDB_ORG}"
+      INFLUX_BUCKET: "${INFLUXDB_BUCKET:?set INFLUXDB_BUCKET}"
+    volumes:
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    secrets:
+      - automation_ca_cert
+      - influxdb_telegraf_token
+      - source: telegraf_client_cert
+        target: mqtt_client_cert
+      - source: telegraf_client_key
+        target: mqtt_client_key
+    group_add:
+      - "0"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    <<: *default-security
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      start_period: 20s
+      interval: 20s
+      timeout: 3s
+      retries: 3
+    logging: *bounded-logging
+    networks: [broker, data]
+    pids_limit: 128
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 1.0
+
+  event-harness:
+    image: localhost/edsys/edcore-automation-runtime:1.0.0
+    build:
+      context: ./runtime
+    pull_policy: never
+    profiles: ["tools"]
+    entrypoint: ["python", "-m", "event_harness.cli"]
+    command: ["self-test"]
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "8883"
+    volumes:
+      - automation-event-harness-data:/var/lib/automation-event-harness
+    secrets:
+      - automation_ca_cert
+      - source: event_replay_client_cert
+        target: mqtt_client_cert
+      - source: event_replay_client_key
+        target: mqtt_client_key
+    group_add:
+      - "0"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m,uid=10001,gid=0,mode=0770
+    <<: *default-security
+    logging: *bounded-logging
+    networks: [broker]
+    pids_limit: 128
+    mem_limit: 512m
+    mem_reservation: 64m
+    cpus: 0.5
+
+secrets:
+  automation_ca_cert:
+    file: /etc/edsys-secrets/edcore-automation/pki/ca/ca.crt
+  mosquitto_server_cert:
+    file: /etc/edsys-secrets/edcore-automation/pki/servers/mosquitto.crt
+  mosquitto_server_key:
+    file: /etc/edsys-secrets/edcore-automation/pki/servers/mosquitto.key
+  mqtt_health_client_cert:
+    file: /etc/edsys-secrets/edcore-automation/pki/clients/mqtt-health.crt
+  mqtt_health_client_key:
+    file: /etc/edsys-secrets/edcore-automation/pki/clients/mqtt-health.key
+  nodered_client_cert:
+    file: /etc/edsys-secrets/edcore-automation/pki/clients/nodered.crt
+  nodered_client_key:
+    file: /etc/edsys-secrets/edcore-automation/pki/clients/nodered.key
+  automation_runtime_client_cert:
+    file: /etc/edsys-secrets/edcore-automation/pki/clients/automation-runtime.crt
+  automation_runtime_client_key:
+    file: /etc/edsys-secrets/edcore-automation/pki/clients/automation-runtime.key
+  telegraf_client_cert:
+    file: /etc/edsys-secrets/edcore-automation/pki/clients/telegraf.crt
+  telegraf_client_key:
+    file: /etc/edsys-secrets/edcore-automation/pki/clients/telegraf.key
+  event_replay_client_cert:
+    file: /etc/edsys-secrets/edcore-automation/pki/clients/event-replay.crt
+  event_replay_client_key:
+    file: /etc/edsys-secrets/edcore-automation/pki/clients/event-replay.key
+  node_red_admin_password_hash:
+    file: /etc/edsys-secrets/edcore-automation/node-red/admin_password_hash
+  node_red_credential_secret:
+    file: /etc/edsys-secrets/edcore-automation/node-red/credential_secret
+  node_red_tls_cert:
+    file: /etc/edsys-secrets/edcore-automation/pki/servers/node-red.crt
+  node_red_tls_key:
+    file: /etc/edsys-secrets/edcore-automation/pki/servers/node-red.key
+  influxdb_admin_password:
+    file: /etc/edsys-secrets/edcore-automation/influxdb/admin_password
+  influxdb_admin_token:
+    file: /etc/edsys-secrets/edcore-automation/influxdb/admin_token
+  influxdb_telegraf_token:
+    file: /etc/edsys-secrets/edcore-automation/influxdb/telegraf_token
+  influxdb_tls_cert:
+    file: /etc/edsys-secrets/edcore-automation/pki/servers/influxdb.crt
+  influxdb_tls_key:
+    file: /etc/edsys-secrets/edcore-automation/pki/servers/influxdb.key
+
+volumes:
+  mosquitto-data:
+  node-red-data:
+  influxdb-data:
+  influxdb-config:
+  automation-runtime-data:
+  automation-event-harness-data:
+
+networks:
+  broker:
+    name: edsys-edcore-automation-broker
+    internal: true
+  data:
+    name: edsys-edcore-automation-data
+    internal: true
+  ingress:
+    name: edsys-edcore-automation-ingress
+    driver: bridge
+    enable_ipv6: false
+    driver_opts:
+      com.docker.network.bridge.name: br-ed-ingress
+      com.docker.network.bridge.enable_icc: "false"
+    ipam:
+      config:
+        - subnet: 172.31.82.16/29
+          gateway: 172.31.82.17
+  egress:
+    name: edsys-edcore-automation-egress
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-edsys-egress
+    ipam:
+      config:
+        - subnet: 172.31.82.0/28
+          gateway: 172.31.82.1

@@ -1,0 +1,63 @@
+# Certificate Common Names are MQTT usernames because use_identity_as_username
+# is enabled. Add a distinct certificate and the narrowest possible entries for
+# every real client; never share private keys between hosts or services.
+
+user mqtt-health
+topic write edsys/test/v1/health/mqtt-health/#
+
+# Dedicated broker/restore audit identity. It cannot publish, acknowledge, or
+# read HA/Frigate state; its only capability is detecting a stale HA command.
+user command-audit
+topic read edsys/v1/command/ha/#
+
+# External Node-RED connection is intentionally read/derived-state only. Its
+# separate internal 8884 connection submits non-retained automation requests.
+user nodered
+topic read edsys/v1/telemetry/#
+topic read edsys/v1/state/#
+topic read edsys/v1/availability/#
+topic read edsys/v1/automation/ack/#
+topic read edsys/test/v1/replay/#
+topic write edsys/v1/state/derived/#
+topic write edsys/v1/availability/edcore-automation/nodered/#
+
+user telegraf
+topic read edsys/v1/telemetry/environment/#
+topic read edsys/v1/telemetry/energy/#
+topic read edsys/v1/telemetry/rf/#
+topic read edsys/v1/telemetry/highrate/#
+
+user event-replay
+topic read edsys/v1/telemetry/#
+topic read edsys/v1/state/#
+topic read edsys/v1/availability/#
+topic write edsys/test/v1/replay/#
+topic write edsys/v1/availability/edcore-automation/event-replay
+
+# Migration identities. Issue distinct certificates only when each client is
+# ready; never reuse the Home Assistant or Frigate private key.
+user homeassistant
+topic readwrite homeassistant/#
+topic read frigate/#
+topic read edsys/v1/telemetry/#
+topic read edsys/v1/state/#
+topic read edsys/v1/availability/#
+topic write edsys/v1/telemetry/homeassistant/#
+topic write edsys/v1/state/homeassistant/#
+topic write edsys/v1/availability/homeassistant/#
+topic read edsys/v1/command/ha/#
+topic write edsys/v1/automation/ack/homeassistant/#
+
+user frigate
+topic readwrite frigate/#
+topic read homeassistant/status
+topic write homeassistant/#
+topic write edsys/v1/telemetry/frigate/#
+topic write edsys/v1/availability/frigate/#
+
+# Issued only for a bounded synthetic ingestion/replay acceptance, then marked
+# unused-not-delivered and removed online. It has no command/control access.
+user edsys-edge-livingroom
+topic write edsys/v1/telemetry/environment/edge-livingroom/#
+topic write edsys/v1/state/edge-livingroom/#
+topic write edsys/v1/availability/edge-livingroom/#

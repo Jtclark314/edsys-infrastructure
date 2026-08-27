@@ -1,0 +1,5 @@
+{
+  "schema": "edsys.command-policy.v1",
+  "max_ttl_seconds": 300,
+  "allowed": []
+}

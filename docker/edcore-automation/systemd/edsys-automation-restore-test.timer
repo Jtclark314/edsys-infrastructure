@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly isolated EdSys EdCore automation restore test
+
+[Timer]
+OnCalendar=Sun *-*-* 03:30:00 America/New_York
+Persistent=true
+RandomizedDelaySec=300
+Unit=edsys-automation-restore-test.service
+
+[Install]
+WantedBy=timers.target

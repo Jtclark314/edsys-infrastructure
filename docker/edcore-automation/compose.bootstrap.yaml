@@ -1,0 +1,16 @@
+# One-time InfluxDB initialization only. Deploy immediately recreates the
+# steady service from compose.yaml so neither bootstrap credential remains
+# mounted or present in its environment.
+services:
+  influxdb:
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: "${INFLUXDB_INIT_USERNAME:?set INFLUXDB_INIT_USERNAME}"
+      DOCKER_INFLUXDB_INIT_PASSWORD_FILE: /run/secrets/influxdb_admin_password
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE: /run/secrets/influxdb_admin_token
+      DOCKER_INFLUXDB_INIT_ORG: "${INFLUXDB_ORG:?set INFLUXDB_ORG}"
+      DOCKER_INFLUXDB_INIT_BUCKET: "${INFLUXDB_BUCKET:?set INFLUXDB_BUCKET}"
+      DOCKER_INFLUXDB_INIT_RETENTION: "${INFLUXDB_RETENTION:-30d}"
+    secrets:
+      - influxdb_admin_password
+      - influxdb_admin_token

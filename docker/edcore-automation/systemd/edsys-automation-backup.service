@@ -1,0 +1,19 @@
+[Unit]
+Description=EdSys EdCore automation application-consistent backup
+Requires=docker.service
+After=docker.service edsys-automation-compose.service
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/edsys-secrets/edcore-automation/healthchecks/backup.env
+ExecStartPre=/usr/local/sbin/edsys-automation-source-guard --runtime
+ExecStart=/srv/edsys/edsys-infrastructure/docker/edcore-automation/scripts/backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/edcore-automation /var/lib/docker /run/docker.sock

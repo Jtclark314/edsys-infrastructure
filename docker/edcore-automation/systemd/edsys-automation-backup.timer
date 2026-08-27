@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly EdSys EdCore automation backup
+
+[Timer]
+OnCalendar=*-*-* 01:15:00 America/New_York
+Persistent=true
+RandomizedDelaySec=60
+Unit=edsys-automation-backup.service
+
+[Install]
+WantedBy=timers.target
