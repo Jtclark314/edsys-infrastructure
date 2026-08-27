@@ -7,22 +7,43 @@ verify_script="${repo_root}/scripts/ops/verify-netdata-compute.py"
 parent_ip="192.168.50.50"
 group_name="edsys-compute"
 pve_children=(pve-edcore pve-node0 pve-node1 pve-node2)
-satellites=(edcore-ops edcore-sdr netbox)
+satellites=(edcore-ops edcore-sdr netbox edcore-automation)
+automation_ip="192.168.50.82"
+automation_host_key_fingerprint="${EDCORE_AUTOMATION_SSH_HOST_KEY_FINGERPRINT:-}"
 
 usage() {
   cat <<'EOF'
-Usage: deploy-netdata-compute.sh --check | --apply
+Usage: deploy-netdata-compute.sh --check | --apply [--automation-host-key SHA256:...]
 
---check  Verify the exact eight-node parent/child topology without changing it.
+--check  Verify the exact nine-node parent/child topology without changing it.
 --apply  Back up configuration, align packages, deploy the topology, and verify it.
+
+For a first enrollment, pass the EdCore Automation SSH ED25519 host-key
+fingerprint obtained from the trusted Proxmox console. The deployer verifies
+the live key before adding it to the operator's known_hosts file. It never
+uses trust-on-first-use or disables strict host-key checking.
 EOF
 }
 
-case "${1:-}" in
+mode="${1:-}"
+shift || true
+case "$mode" in
   --check)
+    (( $# == 0 )) || { usage >&2; exit 2; }
     exec python3 "$verify_script"
     ;;
-  --apply) ;;
+  --apply)
+    while (( $# > 0 )); do
+      case "$1" in
+        --automation-host-key)
+          (( $# >= 2 )) || { usage >&2; exit 2; }
+          automation_host_key_fingerprint="$2"
+          shift 2
+          ;;
+        *) usage >&2; exit 2 ;;
+      esac
+    done
+    ;;
   *) usage >&2; exit 2 ;;
 esac
 
@@ -31,7 +52,7 @@ if [[ ${EUID} -ne 0 ]]; then
   exit 2
 fi
 
-for command in curl getent install python3 scp ssh systemctl uuidgen; do
+for command in awk curl getent id install python3 scp ssh ssh-keygen ssh-keyscan systemctl uuidgen; do
   command -v "$command" >/dev/null || {
     echo "Required command is missing: $command" >&2
     exit 1
@@ -60,6 +81,15 @@ scp_options=(
   -o "UserKnownHostsFile=${operator_home}/.ssh/known_hosts"
   -o BatchMode=yes
 )
+
+satellite_target() {
+  local satellite="$1"
+  if [[ "$satellite" == edcore-automation ]]; then
+    printf '%s@%s\n' "$operator_user" "$automation_ip"
+  else
+    printf '%s\n' "$satellite"
+  fi
+}
 [[ -x "$verify_script" ]] || chmod 0755 "$verify_script"
 [[ -r /usr/share/keyrings/netdata-archive-keyring.gpg ]] || {
   echo "Netdata public package keyring is missing on 9950x." >&2
@@ -71,6 +101,7 @@ parent_backup="/var/backups/edsys-netdata-compute/${stamp}"
 tmpdir="$(mktemp -d)"
 config_mutated=0
 backup_started=0
+known_hosts_mutated=0
 
 cleanup() {
   rm -rf -- "$tmpdir"
@@ -87,6 +118,7 @@ restore_local_file() {
 
 rollback_configs() {
   local status=$?
+  local target
   trap - ERR
   if (( config_mutated == 1 )); then
     echo "Deployment failed; restoring the pre-change Netdata configuration." >&2
@@ -103,7 +135,8 @@ rollback_configs() {
          systemctl restart netdata" || true
     done
     for satellite in "${satellites[@]}"; do
-      ssh "${ssh_options[@]}" "$satellite" \
+      target="$(satellite_target "$satellite")"
+      ssh "${ssh_options[@]}" "$target" \
         "sudo -n env BACKUP='${parent_backup}' bash -s" <<'REMOTE_ROLLBACK' || true
 set -e
 if test -f "$BACKUP/netdata.conf.exists"; then
@@ -120,6 +153,11 @@ systemctl restart netdata
 REMOTE_ROLLBACK
     done
   fi
+  if (( known_hosts_mutated == 1 )); then
+    echo "Deployment failed; restoring the operator SSH known_hosts file." >&2
+    cp -a -- "${parent_backup}/operator-known_hosts.before" \
+      "${operator_home}/.ssh/known_hosts" || true
+  fi
   if (( backup_started == 1 )); then
     echo "Private backup material remains under ${parent_backup} on every host." >&2
   else
@@ -131,6 +169,65 @@ REMOTE_ROLLBACK
 trap cleanup EXIT
 trap rollback_configs ERR
 
+enroll_automation_host_key_if_needed() {
+  local expected="$automation_host_key_fingerprint"
+  local scan_file="${tmpdir}/edcore-automation.ssh-keyscan"
+  local selected_file="${tmpdir}/edcore-automation.known-host"
+  local existing_file="${tmpdir}/edcore-automation.existing-known-host"
+  local candidate fingerprint
+
+  if ssh-keygen -F "$automation_ip" -f "${operator_home}/.ssh/known_hosts" \
+    >"$existing_file" 2>/dev/null; then
+    [[ -n "$expected" ]] || return
+    while IFS= read -r candidate; do
+      [[ -n "$candidate" && "$candidate" != \#* ]] || continue
+      fingerprint="$(printf '%s\n' "$candidate" | ssh-keygen -E sha256 -lf - | awk '{print $2}')"
+      [[ "$fingerprint" == "$expected" ]] && return
+    done <"$existing_file"
+    echo "The existing ${automation_ip} SSH host key does not match the supplied fingerprint." >&2
+    echo "Review and replace a stale key manually; the deployer will not overwrite it." >&2
+    return 1
+  fi
+  if [[ ! "$expected" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
+    echo "No trusted SSH host key exists for ${automation_ip}." >&2
+    echo "Obtain its ED25519 fingerprint from the trusted Proxmox console, then rerun with:" >&2
+    echo "  --automation-host-key SHA256:<fingerprint>" >&2
+    return 1
+  fi
+
+  ssh-keyscan -T 5 -t ed25519 "$automation_ip" >"$scan_file" 2>/dev/null
+  : >"$selected_file"
+  while IFS= read -r candidate; do
+    [[ -n "$candidate" && "$candidate" != \#* ]] || continue
+    fingerprint="$(printf '%s\n' "$candidate" | ssh-keygen -E sha256 -lf - | awk '{print $2}')"
+    if [[ "$fingerprint" == "$expected" ]]; then
+      printf '%s\n' "$candidate" >"$selected_file"
+      break
+    fi
+  done <"$scan_file"
+  if [[ ! -s "$selected_file" ]]; then
+    echo "The live ${automation_ip} ED25519 host key did not match the trusted fingerprint." >&2
+    return 1
+  fi
+
+  install -d -m 0700 "$parent_backup"
+  cp -a -- "${operator_home}/.ssh/known_hosts" \
+    "${parent_backup}/operator-known_hosts.before"
+  cp -a -- "${operator_home}/.ssh/known_hosts" "${tmpdir}/known_hosts.new"
+  if [[ -s "${tmpdir}/known_hosts.new" ]] && \
+     [[ "$(tail -c 1 "${tmpdir}/known_hosts.new" | wc -l)" -eq 0 ]]; then
+    printf '\n' >>"${tmpdir}/known_hosts.new"
+  fi
+  cat "$selected_file" >>"${tmpdir}/known_hosts.new"
+  install -m 0600 -o "$operator_user" -g "$(id -gn "$operator_user")" \
+    "${tmpdir}/known_hosts.new" "${operator_home}/.ssh/known_hosts"
+  known_hosts_mutated=1
+  backup_started=1
+  echo "Verified and enrolled the EdCore Automation SSH host key."
+}
+
+enroll_automation_host_key_if_needed
+
 echo "Preflighting child hosts and the parent streaming endpoint."
 curl -fsS --max-time 10 "http://127.0.0.1:19999/api/v1/info" >/dev/null
 for child in "${pve_children[@]}"; do
@@ -138,7 +235,8 @@ for child in "${pve_children[@]}"; do
     "test \"\$(hostname)\" = '${child}'; curl -fsS --max-time 10 http://${parent_ip}:19999/api/v1/info >/dev/null"
 done
 for satellite in "${satellites[@]}"; do
-  ssh "${ssh_options[@]}" "$satellite" \
+  target="$(satellite_target "$satellite")"
+  ssh "${ssh_options[@]}" "$target" \
     "test \"\$(hostname)\" = '${satellite}'; \
      sudo -n true; \
      curl -fsS --max-time 10 http://${parent_ip}:19999/api/v1/info >/dev/null"
@@ -171,7 +269,8 @@ for child in "${pve_children[@]}"; do
      systemctl is-active netdata >\"\$backup/netdata.active\" 2>&1 || true"
 done
 for satellite in "${satellites[@]}"; do
-  ssh "${ssh_options[@]}" "$satellite" \
+  target="$(satellite_target "$satellite")"
+  ssh "${ssh_options[@]}" "$target" \
     "sudo -n env BACKUP='${parent_backup}' bash -s" <<'REMOTE_BACKUP'
 set -euo pipefail
 install -d -m 0700 "$BACKUP"
@@ -231,9 +330,10 @@ done
 
 echo "Installing or aligning signed Netdata edge packages on the Ubuntu satellites."
 for satellite in "${satellites[@]}"; do
+  target="$(satellite_target "$satellite")"
   scp "${scp_options[@]}" /usr/share/keyrings/netdata-archive-keyring.gpg \
-    "${satellite}:/tmp/netdata-archive-keyring.gpg"
-  ssh "${ssh_options[@]}" "$satellite" 'sudo -n bash -s' <<'REMOTE_UBUNTU_INSTALL'
+    "${target}:/tmp/netdata-archive-keyring.gpg"
+  ssh "${ssh_options[@]}" "$target" 'sudo -n bash -s' <<'REMOTE_UBUNTU_INSTALL'
 set -euo pipefail
 install -m 0444 -o root -g root /tmp/netdata-archive-keyring.gpg /usr/share/keyrings/netdata-archive-keyring.gpg
 rm -f /tmp/netdata-archive-keyring.gpg
@@ -285,7 +385,7 @@ cat >"${tmpdir}/parent-stream.conf" <<EOF
 [${stream_key}]
     type = api
     enabled = yes
-    allow from = 192.168.50.51 192.168.50.52 192.168.50.53 192.168.50.54 192.168.50.79 192.168.50.80 192.168.50.81
+    allow from = 192.168.50.51 192.168.50.52 192.168.50.53 192.168.50.54 192.168.50.79 192.168.50.80 192.168.50.81 192.168.50.82
     db = dbengine
     health enabled = auto
     postpone alerts on connect = 1m
@@ -341,16 +441,25 @@ EOF
     reconnect delay = 15s
 EOF
   scp "${scp_options[@]}" "${tmpdir}/${child}-netdata.conf" "root@${child}:/tmp/netdata.conf.edsys"
-  scp "${scp_options[@]}" "${tmpdir}/${child}-stream.conf" "root@${child}:/tmp/stream.conf.edsys"
   ssh "${ssh_options[@]}" "root@${child}" \
-    "set -e; install -m 0644 -o root -g root /tmp/netdata.conf.edsys /etc/netdata/netdata.conf; \
-     install -m 0600 -o root -g root /tmp/stream.conf.edsys /etc/netdata/stream.conf; \
-     rm -f /tmp/netdata.conf.edsys /tmp/stream.conf.edsys; \
-     systemctl restart netdata; systemctl is-active --quiet netdata"
+    "bash -c 'set -Eeuo pipefail; umask 077; \
+     stream_stage=\$(mktemp /run/edsys-netdata-stream.XXXXXX); \
+     stream_install=/etc/netdata/.stream.conf.edsys.\$\$; \
+     cleanup_secret() { rm -f -- \"\$stream_stage\" \"\$stream_install\" /tmp/netdata.conf.edsys; }; \
+     trap cleanup_secret EXIT; \
+     cat >\"\$stream_stage\"; \
+     test \"\$(stat -c %U:%G:%a \"\$stream_stage\")\" = root:root:600; \
+     install -m 0644 -o root -g root /tmp/netdata.conf.edsys /etc/netdata/netdata.conf; \
+     install -m 0600 -o root -g root \"\$stream_stage\" \"\$stream_install\"; \
+     test \"\$(stat -c %U:%G:%a \"\$stream_install\")\" = root:root:600; \
+     mv -fT -- \"\$stream_install\" /etc/netdata/stream.conf; \
+     systemctl restart netdata; systemctl is-active --quiet netdata'" \
+    <"${tmpdir}/${child}-stream.conf"
 done
 
-echo "Configuring and starting the three Ubuntu satellite children."
+echo "Configuring and starting the four Ubuntu satellite children."
 for satellite in "${satellites[@]}"; do
+  target="$(satellite_target "$satellite")"
   cat >"${tmpdir}/${satellite}-netdata.conf" <<EOF
 # Managed by EdSys deploy-netdata-compute.sh.
 [global]
@@ -373,15 +482,21 @@ EOF
     reconnect delay = 15s
 EOF
   scp "${scp_options[@]}" "${tmpdir}/${satellite}-netdata.conf" \
-    "${satellite}:/tmp/netdata.conf.edsys"
-  scp "${scp_options[@]}" "${tmpdir}/${satellite}-stream.conf" \
-    "${satellite}:/tmp/stream.conf.edsys"
-  ssh "${ssh_options[@]}" "$satellite" \
-    "sudo -n bash -c 'set -e; \
+    "${target}:/tmp/netdata.conf.edsys"
+  ssh "${ssh_options[@]}" "$target" \
+    "sudo -n bash -c 'set -Eeuo pipefail; umask 077; \
+     stream_stage=\$(mktemp /run/edsys-netdata-stream.XXXXXX); \
+     stream_install=/etc/netdata/.stream.conf.edsys.\$\$; \
+     cleanup_secret() { rm -f -- \"\$stream_stage\" \"\$stream_install\" /tmp/netdata.conf.edsys; }; \
+     trap cleanup_secret EXIT; \
+     cat >\"\$stream_stage\"; \
+     test \"\$(stat -c %U:%G:%a \"\$stream_stage\")\" = root:root:600; \
      install -m 0644 -o root -g root /tmp/netdata.conf.edsys /etc/netdata/netdata.conf; \
-     install -m 0600 -o root -g root /tmp/stream.conf.edsys /etc/netdata/stream.conf; \
-     rm -f /tmp/netdata.conf.edsys /tmp/stream.conf.edsys; \
-     systemctl restart netdata; systemctl is-active --quiet netdata'"
+     install -m 0600 -o root -g root \"\$stream_stage\" \"\$stream_install\"; \
+     test \"\$(stat -c %U:%G:%a \"\$stream_install\")\" = root:root:600; \
+     mv -fT -- \"\$stream_install\" /etc/netdata/stream.conf; \
+     systemctl restart netdata; systemctl is-active --quiet netdata'" \
+    <"${tmpdir}/${satellite}-stream.conf"
   if [[ "$satellite" == netbox ]]; then
     cat >"${tmpdir}/netbox-docker.conf" <<'EOF'
 # Managed by EdSys deploy-netdata-compute.sh.
@@ -402,9 +517,9 @@ jobs:
     url: http://127.0.0.1:9100/metrics
     update_every: 10
 EOF
-    scp "${scp_options[@]}" "${tmpdir}/netbox-docker.conf" "${satellite}:/tmp/docker.conf.edsys"
-    scp "${scp_options[@]}" "${tmpdir}/netbox-prometheus.conf" "${satellite}:/tmp/prometheus.conf.edsys"
-    ssh "${ssh_options[@]}" "$satellite" 'sudo -n bash -s' <<'REMOTE_NETBOX_MONITORING'
+    scp "${scp_options[@]}" "${tmpdir}/netbox-docker.conf" "${target}:/tmp/docker.conf.edsys"
+    scp "${scp_options[@]}" "${tmpdir}/netbox-prometheus.conf" "${target}:/tmp/prometheus.conf.edsys"
+    ssh "${ssh_options[@]}" "$target" 'sudo -n bash -s' <<'REMOTE_NETBOX_MONITORING'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get install -y prometheus-node-exporter
@@ -424,7 +539,7 @@ REMOTE_NETBOX_MONITORING
   fi
 done
 
-echo "Waiting for all seven child streams to become reachable on 9950x."
+echo "Waiting for all eight child streams to become reachable on 9950x."
 for _ in {1..90}; do
   if python3 "$verify_script" >/dev/null 2>&1; then
     break

@@ -1088,6 +1088,8 @@ def sanitized_export(api: NetBoxAPI):
 
     devices = []
     for item in api.list("dcim/devices/"):
+        if (item.get("custom_fields") or {}).get("retired") is True:
+            continue
         devices.append({
             "name": item.get("name"), "status": item.get("status", {}).get("value") if isinstance(item.get("status"), dict) else item.get("status"),
             "site": nested_name(item.get("site")), "role": nested_name(item.get("role")),
@@ -1103,6 +1105,8 @@ def sanitized_export(api: NetBoxAPI):
     prefixes = [{"prefix": item.get("prefix"), "status": (item.get("status") or {}).get("value")} for item in api.list("ipam/prefixes/")]
     services = []
     for item in api.list("ipam/services/"):
+        if (item.get("custom_fields") or {}).get("retired") is True:
+            continue
         services.append({
             "name": item.get("name"), "parent": nested_name(item.get("parent")),
             "protocol": (item.get("protocol") or {}).get("value") if isinstance(item.get("protocol"), dict) else item.get("protocol"),

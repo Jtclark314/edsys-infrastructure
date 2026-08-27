@@ -141,7 +141,6 @@ collect_tar "pve-node2-config" "root" "192.168.50.53" "/etc/pve" "/etc/network/i
 
 collect_text "arr-server-docker-baseline" "jeremy" "192.168.50.201" "hostnamectl; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || true; findmnt"
 collect_text "family-services-docker-baseline" "jeremy" "192.168.50.78" "hostnamectl; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || true; findmnt"
-collect_text "edsys-voice-docker-baseline" "jeremy" "192.168.50.12" "hostnamectl; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || true; findmnt"
 collect_text "edsys-ingress-docker-baseline" "jeremy" "192.168.50.4" "hostnamectl; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || true; findmnt"
 
 log "Remote collection complete: ${OUT_DIR}"

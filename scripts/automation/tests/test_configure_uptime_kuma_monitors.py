@@ -46,7 +46,8 @@ def create_database(path: Path, *, include_group: bool = True) -> None:
           mqtt_success_message TEXT,
           tls_ca TEXT,
           tls_cert TEXT,
-          tls_key TEXT
+          tls_key TEXT,
+          auth_method TEXT
         );
         CREATE TABLE notification (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,7 +95,7 @@ def test_reconcile_creates_enabled_private_monitors(tmp_path):
     rows = connection.execute(
         """
         SELECT name, type, url, hostname, port, ignore_tls, parent,
-               basic_auth_pass, mqtt_password, tls_ca, tls_cert,
+               basic_auth_pass, mqtt_password, tls_ca, tls_cert, auth_method,
                accepted_statuscodes_json
         FROM monitor WHERE name LIKE 'EdCore Automation %' ORDER BY name
         """
@@ -105,6 +106,8 @@ def test_reconcile_creates_enabled_private_monitors(tmp_path):
     assert all(row[7] is None and row[8] is None and row[10] is None for row in rows)
     assert all(row[9] is None for row in rows if row[1] != "http")
     assert all(row[9] == TLS_CA for row in rows if row[1] == "http")
+    assert all(row[11] is None for row in rows if row[1] != "http")
+    assert all(row[11] == "mtls" for row in rows if row[1] == "http")
     assert connection.execute(
         "SELECT COUNT(*) FROM monitor WHERE type='http' AND tls_ca=?", (TLS_CA,)
     ).fetchone()[0] == 2

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the authoritative eight-node EdSys Netdata parent topology."""
+"""Verify the authoritative nine-node EdSys Netdata parent topology."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import urllib.request
 PARENT = "http://127.0.0.1:19999"
 EXPECTED = {
     "9950x",
+    "edcore-automation",
     "edcore-ops",
     "edcore-sdr",
     "netbox",
@@ -21,6 +22,8 @@ EXPECTED = {
     "pve-node2",
 }
 EXPECTED_GROUP = "edsys-compute"
+EXPECTED_TOTAL = len(EXPECTED)
+EXPECTED_RECEIVING = EXPECTED_TOTAL - 1
 
 
 def fetch(path: str) -> dict:
@@ -79,11 +82,14 @@ def main() -> int:
         counts = local_agent.get("nodes", {})
         if runtime.get("parent") is not True:
             errors.append(f"9950x parent flag is {runtime.get('parent')!r}")
-        if counts.get("total") != 8:
-            errors.append(f"9950x reports total={counts.get('total')!r}, expected 8")
-        if counts.get("receiving") != 7:
+        if counts.get("total") != EXPECTED_TOTAL:
             errors.append(
-                f"9950x reports receiving={counts.get('receiving')!r}, expected 7"
+                f"9950x reports total={counts.get('total')!r}, expected {EXPECTED_TOTAL}"
+            )
+        if counts.get("receiving") != EXPECTED_RECEIVING:
+            errors.append(
+                "9950x reports "
+                f"receiving={counts.get('receiving')!r}, expected {EXPECTED_RECEIVING}"
             )
 
     if errors:
@@ -98,7 +104,10 @@ def main() -> int:
             f"health={node.get('health', {}).get('status')}, "
             f"group={node.get('labels', {}).get('group')}, version={node.get('v')}"
         )
-    print("PASS topology: 9950x parent, 8 total nodes, 7 receiving children")
+    print(
+        f"PASS topology: 9950x parent, {EXPECTED_TOTAL} total nodes, "
+        f"{EXPECTED_RECEIVING} receiving children"
+    )
     return 0
 
 

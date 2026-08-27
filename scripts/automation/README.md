@@ -270,9 +270,11 @@ identity, ACL, publish/acknowledgment, and plaintext-port denial.
 
 The two HTTPS monitors require the automation CA certificate. Supply its public
 certificate bundle at runtime; the helper stores that public CA in only the two
-HTTPS monitor rows and always leaves `ignore_tls=0`. It rejects private-key
-material and does not copy CA keys, client certificates, passwords, MQTT
-identities, or notification credentials into source control or monitor rows.
+HTTPS monitor rows, selects Uptime Kuma 1.x's TLS-agent path so the CA is
+actually applied, and always leaves `ignore_tls=0`. No client certificate or
+client identity is installed. It rejects private-key material and does not copy
+CA keys, client certificates, passwords, MQTT identities, or notification
+credentials into source control or monitor rows.
 
 Stop Uptime Kuma and take the offline path explicitly. The helper independently
 creates a private SQLite-consistent pre-change backup and refuses a container

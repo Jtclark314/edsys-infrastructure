@@ -152,6 +152,10 @@ services:
 
   caddy:
     image: docker.io/caddy:2.11.4-alpine@sha256:98eb57d882ccd5213d1688764db10c1ca2c58a1ca3a6717a3411ad798f7a423a
+    # BusyBox wget delegates TLS to ssl_client.  Without a subreaper those
+    # short-lived health-check children can remain defunct under Caddy PID 1
+    # until the container exhausts its PID limit.
+    init: true
     restart: unless-stopped
     depends_on:
       netbox:
@@ -176,7 +180,7 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider --no-check-certificate https://netbox.edsys.local/login/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider --no-check-certificate -T 5 -t 1 https://netbox.edsys.local/login/ || exit 1"]
       start_period: 30s
       interval: 15s
       timeout: 5s

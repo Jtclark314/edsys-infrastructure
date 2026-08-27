@@ -15,7 +15,6 @@ docker_hosts:
   - family-services
   - node1-services
   - edsys-ingress
-  - edsys-voice
 network_hosts:
   - localhost
   - pve-edcore

@@ -44,7 +44,7 @@ HOSTS = [
     {"name": "edsys-ingress", "host": "192.168.50.4", "user": "jeremy", "kind": "docker"},
     {"name": "pihole-primary", "host": "192.168.50.5", "user": "jeremy", "kind": "pihole"},
     {"name": "pihole-secondary", "host": "192.168.50.6", "user": "jeremy", "kind": "pihole"},
-    {"name": "edsys-voice-old-ip", "host": "192.168.50.7", "user": "jeremy", "kind": "linux"},
+    {"name": "edsys-edge-livingroom", "host": "192.168.50.126", "user": "jeremy", "kind": "linux"},
     {"name": "voice-node1", "host": "192.168.50.12", "user": "jeremy", "kind": "docker"},
     {"name": "9950x", "host": "192.168.50.50", "user": "jeremy", "kind": "docker"},
     {"name": "pve-node0", "host": "192.168.50.51", "user": "root", "kind": "proxmox"},

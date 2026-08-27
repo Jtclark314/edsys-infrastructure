@@ -67,6 +67,7 @@ checks = [
     ("foothills-restic-offsite-restore-test", "Foothills Google Drive restore test", 8 * 24, 24),
     ("edsys-netbox-backup", "NetBox application backup", 26, 2),
     ("edsys-netbox-backup-pull", "NetBox verified backup pull", 26, 2),
+    ("edsys-edcore-automation-backup-pull", "EdCore Automation verified backup pull", 26, 2),
     ("edsys-netbox-restore-test", "NetBox isolated restore test", 8 * 24, 24),
     ("edsys-netbox-sync-review", "NetBox discovery and reconciliation review", 26, 2),
     ("edsys-netbox-export-review", "NetBox sanitized export review", 8 * 24, 24),
@@ -87,6 +88,12 @@ for slug, name, timeout_hours, grace_hours in checks:
         check.name = name; changed = True
     if check.methods is None:
         check.methods = ""; changed = True
+    desired_timeout = timedelta(hours=timeout_hours)
+    desired_grace = timedelta(hours=grace_hours)
+    if check.timeout != desired_timeout:
+        check.timeout = desired_timeout; changed = True
+    if check.grace != desired_grace:
+        check.grace = desired_grace; changed = True
     if changed:
         check.save()
     print(f"{slug}\t{check.code}")
@@ -116,6 +123,7 @@ declare -A SYSTEMD_SERVICES=(
   [foothills-restic-restore-test]=foothills-restic-restore-test
   [foothills-restic-offsite-restore-test]=foothills-restic-offsite-restore-test
   [edsys-netbox-backup-pull]=edsys-netbox-backup-pull
+  [edsys-edcore-automation-backup-pull]=edsys-edcore-automation-backup-pull
   [edsys-netbox-sync-review]=edsys-netbox-sync-review
   [edsys-netbox-export-review]=edsys-netbox-export-review
 )

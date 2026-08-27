@@ -104,6 +104,7 @@ REQUIRED_MONITOR_COLUMNS = {
     "tls_ca",
     "tls_cert",
     "tls_key",
+    "auth_method",
 }
 
 
@@ -247,8 +248,14 @@ def upsert_monitor(
         raise ReconcileError(f"duplicate monitor name requires manual review: {spec.name}")
     active = requested_active(state, rows[0][1] if rows else None)
     monitor_tls_ca = None
+    auth_method = None
     if spec.monitor_type == "http":
         monitor_tls_ca = tls_ca if tls_ca is not None else (rows[0][2] if rows else None)
+        # Uptime Kuma 1.x applies the custom server CA only through its mTLS
+        # HTTPS agent path. Selecting that path with a CA and no client
+        # certificate provides strict private-CA server verification without
+        # granting the monitor a client identity.
+        auth_method = "mtls"
     values = (
         active,
         user_id,
@@ -260,6 +267,7 @@ def upsert_monitor(
         parent_id,
         spec.accepted_statuses,
         monitor_tls_ca,
+        auth_method,
     )
     if not rows:
         cursor = connection.execute(
@@ -269,10 +277,11 @@ def upsert_monitor(
                maxretries, ignore_tls, retry_interval, method, description,
                parent, expiry_notification, accepted_statuscodes_json,
                basic_auth_user, basic_auth_pass, mqtt_username, mqtt_password,
-               mqtt_topic, mqtt_success_message, tls_ca, tls_cert, tls_key)
+               mqtt_topic, mqtt_success_message, tls_ca, tls_cert, tls_key,
+               auth_method)
             VALUES
               (?, ?, ?, 60, ?, ?, ?, ?, 2, 0, 60, 'GET', ?, ?, 1, ?,
-               NULL, NULL, NULL, NULL, NULL, NULL, ?, NULL, NULL)
+               NULL, NULL, NULL, NULL, NULL, NULL, ?, NULL, NULL, ?)
             """,
             (spec.name, *values),
         )
@@ -288,7 +297,7 @@ def upsert_monitor(
                 accepted_statuscodes_json=?, basic_auth_user=NULL,
                 basic_auth_pass=NULL, mqtt_username=NULL, mqtt_password=NULL,
                 mqtt_topic=NULL, mqtt_success_message=NULL, tls_ca=?,
-                tls_cert=NULL, tls_key=NULL
+                tls_cert=NULL, tls_key=NULL, auth_method=?
             WHERE id=?
             """,
             (*values, monitor_id),
