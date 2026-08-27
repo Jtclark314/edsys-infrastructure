@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from .catalog_loader import CatalogStore
 from .config import Settings, get_settings
 from .health_checks import HealthChecker
-from .routers import dashboard, devices, health, meta, search, services
+from .routers import dashboard, devices, grounding, health, meta, search, services
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -66,6 +66,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(services.router)
     app.include_router(devices.router)
     app.include_router(search.router)
+    app.include_router(grounding.router)
     app.include_router(health.router)
     app.include_router(dashboard.router)
     return app

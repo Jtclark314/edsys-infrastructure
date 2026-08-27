@@ -12,8 +12,14 @@ services:
     env_file:
       - path: .env
         required: false
+      - path: /etc/edsys-secrets/control-api/voice-grounding.env
+        required: true
     volumes:
       - type: bind
         source: ${EDSYS_MASTER_DATA_PATH}
         target: /data
+        read_only: true
+      - type: bind
+        source: /mnt/ai-store/rag/grounding/edsys-grounding.sqlite
+        target: /rag/edsys-grounding.sqlite
         read_only: true

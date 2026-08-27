@@ -1,0 +1,36 @@
+name: edsys-voice-gateway
+description: Private transcript-level voice decision and conversation gateway
+host: 9950x
+runtime: Docker Compose with a dedicated systemd unit and immutable local image ID
+ports:
+  - 127.0.0.1:8055/tcp to container 8443/tcp for local TLS API
+  - 192.168.50.50:8055/tcp to container 8443/tcp, admitted only from Home Assistant 192.168.50.75
+  - 127.0.0.1:8056/tcp to container 9101/tcp for Prometheus metrics
+volumes:
+  - /etc/edsys-secrets/voice-gateway/tls (read-only; private runtime)
+  - ./config/approved-workflows.json (read-only; reviewed policy)
+environment:
+  - /etc/edsys-secrets/voice-gateway/deploy.env
+  - /etc/edsys-secrets/voice-gateway/gateway.env
+secrets_required:
+  - Home Assistant to Gateway bearer credential
+  - Gateway operator bearer credential
+  - non-admin Gateway to Home Assistant credential
+  - LiteLLM service credential
+  - current-only RAG credential when enabled
+  - internal TLS certificate, key, and CA chain
+backup:
+  classification: source-and-secret-escrow
+  include:
+    - private Git source and infrastructure definitions
+    - encrypted secret escrow under the established EdSys secret process
+  exclude:
+    - ephemeral request cache
+    - audio, transcripts, prompts, and response bodies
+monitoring:
+  - HTTPS liveness at loopback/LAN API
+  - loopback-only Prometheus metrics
+  - Uptime Kuma from the 9950x or Home Assistant source path
+restore_notes: Restore exact source/image digest, restore private credentials and TLS material, start firewall then Compose, verify text routing before selecting the HA conversation agent.
+owner: EdSys
+last_verified: to be confirmed after production deployment

@@ -1,0 +1,20 @@
+[Unit]
+Description=EdSys Voice Gateway Docker Compose service
+Requires=docker.service network-online.target edsys-voice-gateway-firewall.service
+After=docker.service network-online.target edsys-container-recovery.service edsys-voice-gateway-firewall.service
+Wants=edsys-container-recovery.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/srv/edsys/edsys-infrastructure/docker/9950x-voice-gateway
+EnvironmentFile=/etc/edsys-secrets/voice-gateway/deploy.env
+ExecStartPre=/usr/local/sbin/edsys-voice-gateway-preflight
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStartPost=/srv/edsys/edsys-infrastructure/docker/9950x-voice-gateway/scripts/verify.sh
+ExecStop=/usr/bin/docker compose stop -t 30
+TimeoutStartSec=300
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

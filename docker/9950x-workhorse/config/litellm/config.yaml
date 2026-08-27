@@ -47,11 +47,14 @@ router_settings:
     # Do not replace these with config-stored API keys.
     edsys-chat-cloud: gpt-5-chat-latest
     edsys-coder-cloud: gpt-5-codex
+    edsys-voice-cloud: gpt-5-chat-latest
   fallbacks:
     - edsys-chat-cloud:
         - edsys-chat-local
     - edsys-coder-cloud:
         - edsys-coder-local
+    - edsys-voice-cloud:
+        - edsys-voice-quality
     - edsys-voice-quality:
         - edsys-voice-fast
 

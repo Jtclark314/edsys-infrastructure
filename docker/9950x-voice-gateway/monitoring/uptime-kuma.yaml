@@ -1,0 +1,10 @@
+schema: edsys.uptime-kuma.monitor.v1
+name: EdSys Voice Gateway
+type: http
+url: https://192.168.50.50:8055/health/live
+method: GET
+expected_status: 200
+interval_seconds: 60
+source_requirement: Monitor must originate on 9950x loopback or Home Assistant 192.168.50.75.
+tls_requirement: Trust the EdSys internal CA; do not disable certificate verification in production.
+status: to be configured after the TLS endpoint is deployed

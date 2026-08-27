@@ -12,10 +12,13 @@ It is not a control system. This first version does not restart, reboot, edit, d
 EdSys-Master YAML
   data/network-map.yml
   data/service-catalog.yml
+Shared current-only grounding index
+  /mnt/ai-store/rag/grounding/edsys-grounding.sqlite
         |
         v
 EdSys Control API
-  FastAPI normalization, filtering, search, and optional live checks
+  FastAPI normalization, filtering, authenticated grounding search,
+  and optional live checks
         |
         v
 Dashboards, local AI, future voice assistant, monitoring tools
@@ -50,6 +53,7 @@ The API reads these files from a mounted read-only data folder:
 
 - `network-map.yml`
 - `service-catalog.yml`
+- the existing current-only EdSys grounding SQLite index
 
 Default container paths:
 
@@ -70,7 +74,15 @@ EDSYS_HEALTH_TIMEOUT_SECONDS=2
 EDSYS_ENABLE_LIVE_CHECKS=true
 EDSYS_CACHE_SECONDS=30
 EDSYS_API_TITLE=EdSys Control API
+EDSYS_GROUNDING_INDEX=/rag/edsys-grounding.sqlite
+EDSYS_GROUNDING_FRESHNESS_SECONDS=900
+EDSYS_GROUNDING_TOP_K=6
 ```
+
+`EDSYS_GROUNDING_BEARER_TOKEN` is required for the grounding endpoint. On the
+9950x it is loaded from
+`/etc/edsys-secrets/control-api/voice-grounding.env`; it must never be placed in
+Git or copied into documentation.
 
 ## Local Windows Development
 
@@ -154,6 +166,7 @@ promotion.
 - `GET /api/devices/{hostname}`
 - `GET /api/devices/{hostname}/services`
 - `GET /api/search?q=`
+- `POST /api/grounding/search` (dedicated bearer credential required)
 - `GET /api/health`
 - `GET /api/health/live`
 - `GET /api/health/live/{service_name}`
@@ -177,10 +190,13 @@ Live checks are safe and read-only:
 
 ## Security Notes
 
-- No app login is included in this MVP.
+- Existing catalog and shallow-health endpoints remain unauthenticated on the
+  LAN. The voice grounding endpoint requires its own bearer credential.
 - Keep it LAN-only unless an upstream access layer is added.
 - Do not commit `.env`, secrets, tokens, API keys, logs, databases, Docker volumes, or private runtime data.
 - This API exposes infrastructure metadata that is useful internally but should not be public without protection.
+- Grounding search opens the shared index read-only and does not persist the
+  query, excerpts, transcript, or generated answer.
 
 ## Backup And Recovery
 
@@ -189,12 +205,14 @@ The API is stateless. Back up:
 - this Git repo for implementation,
 - `EdSys-Master` for source-of-truth YAML and docs.
 
-No runtime database is used by this service.
+The shared grounding database is an externally managed, reproducible read-only
+input; it is not a Control API runtime database.
 
 ## Known Limitations
 
 - Health checks are shallow reachability checks, not deep application checks.
-- No authentication yet.
+- Most catalog endpoints do not yet require authentication; the grounding
+  endpoint is authenticated.
 - No write/control actions yet.
 - No Prometheus metrics endpoint yet.
 - No Home Assistant or Uptime Kuma integration yet.
