@@ -45,3 +45,26 @@ sudo sshd -t && sudo systemctl reload ssh.service
 ```
 
 Controller public keys remain live private host state and never belong in Git.
+
+## EdCore Omarchy Workhorse
+
+`90-edsys-omarchy-workhorse.conf` is the sanitized SSH policy accepted on
+`edcore-workhorse`. It is intentionally stricter than the 9950x policy because
+the workhorse does not currently need local or remote forwarding.
+
+Install it from a physical console or an already proven key-authenticated
+session, validate before reload, and verify a fresh connection before closing
+the maintenance session:
+
+```bash
+sudo install -o root -g root -m 0644 \
+  scripts/security/90-edsys-omarchy-workhorse.conf \
+  /etc/ssh/sshd_config.d/90-edsys-hardening.conf
+sudo sshd -t
+sudo systemctl reload sshd
+```
+
+The accepted UFW boundary is default-deny incoming, TCP/22 from
+`192.168.50.50` only, and no LocalSend ingress. Public keys and the live UFW
+ruleset remain private host state rather than Git content. Omarchy's
+user-persistent workhorse posture is `omarchy-toggle-idle stay-awake`.
