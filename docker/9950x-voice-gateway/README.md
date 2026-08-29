@@ -1,5 +1,10 @@
 # 9950x EdSys Voice Gateway Deployment
 
+**Status: retired 2026-08-29.** The former Home Assistant endpoint was
+destroyed with EdCore. The installer, runtime initializer, and firewall helper
+intentionally refuse to run until this stack is redesigned for a replacement
+Home Assistant deployment.
+
 This stack deploys the independent transcript-level Voice Gateway. It does not
 receive raw audio and it is not part of the AI Portal process. Runtime secrets
 live under `/etc/edsys-secrets/voice-gateway/` and never enter Git.
@@ -7,14 +12,11 @@ live under `/etc/edsys-secrets/voice-gateway/` and never enter Git.
 ## Network boundary
 
 - `127.0.0.1:8055` — host-local TLS API.
-- `192.168.50.50:8055` — TLS API; the forward firewall permits only Home
-  Assistant at `192.168.50.75`.
 - `127.0.0.1:8056` — Prometheus metrics only.
 - No wildcard host, Tailnet, Cloudflare, or public publication is defined.
 
-Docker publishes to a non-root container port. The nftables forward hook checks
-the original published port after Docker DNAT and drops every remote source
-except Home Assistant.
+The retired definition has no LAN publication. A future design must establish
+a new source boundary before restoring remote access.
 
 ## Required private files
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the authoritative nine-node EdSys Netdata parent topology."""
+"""Verify the authoritative five-node EdSys Netdata parent topology."""
 
 from __future__ import annotations
 
@@ -12,14 +12,16 @@ import urllib.request
 PARENT = "http://127.0.0.1:19999"
 EXPECTED = {
     "9950x",
-    "edcore-automation",
-    "edcore-ops",
-    "edcore-sdr",
     "netbox",
-    "pve-edcore",
     "pve-node0",
     "pve-node1",
     "pve-node2",
+}
+RETIRED = {
+    "edcore-automation",
+    "edcore-ops",
+    "edcore-sdr",
+    "pve-edcore",
 }
 EXPECTED_GROUP = "edsys-compute"
 EXPECTED_TOTAL = len(EXPECTED)
@@ -44,7 +46,7 @@ def main() -> int:
 
     nodes = nodes_payload.get("nodes", [])
     by_name = {node.get("nm"): node for node in nodes if node.get("nm")}
-    actual = set(by_name)
+    actual = {name for name, node in by_name.items() if node.get("state") != "stale"}
     errors: list[str] = []
 
     if actual != EXPECTED:
@@ -52,6 +54,14 @@ def main() -> int:
             "node set mismatch: "
             f"missing={sorted(EXPECTED - actual)} unexpected={sorted(actual - EXPECTED)}"
         )
+
+    unexpected_history = set(by_name) - EXPECTED - RETIRED
+    if unexpected_history:
+        errors.append(f"unexpected historical nodes={sorted(unexpected_history)}")
+    for name in sorted(RETIRED & set(by_name)):
+        node = by_name[name]
+        if node.get("state") != "stale":
+            errors.append(f"retired node {name}: state={node.get('state')!r}")
 
     for name in sorted(EXPECTED & actual):
         node = by_name[name]
@@ -82,9 +92,9 @@ def main() -> int:
         counts = local_agent.get("nodes", {})
         if runtime.get("parent") is not True:
             errors.append(f"9950x parent flag is {runtime.get('parent')!r}")
-        if counts.get("total") != EXPECTED_TOTAL:
+        if not isinstance(counts.get("total"), int) or counts.get("total") < EXPECTED_TOTAL:
             errors.append(
-                f"9950x reports total={counts.get('total')!r}, expected {EXPECTED_TOTAL}"
+                f"9950x reports total={counts.get('total')!r}, expected at least {EXPECTED_TOTAL}"
             )
         if counts.get("receiving") != EXPECTED_RECEIVING:
             errors.append(
@@ -104,8 +114,10 @@ def main() -> int:
             f"health={node.get('health', {}).get('status')}, "
             f"group={node.get('labels', {}).get('group')}, version={node.get('v')}"
         )
+    for name in sorted(RETIRED & set(by_name)):
+        print(f"PASS retired {name}: archived stale history, no active stream")
     print(
-        f"PASS topology: 9950x parent, {EXPECTED_TOTAL} total nodes, "
+        f"PASS topology: 9950x parent, {EXPECTED_TOTAL} active nodes, "
         f"{EXPECTED_RECEIVING} receiving children"
     )
     return 0

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "The EdSys Voice Gateway was retired with the former EdCore Home Assistant deployment; redesign it before installation." >&2
+exit 2
+
 readonly stack_dir="/srv/edsys/edsys-infrastructure/docker/9950x-voice-gateway"
 readonly unit_dir="/etc/systemd/system"
 

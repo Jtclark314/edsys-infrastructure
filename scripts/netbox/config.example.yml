@@ -5,7 +5,6 @@ service_catalog: /home/jeremy/code/EdSys-Master/data/service-catalog.yml
 export_path: /home/jeremy/code/EdSys-Master/data/netbox-inventory.yml
 state_dir: /var/lib/edsys-netbox-sync
 proxmox_hosts:
-  - pve-edcore
   - pve-node0
   - pve-node1
   - pve-node2
@@ -17,7 +16,6 @@ docker_hosts:
   - edsys-ingress
 network_hosts:
   - localhost
-  - pve-edcore
   - pve-node0
   - pve-node1
   - pve-node2
@@ -27,7 +25,5 @@ network_hosts:
   - arr-server
   - family-services
   - node1-services
-  - edcore-ops
-  - edcore-sdr
   - aruba-switch
   - unifi-ap

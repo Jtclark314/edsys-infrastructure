@@ -5,6 +5,6 @@ url: https://192.168.50.50:8055/health/live
 method: GET
 expected_status: 200
 interval_seconds: 60
-source_requirement: Monitor must originate on 9950x loopback or Home Assistant 192.168.50.75.
+source_requirement: Retired; define a new source boundary before redeployment.
 tls_requirement: Trust the EdSys internal CA; do not disable certificate verification in production.
-status: to be configured after the TLS endpoint is deployed
+status: retired 2026-08-29

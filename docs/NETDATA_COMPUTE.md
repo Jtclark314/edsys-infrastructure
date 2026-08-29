@@ -2,21 +2,17 @@
 
 ## Current Design
 
-`9950x` is the single EdSys Netdata Parent. The four Proxmox hosts plus the
-`edcore-ops`, `edcore-sdr`, `netbox`, and `edcore-automation` Ubuntu satellites are Netdata Children and stream
-to the parent over the LAN:
+`9950x` is the single EdSys Netdata Parent. The three retained Proxmox hosts
+and the authoritative `netbox` Ubuntu VM are Netdata Children and stream to
+the parent over the LAN:
 
 - `9950x` — parent and local collector
-- `edcore-automation` — production MQTT and automation-services satellite
-- `edcore-ops` — Ubuntu operations/Codex satellite
-- `edcore-sdr` — Ubuntu SDR/RF observatory satellite
-- `netbox` — Ubuntu inventory candidate with NetBox, Docker, and node_exporter metrics
-- `pve-edcore` — child
+- `netbox` — authoritative inventory with NetBox, Docker, and node_exporter metrics
 - `pve-node0` — child
 - `pve-node1` — child
 - `pve-node2` — child
 
-All nine nodes carry the host label `group=edsys-compute`. The authoritative
+All five nodes carry the host label `group=edsys-compute`. The authoritative
 local dashboard and API are on `9950x` TCP `19999`.
 
 The streaming API key is generated at deployment time, stored only in
@@ -36,13 +32,12 @@ sudo scripts/ops/deploy-netdata-compute.sh --apply
 
 The installer:
 
-1. Preflights SSH and child-to-parent LAN reachability, including the
-   separately provisioned `edcore-ops`, `edcore-sdr`, `netbox`, and
-   `edcore-automation` satellites.
+1. Preflights SSH and child-to-parent LAN reachability for the three Proxmox
+   nodes and the separately provisioned `netbox` satellite.
 2. Stores private pre-change configuration under
    `/var/backups/edsys-netdata-compute/<UTC timestamp>/` on every affected host.
-3. Aligns the four Debian 13 Proxmox hosts and all four Ubuntu 24.04 satellites to
-   the signed Netdata edge APT repository. Satellite web interfaces bind only
+3. Aligns the three Debian 13 Proxmox hosts and the NetBox Ubuntu 24.04 satellite to
+   the signed Netdata edge APT repository. The satellite web interface binds only
    to loopback; the deployer configures their outbound streams.
 4. Configures exact hostnames and the shared `edsys-compute` label.
    The private stream credential travels only over SSH standard input into a
@@ -52,7 +47,7 @@ The installer:
 5. Sets the Parent's Docker collector to a 10-second cadence while retaining
    Docker service discovery and Docker/cgroup charts.
 6. Restarts the Parent first and each Child individually.
-7. Requires the exact nine-node topology and eight receiving streams before
+7. Requires the exact five-node topology and four receiving streams before
    reporting success.
 
 If configuration deployment fails, the script restores the prior
@@ -60,7 +55,7 @@ If configuration deployment fails, the script restores the prior
 Netdata. Package installation is not automatically reversed; that avoids
 destructive package removal on a Proxmox host.
 
-The 2026-07-28 host performance sweep found that the stock one-second Docker
+Historical note: the 2026-07-28 host performance sweep found that the stock one-second Docker
 collector cadence made `dockerd` average 112.1% CPU while walking the 9950x's
 160-image inventory. The Parent now collects the Docker job every 10 seconds.
 A 30-second post-change sample averaged 13.8% `dockerd` CPU, and the exact
@@ -74,21 +69,8 @@ receiving stream. On 2026-08-27, the strict local API check passed with all
 nine exact node names online, all carrying `group=edsys-compute`, and the
 parent reporting nine total nodes and eight receiving streams. The parent was
 on the accepted `v2.11.0-138-nightly` build and all eight children were on the
-accepted `v2.11.0-84-nightly` build at that check.
-
-When `edcore-automation` has not previously been contacted from `9950x`, obtain
-its ED25519 host-key fingerprint from the trusted Proxmox console and use the
-explicit first-enrollment option:
-
-```bash
-sudo scripts/ops/deploy-netdata-compute.sh --apply \
-  --automation-host-key 'SHA256:<trusted-console-fingerprint>'
-```
-
-The deployer verifies the scanned key against that fingerprint before changing
-the operator's root-private `known_hosts` file. It backs up that file with the
-other private pre-change material and restores it automatically if deployment
-fails. It never enables trust-on-first-use or disables strict host-key checks.
+accepted `v2.11.0-84-nightly` build at that check. Those EdCore-era nodes were
+retired on 2026-08-29; this history is not part of the current acceptance set.
 
 ## Verification
 
@@ -99,11 +81,13 @@ scripts/ops/deploy-netdata-compute.sh --check
 
 The check fails unless:
 
-- the node set is exactly the nine names above;
+- the active node set is exactly the five names above; archived stale history
+  for the four retired EdCore nodes is allowed but no active stream is;
 - every node is reachable, with its alert engine either online or in the
   bounded post-restart `initializing` state;
 - every node has `group=edsys-compute`;
-- `9950x` reports Parent mode, nine total nodes, and eight receiving streams.
+- `9950x` reports Parent mode and four receiving streams. Its historical total
+  may remain above five because Netdata retains stale node history.
 
 Direct API inspection remains available at:
 

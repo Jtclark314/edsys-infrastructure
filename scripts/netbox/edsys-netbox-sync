@@ -282,7 +282,9 @@ def cf_values(source: str, observed: str | None, confidence: str, raw: Any, **ex
     return result
 
 
-def inventory_tags(*, to_be_confirmed: bool = False, benchmark_canary: bool = False):
+def inventory_tags(
+    *, to_be_confirmed: bool = False, benchmark_canary: bool = False, retired: bool = False
+):
     result = [ref("tag:discovered")]
     if AUTHORITATIVE_CUTOVER:
         result.append(ref("tag:authoritative"))
@@ -290,6 +292,8 @@ def inventory_tags(*, to_be_confirmed: bool = False, benchmark_canary: bool = Fa
         result.append(ref("tag:to-be-confirmed"))
     if benchmark_canary:
         result.append(ref("tag:benchmark-canary"))
+    if retired:
+        result.append(ref("tag:retired"))
     return result
 
 
@@ -449,7 +453,7 @@ def stable_inventory_ip(value: Any):
 def add_network_inventory(plan: Plan, network: dict[str, Any]):
     vm_ips = {item.get("guest_ip") for item in network.get("proxmox_resources", []) if item.get("guest_ip")}
     vm_names = {item.get("name") for item in network.get("proxmox_resources", [])}
-    vm_names.update({"home-assistant", "edcore-ops", "edcore-sdr", "node1-services", "family-services", "arr-server", "edrouter-node0", "arr-vm", "netbox"})
+    vm_names.update({"node1-services", "family-services", "arr-server", "edrouter-node0", "arr-vm", "netbox"})
 
     plan.upsert(
         "vlan:1", "ipam/vlans/", {"vid": 1, "name": "DEFAULT_VLAN"},
@@ -482,7 +486,11 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
         category = device_category_role(device.get("category"), device.get("role"))
         key = f"device:{name}"
         is_tbc = bool(device.get("verify_live")) or str(device.get("confidence", "")).lower() not in {"high", "verified"}
-        tag_refs = inventory_tags(to_be_confirmed=is_tbc)
+        is_retired = any(
+            token in str(device.get("status", "")).lower()
+            for token in ("retired", "destroyed")
+        )
+        tag_refs = inventory_tags(to_be_confirmed=is_tbc, retired=is_retired)
         payload = {
             "name": name,
             "device_type": ref(f"device-type:{category}"),
@@ -490,13 +498,13 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
             "site": ref("site:edsys-home"),
             "location": ref("location:network-core"),
             "tenant": ref("tenant:edsys"),
-            "status": "active" if "retired" not in str(device.get("status", "")) else "offline",
+            "status": "offline" if is_retired else "active",
             "description": str(device.get("role") or device.get("category") or "EdSys managed device")[:200],
             "comments": f"Management: {', '.join(device.get('management_urls') or [])}\n\n{device.get('notes', '')}"[:5000],
             "tags": tag_refs,
             "custom_fields": cf_values(
                 device.get("source", "EdSys network map"), device.get("last_verified"), device.get("confidence", "medium"), device,
-                last_verified=(device.get("last_verified") or TODAY)[:10], management_method="EdSys reviewed inventory and read-only discovery",
+                last_verified=(device.get("last_verified") or TODAY)[:10], management_method="EdSys reviewed inventory and read-only discovery", retired=is_retired,
             ),
         }
         if name in set(network.get("proxmox_cluster", {}).get("nodes", [])):
@@ -512,10 +520,10 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
                 ifkey, "dcim/interfaces/", {"device_id": ref(key), "name": ifname},
                 {
                     "device": ref(key), "name": ifname, "type": "other",
-                    "enabled": str(interface.get("state", "UP")).upper() != "DOWN",
+                    "enabled": not is_retired and str(interface.get("state", "UP")).upper() != "DOWN",
                     "description": str(interface.get("notes") or "Observed interface")[:200],
                     "tags": tag_refs,
-                    "custom_fields": cf_values(device.get("source", "EdSys network map"), device.get("last_verified"), device.get("confidence", "medium"), interface),
+                    "custom_fields": cf_values(device.get("source", "EdSys network map"), device.get("last_verified"), device.get("confidence", "medium"), interface, retired=is_retired),
                 },
             )
             mac = interface.get("mac") or (device.get("mac") if index == 0 else None)
@@ -534,12 +542,12 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
                 plan.upsert(
                     ipkey, "ipam/ip-addresses/", {"address": address_with_mask(ip)},
                     {
-                        "address": address_with_mask(ip), "status": "active", "tenant": ref("tenant:edsys"),
+                        "address": address_with_mask(ip), "status": "deprecated" if is_retired else "active", "tenant": ref("tenant:edsys"),
                         "assigned_object_type": "dcim.interface", "assigned_object_id": ref(ifkey),
-                        "dns_name": f"{name}.edsys.local" if str(ip).startswith("192.168.50.") else "",
+                        "dns_name": f"{name}.edsys.local" if str(ip).startswith("192.168.50.") and not is_retired else "",
                         "description": "Observed interface address",
                         "tags": tag_refs,
-                        "custom_fields": cf_values(device.get("source", "EdSys network map"), device.get("last_verified"), device.get("confidence", "medium"), {"device": name, "interface": interface}),
+                        "custom_fields": cf_values(device.get("source", "EdSys network map"), device.get("last_verified"), device.get("confidence", "medium"), {"device": name, "interface": interface}, retired=is_retired),
                     },
                 )
                 if ip == device.get("ip") or (primary_ip_ref is None and str(ip).startswith("192.168.50.")):
@@ -550,11 +558,11 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
                 plan.upsert(
                     ifkey, "dcim/interfaces/", {"device_id": ref(key), "name": "management0"},
                     {
-                        "device": ref(key), "name": "management0", "type": "other", "enabled": True,
+                        "device": ref(key), "name": "management0", "type": "other", "enabled": not is_retired,
                         "description": "Reviewed primary management interface", "tags": tag_refs,
                         "custom_fields": cf_values(
                             device.get("source", "EdSys network map"), device.get("last_verified"),
-                            device.get("confidence", "medium"), {"device": name, "interface": "management0"},
+                            device.get("confidence", "medium"), {"device": name, "interface": "management0"}, retired=is_retired,
                         ),
                     },
                 )
@@ -562,12 +570,12 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
             plan.upsert(
                 primary_ip_ref, "ipam/ip-addresses/", {"address": address_with_mask(device["ip"])},
                 {
-                    "address": address_with_mask(device["ip"]), "status": "active", "tenant": ref("tenant:edsys"),
+                    "address": address_with_mask(device["ip"]), "status": "deprecated" if is_retired else "active", "tenant": ref("tenant:edsys"),
                     "assigned_object_type": "dcim.interface", "assigned_object_id": ref(ifkey),
-                    "dns_name": f"{name}.edsys.local", "description": "Primary management address", "tags": tag_refs,
+                    "dns_name": "" if is_retired else f"{name}.edsys.local", "description": "Primary management address", "tags": tag_refs,
                     "custom_fields": cf_values(
                         device.get("source", "EdSys network map"), device.get("last_verified"),
-                        device.get("confidence", "medium"), {"device": name, "address": device["ip"]},
+                        device.get("confidence", "medium"), {"device": name, "address": device["ip"]}, retired=is_retired,
                     ),
                 },
             )
@@ -614,9 +622,11 @@ def add_virtualization(plan: Plan, network: dict[str, Any], live_resources: list
         vmid = int(item["vmid"])
         by_vmid.setdefault(vmid, {}).update(item)
     by_vmid[323] = {
-        "type": "qemu", "vmid": 323, "name": "netbox", "node": "pve-edcore", "status": "running",
-        "guest_ip": "192.168.50.81", "cores": 4, "memory_mb": 8192,
-        "disks": ["local-lvm:vm-323-disk,size=128G"], "onboot": True, "startup": "order=40,up=180,down=180",
+        "type": "qemu", "vmid": 323, "name": "netbox", "node": "pve-node0", "status": "running",
+        "guest_ip": "192.168.50.81", "mac": "bc:24:11:91:21:17", "bridge": "vmbr0",
+        "cores": 4, "memory_mb": 4096,
+        "disks": ["local-lvm:vm-323-disk-1,size=128G"], "onboot": True,
+        "startup": "order=20,up=180,down=180",
         "source": "EdSys NetBox production deployment", "confidence": "high", "last_verified": TODAY,
     }
     for vmid, vm in sorted(by_vmid.items()):
@@ -624,9 +634,14 @@ def add_virtualization(plan: Plan, network: dict[str, Any], live_resources: list
         key = f"vm:{vmid}"
         ip = vm.get("guest_ip")
         is_benchmark_canary = vmid == 390 and name == "fleet-canary"
+        is_retired = any(
+            token in str(vm.get("status", "")).lower()
+            for token in ("retired", "destroyed")
+        )
         tag_refs = inventory_tags(
             to_be_confirmed=str(vm.get("confidence", "")).lower() not in {"high", "verified"},
             benchmark_canary=is_benchmark_canary,
+            retired=is_retired,
         )
         plan.upsert(
             key, "virtualization/virtual-machines/", {"cluster_id": ref("cluster:gadgetlab"), "name": name},
@@ -638,7 +653,7 @@ def add_virtualization(plan: Plan, network: dict[str, Any], live_resources: list
                 "vcpus": vm.get("cores"), "memory": vm.get("memory_mb"),
                 "description": f"Proxmox VMID {vmid} on {vm.get('node', 'to be confirmed')}"[:200],
                 "comments": str(vm.get("notes") or "")[:5000], "tags": tag_refs,
-                "custom_fields": cf_values(vm.get("source", "Proxmox discovery"), vm.get("last_verified"), vm.get("confidence", "high"), vm, last_verified=(vm.get("last_verified") or TODAY)[:10], management_method="Proxmox read-only discovery"),
+                "custom_fields": cf_values(vm.get("source", "Proxmox discovery"), vm.get("last_verified"), vm.get("confidence", "high"), vm, last_verified=(vm.get("last_verified") or TODAY)[:10], management_method="Proxmox read-only discovery", retired=is_retired),
             },
         )
         has_interface = bool(vm.get("bridge") or vm.get("mac") or valid_ip(ip))
@@ -647,13 +662,13 @@ def add_virtualization(plan: Plan, network: dict[str, Any], live_resources: list
             plan.upsert(
                 ifkey, "virtualization/interfaces/", {"virtual_machine_id": ref(key), "name": "net0"},
                 {
-                    "virtual_machine": ref(key), "name": "net0", "enabled": True,
+                    "virtual_machine": ref(key), "name": "net0", "enabled": not is_retired,
                     "description": f"Proxmox bridge {vm.get('bridge') or 'to be confirmed'}", "tags": tag_refs,
                     "custom_fields": cf_values(
                         vm.get("source", "Proxmox discovery"), vm.get("last_verified"), vm.get("confidence", "high"),
                         {"vmid": vmid, "bridge": vm.get("bridge"), "mac": vm.get("mac")},
                         last_verified=(vm.get("last_verified") or TODAY)[:10],
-                        management_method="Proxmox read-only discovery",
+                        management_method="Proxmox read-only discovery", retired=is_retired,
                     ),
                 },
             )
@@ -664,14 +679,14 @@ def add_virtualization(plan: Plan, network: dict[str, Any], live_resources: list
             plan.upsert(
                 ipkey, "ipam/ip-addresses/", {"address": address_with_mask(ip)},
                 {
-                    "address": address_with_mask(ip), "status": "active", "tenant": ref("tenant:edsys"),
+                    "address": address_with_mask(ip), "status": "deprecated" if is_retired else "active", "tenant": ref("tenant:edsys"),
                     "assigned_object_type": "virtualization.vminterface", "assigned_object_id": ref(ifkey),
-                    "dns_name": f"{name}.edsys.local" if str(ip).startswith("192.168.50.") else "",
+                    "dns_name": f"{name}.edsys.local" if str(ip).startswith("192.168.50.") and not is_retired else "",
                     "description": f"VMID {vmid} primary address", "tags": tag_refs,
                     "custom_fields": cf_values(
                         vm.get("source", "Proxmox discovery"), vm.get("last_verified"), vm.get("confidence", "high"),
                         {"vmid": vmid, "address": ip}, last_verified=(vm.get("last_verified") or TODAY)[:10],
-                        management_method="Proxmox read-only discovery",
+                        management_method="Proxmox read-only discovery", retired=is_retired,
                     ),
                 },
             )
@@ -687,7 +702,7 @@ def add_virtualization(plan: Plan, network: dict[str, Any], live_resources: list
                         "custom_fields": cf_values(
                             vm.get("source", "Proxmox discovery"), vm.get("last_verified"), vm.get("confidence", "high"),
                             {"vmid": vmid, "disk": str(disk)}, last_verified=(vm.get("last_verified") or TODAY)[:10],
-                            management_method="Proxmox read-only discovery",
+                            management_method="Proxmox read-only discovery", retired=is_retired,
                         ),
                     },
                 )
@@ -729,8 +744,12 @@ def add_services(plan: Plan, services: dict[str, Any], network: dict[str, Any]):
     vm_name_map["arr-server"] = "vm:200"
     for item in services.get("services", []):
         parsed = service_protocol(item)
-        if not parsed or "retired" in str(item.get("status", "")).lower():
+        if not parsed:
             continue
+        is_retired = any(
+            token in str(item.get("status", "")).lower()
+            for token in ("retired", "destroyed")
+        )
         protocol, port = parsed
         host = str(item.get("host") or "")
         parent = physical.get(host) or vm_name_map.get(host) or vm_ip_map.get(str(item.get("ip") or ""))
@@ -743,11 +762,11 @@ def add_services(plan: Plan, services: dict[str, Any], network: dict[str, Any]):
             "protocol": protocol, "ports": [port],
             "description": f"{item.get('runtime', '')}; {item.get('url') or ''}"[:200].strip(),
             "comments": str(item.get("notes") or "")[:5000],
-            "tags": inventory_tags(),
+            "tags": inventory_tags(retired=is_retired),
             "custom_fields": cf_values(
                 item.get("source", "EdSys service catalog"), item.get("last_verified"), item.get("confidence", "medium"), item,
                 last_verified=(item.get("last_verified") or TODAY)[:10], criticality=str(item.get("criticality") or "")[:100],
-                backup_requirement=str(item.get("backup_required") or "")[:200], management_method=str(item.get("runtime") or "")[:200],
+                backup_requirement=str(item.get("backup_required") or "")[:200], management_method=str(item.get("runtime") or "")[:200], retired=is_retired,
             ),
         }
         plan.upsert(f"service:{slug(item['name'])}", "ipam/services/", {"name": item["name"][:100]}, payload)
@@ -1097,6 +1116,8 @@ def sanitized_export(api: NetBoxAPI):
         })
     virtual_machines = []
     for item in api.list("virtualization/virtual-machines/"):
+        if (item.get("custom_fields") or {}).get("retired") is True:
+            continue
         virtual_machines.append({
             "name": item.get("name"), "status": item.get("status", {}).get("value") if isinstance(item.get("status"), dict) else item.get("status"),
             "cluster": nested_name(item.get("cluster")), "site": nested_name(item.get("site")),

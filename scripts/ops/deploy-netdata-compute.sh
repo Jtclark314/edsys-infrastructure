@@ -6,22 +6,15 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 verify_script="${repo_root}/scripts/ops/verify-netdata-compute.py"
 parent_ip="192.168.50.50"
 group_name="edsys-compute"
-pve_children=(pve-edcore pve-node0 pve-node1 pve-node2)
-satellites=(edcore-ops edcore-sdr netbox edcore-automation)
-automation_ip="192.168.50.82"
-automation_host_key_fingerprint="${EDCORE_AUTOMATION_SSH_HOST_KEY_FINGERPRINT:-}"
+pve_children=(pve-node0 pve-node1 pve-node2)
+satellites=(netbox)
 
 usage() {
   cat <<'EOF'
-Usage: deploy-netdata-compute.sh --check | --apply [--automation-host-key SHA256:...]
+Usage: deploy-netdata-compute.sh --check | --apply
 
---check  Verify the exact nine-node parent/child topology without changing it.
+--check  Verify the exact five-node parent/child topology without changing it.
 --apply  Back up configuration, align packages, deploy the topology, and verify it.
-
-For a first enrollment, pass the EdCore Automation SSH ED25519 host-key
-fingerprint obtained from the trusted Proxmox console. The deployer verifies
-the live key before adding it to the operator's known_hosts file. It never
-uses trust-on-first-use or disables strict host-key checking.
 EOF
 }
 
@@ -33,16 +26,7 @@ case "$mode" in
     exec python3 "$verify_script"
     ;;
   --apply)
-    while (( $# > 0 )); do
-      case "$1" in
-        --automation-host-key)
-          (( $# >= 2 )) || { usage >&2; exit 2; }
-          automation_host_key_fingerprint="$2"
-          shift 2
-          ;;
-        *) usage >&2; exit 2 ;;
-      esac
-    done
+    (( $# == 0 )) || { usage >&2; exit 2; }
     ;;
   *) usage >&2; exit 2 ;;
 esac
@@ -52,7 +36,7 @@ if [[ ${EUID} -ne 0 ]]; then
   exit 2
 fi
 
-for command in awk curl getent id install python3 scp ssh ssh-keygen ssh-keyscan systemctl uuidgen; do
+for command in awk curl getent id install python3 scp ssh systemctl uuidgen; do
   command -v "$command" >/dev/null || {
     echo "Required command is missing: $command" >&2
     exit 1
@@ -84,11 +68,7 @@ scp_options=(
 
 satellite_target() {
   local satellite="$1"
-  if [[ "$satellite" == edcore-automation ]]; then
-    printf '%s@%s\n' "$operator_user" "$automation_ip"
-  else
-    printf '%s\n' "$satellite"
-  fi
+  printf '%s\n' "$satellite"
 }
 [[ -x "$verify_script" ]] || chmod 0755 "$verify_script"
 [[ -r /usr/share/keyrings/netdata-archive-keyring.gpg ]] || {
@@ -101,7 +81,6 @@ parent_backup="/var/backups/edsys-netdata-compute/${stamp}"
 tmpdir="$(mktemp -d)"
 config_mutated=0
 backup_started=0
-known_hosts_mutated=0
 
 cleanup() {
   rm -rf -- "$tmpdir"
@@ -153,11 +132,6 @@ systemctl restart netdata
 REMOTE_ROLLBACK
     done
   fi
-  if (( known_hosts_mutated == 1 )); then
-    echo "Deployment failed; restoring the operator SSH known_hosts file." >&2
-    cp -a -- "${parent_backup}/operator-known_hosts.before" \
-      "${operator_home}/.ssh/known_hosts" || true
-  fi
   if (( backup_started == 1 )); then
     echo "Private backup material remains under ${parent_backup} on every host." >&2
   else
@@ -168,65 +142,6 @@ REMOTE_ROLLBACK
 }
 trap cleanup EXIT
 trap rollback_configs ERR
-
-enroll_automation_host_key_if_needed() {
-  local expected="$automation_host_key_fingerprint"
-  local scan_file="${tmpdir}/edcore-automation.ssh-keyscan"
-  local selected_file="${tmpdir}/edcore-automation.known-host"
-  local existing_file="${tmpdir}/edcore-automation.existing-known-host"
-  local candidate fingerprint
-
-  if ssh-keygen -F "$automation_ip" -f "${operator_home}/.ssh/known_hosts" \
-    >"$existing_file" 2>/dev/null; then
-    [[ -n "$expected" ]] || return
-    while IFS= read -r candidate; do
-      [[ -n "$candidate" && "$candidate" != \#* ]] || continue
-      fingerprint="$(printf '%s\n' "$candidate" | ssh-keygen -E sha256 -lf - | awk '{print $2}')"
-      [[ "$fingerprint" == "$expected" ]] && return
-    done <"$existing_file"
-    echo "The existing ${automation_ip} SSH host key does not match the supplied fingerprint." >&2
-    echo "Review and replace a stale key manually; the deployer will not overwrite it." >&2
-    return 1
-  fi
-  if [[ ! "$expected" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
-    echo "No trusted SSH host key exists for ${automation_ip}." >&2
-    echo "Obtain its ED25519 fingerprint from the trusted Proxmox console, then rerun with:" >&2
-    echo "  --automation-host-key SHA256:<fingerprint>" >&2
-    return 1
-  fi
-
-  ssh-keyscan -T 5 -t ed25519 "$automation_ip" >"$scan_file" 2>/dev/null
-  : >"$selected_file"
-  while IFS= read -r candidate; do
-    [[ -n "$candidate" && "$candidate" != \#* ]] || continue
-    fingerprint="$(printf '%s\n' "$candidate" | ssh-keygen -E sha256 -lf - | awk '{print $2}')"
-    if [[ "$fingerprint" == "$expected" ]]; then
-      printf '%s\n' "$candidate" >"$selected_file"
-      break
-    fi
-  done <"$scan_file"
-  if [[ ! -s "$selected_file" ]]; then
-    echo "The live ${automation_ip} ED25519 host key did not match the trusted fingerprint." >&2
-    return 1
-  fi
-
-  install -d -m 0700 "$parent_backup"
-  cp -a -- "${operator_home}/.ssh/known_hosts" \
-    "${parent_backup}/operator-known_hosts.before"
-  cp -a -- "${operator_home}/.ssh/known_hosts" "${tmpdir}/known_hosts.new"
-  if [[ -s "${tmpdir}/known_hosts.new" ]] && \
-     [[ "$(tail -c 1 "${tmpdir}/known_hosts.new" | wc -l)" -eq 0 ]]; then
-    printf '\n' >>"${tmpdir}/known_hosts.new"
-  fi
-  cat "$selected_file" >>"${tmpdir}/known_hosts.new"
-  install -m 0600 -o "$operator_user" -g "$(id -gn "$operator_user")" \
-    "${tmpdir}/known_hosts.new" "${operator_home}/.ssh/known_hosts"
-  known_hosts_mutated=1
-  backup_started=1
-  echo "Verified and enrolled the EdCore Automation SSH host key."
-}
-
-enroll_automation_host_key_if_needed
 
 echo "Preflighting child hosts and the parent streaming endpoint."
 curl -fsS --max-time 10 "http://127.0.0.1:19999/api/v1/info" >/dev/null
@@ -292,7 +207,7 @@ REMOTE_BACKUP
 done
 backup_started=1
 
-echo "Aligning Netdata edge packages on the four Debian 13 Proxmox hosts."
+echo "Aligning Netdata edge packages on the three Debian 13 Proxmox hosts."
 for child in "${pve_children[@]}"; do
   scp "${scp_options[@]}" /usr/share/keyrings/netdata-archive-keyring.gpg "root@${child}:/tmp/netdata-archive-keyring.gpg"
   ssh "${ssh_options[@]}" "root@${child}" 'bash -s' <<'REMOTE_INSTALL'
@@ -328,7 +243,7 @@ systemctl enable netdata >/dev/null
 REMOTE_INSTALL
 done
 
-echo "Installing or aligning signed Netdata edge packages on the Ubuntu satellites."
+echo "Installing or aligning signed Netdata edge packages on the NetBox Ubuntu satellite."
 for satellite in "${satellites[@]}"; do
   target="$(satellite_target "$satellite")"
   scp "${scp_options[@]}" /usr/share/keyrings/netdata-archive-keyring.gpg \
@@ -385,7 +300,7 @@ cat >"${tmpdir}/parent-stream.conf" <<EOF
 [${stream_key}]
     type = api
     enabled = yes
-    allow from = 192.168.50.51 192.168.50.52 192.168.50.53 192.168.50.54 192.168.50.79 192.168.50.80 192.168.50.81 192.168.50.82
+    allow from = 192.168.50.51 192.168.50.52 192.168.50.53 192.168.50.81
     db = dbengine
     health enabled = auto
     postpone alerts on connect = 1m
@@ -420,7 +335,7 @@ for _ in {1..30}; do
 done
 curl -fsS --max-time 3 "http://127.0.0.1:19999/api/v1/info" >/dev/null
 
-echo "Configuring and starting the four Netdata children."
+echo "Configuring and starting the three Proxmox Netdata children."
 for child in "${pve_children[@]}"; do
   cat >"${tmpdir}/${child}-netdata.conf" <<EOF
 # Managed by EdSys deploy-netdata-compute.sh.
@@ -457,7 +372,7 @@ EOF
     <"${tmpdir}/${child}-stream.conf"
 done
 
-echo "Configuring and starting the four Ubuntu satellite children."
+echo "Configuring and starting the NetBox Ubuntu satellite child."
 for satellite in "${satellites[@]}"; do
   target="$(satellite_target "$satellite")"
   cat >"${tmpdir}/${satellite}-netdata.conf" <<EOF
@@ -539,7 +454,7 @@ REMOTE_NETBOX_MONITORING
   fi
 done
 
-echo "Waiting for all eight child streams to become reachable on 9950x."
+echo "Waiting for all four child streams to become reachable on 9950x."
 for _ in {1..90}; do
   if python3 "$verify_script" >/dev/null 2>&1; then
     break

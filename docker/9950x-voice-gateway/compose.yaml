@@ -23,7 +23,6 @@ services:
         required: true
     ports:
       - "127.0.0.1:${EDSYS_VOICE_GATEWAY_PORT:-8055}:8443"
-      - "${EDSYS_VOICE_GATEWAY_LAN_IP:-192.168.50.50}:${EDSYS_VOICE_GATEWAY_PORT:-8055}:8443"
       - "127.0.0.1:${EDSYS_VOICE_GATEWAY_METRICS_PORT:-8056}:9101"
     volumes:
       - /etc/edsys-secrets/voice-gateway/tls:/run/edsys-voice-tls:ro

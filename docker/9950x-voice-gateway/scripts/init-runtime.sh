@@ -2,6 +2,9 @@
 set -euo pipefail
 umask 077
 
+echo "The EdSys Voice Gateway runtime was retired with the former EdCore Home Assistant deployment; redesign it before initialization." >&2
+exit 2
+
 readonly secret_dir="/etc/edsys-secrets/voice-gateway"
 readonly ca_dir="/etc/edsys-secrets/voice-gateway-ca"
 readonly image_ref="${1:-}"
@@ -59,7 +62,7 @@ if [[ ! -e ${secret_dir}/gateway.env ]]; then
 EDSYS_VOICE_ENVIRONMENT=production
 EDSYS_VOICE_GATEWAY_BEARER_TOKEN=${gateway_token}
 EDSYS_VOICE_OPERATOR_BEARER_TOKEN=${operator_token}
-EDSYS_VOICE_HOME_ASSISTANT_URL=http://192.168.50.75:8123
+EDSYS_VOICE_HOME_ASSISTANT_URL=TO_BE_CONFIRMED
 EDSYS_VOICE_HOME_ASSISTANT_TOKEN=TO_BE_CONFIRMED
 EDSYS_VOICE_HOME_ASSISTANT_AGENT_ID=conversation.home_assistant
 EDSYS_VOICE_LITELLM_URL=http://192.168.50.50:4000/v1
