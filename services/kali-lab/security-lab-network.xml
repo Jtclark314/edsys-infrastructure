@@ -1,0 +1,12 @@
+<network>
+  <name>security-lab</name>
+  <bridge name="virbr77" stp="on" delay="0"/>
+  <domain name="security-lab.invalid" localOnly="yes"/>
+  <dns enable="no"/>
+  <ip address="192.168.77.1" netmask="255.255.255.0">
+    <dhcp>
+      <range start="192.168.77.100" end="192.168.77.199"/>
+      <host mac="52:54:00:ed:77:10" name="kali-lab" ip="192.168.77.10"/>
+    </dhcp>
+  </ip>
+</network>

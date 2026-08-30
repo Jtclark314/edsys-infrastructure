@@ -1,0 +1,63 @@
+### Locale, keyboard, clock, and identity
+d-i debian-installer/locale string en_US.UTF-8
+d-i keyboard-configuration/xkb-keymap select us
+d-i clock-setup/utc boolean true
+d-i time/zone string US/Eastern
+d-i netcfg/choose_interface select auto
+d-i netcfg/get_hostname string kali-lab
+d-i netcfg/get_domain string security-lab.invalid
+
+### Official Kali mirror; no unrelated repositories
+d-i mirror/country string manual
+d-i mirror/http/hostname string http.kali.org
+d-i mirror/http/directory string /kali
+d-i mirror/http/proxy string
+d-i apt-setup/non-free boolean true
+d-i apt-setup/contrib boolean true
+d-i apt-setup/enable-source-repositories boolean false
+d-i apt-setup/disable-cdrom-entries boolean true
+
+### Key-only non-root operator; the password hash marker locks the account
+d-i passwd/root-login boolean false
+d-i passwd/user-fullname string Kali Lab Operator
+d-i passwd/username string kali
+d-i passwd/user-password-crypted password !
+
+### Simple virtual-disk layout; the physical EdCore filesystem is encrypted
+d-i partman-auto/disk string /dev/vda
+d-i partman-auto/method string regular
+d-i partman-partitioning/choose_label string gpt
+d-i partman-partitioning/default_label string gpt
+d-i partman-auto/choose_recipe select atomic
+d-i partman-md/device_remove_md boolean true
+d-i partman-lvm/device_remove_lvm boolean true
+d-i partman/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+
+### Minimal Kali core, SSH control, guest telemetry, and guest firewall
+tasksel tasksel/first multiselect
+d-i pkgsel/include string kali-linux-core openssh-server qemu-guest-agent nftables ca-certificates
+d-i pkgsel/upgrade select none
+d-i pkgsel/update-policy select none
+popularity-contest popularity-contest/participate boolean false
+
+### Boot and unattended completion
+d-i grub-installer/only_debian boolean true
+d-i grub-installer/with_other_os boolean false
+d-i finish-install/reboot_in_progress note
+
+### Install the dedicated public key and fail-closed guest policy
+d-i preseed/late_command string \
+    /bin/sh -c "printf '%s\n' '# Managed for the EdSys Kali security lab.' 'auto lo' 'iface lo inet loopback' '' 'auto eth0' 'iface eth0 inet dhcp' > /target/etc/network/interfaces"; \
+    install -d -o 1000 -g 1000 -m 0700 /target/home/kali/.ssh; \
+    /bin/sh -c "printf '%s\n' '@KALI_LAB_SSH_PUBLIC_KEY@' > /target/home/kali/.ssh/authorized_keys"; \
+    chown 1000:1000 /target/home/kali/.ssh/authorized_keys; \
+    chmod 0600 /target/home/kali/.ssh/authorized_keys; \
+    /bin/sh -c "printf '%s\n' 'kali ALL=(ALL:ALL) NOPASSWD: ALL' > /target/etc/sudoers.d/90-edsys-kali-lab"; \
+    chmod 0440 /target/etc/sudoers.d/90-edsys-kali-lab; \
+    /bin/sh -c "printf '%s\n' 'PermitRootLogin no' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' 'PubkeyAuthentication yes' 'AllowAgentForwarding no' 'AllowTcpForwarding no' 'X11Forwarding no' 'PermitTunnel no' > /target/etc/ssh/sshd_config.d/90-edsys-kali-lab.conf"; \
+    /bin/sh -c "printf '%s\n' 'flush ruleset' 'table inet filter {' '  chain input {' '    type filter hook input priority filter; policy drop;' '    iifname lo accept' '    ct state established,related accept' '    udp sport 67 udp dport 68 accept' '    ip protocol icmp accept' '    ip6 nexthdr ipv6-icmp accept' '    ip saddr { 192.168.77.1, 192.168.78.1 } tcp dport 22 accept' '  }' '  chain forward { type filter hook forward priority filter; policy drop; }' '  chain output { type filter hook output priority filter; policy accept; }' '}' > /target/etc/nftables.conf"; \
+    in-target passwd -l kali; \
+    in-target systemctl enable ssh.service qemu-guest-agent.service nftables.service serial-getty@ttyS0.service

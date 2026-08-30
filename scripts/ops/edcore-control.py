@@ -14,6 +14,11 @@ from typing import Sequence
 
 
 DEFAULT_HOST = os.environ.get("EDCORE_SSH_HOST", "edcore-admin")
+KALI_LAB_ADDRESS = os.environ.get("EDCORE_KALI_LAB_ADDRESS", "192.168.77.10")
+KALI_LAB_USER = os.environ.get("EDCORE_KALI_LAB_USER", "kali")
+KALI_LAB_KEY = pathlib.Path(
+    os.environ.get("EDCORE_KALI_LAB_KEY", "~/.ssh/edsys_kali_lab_key")
+).expanduser()
 
 
 def ssh_base(host: str) -> list[str]:
@@ -102,6 +107,81 @@ def command_cockpit(args: argparse.Namespace) -> None:
     )
 
 
+def command_lab_status(args: argparse.Namespace) -> None:
+    script = r"""
+set -e
+state=$(sudo -n virsh domstate kali-lab 2>/dev/null || printf absent)
+network=$(sudo -n virsh net-info security-lab 2>/dev/null | awk -F: '/^Active/ {gsub(/^[[:space:]]+/, "", $2); print $2}' || true)
+autostart=$(sudo -n virsh dominfo kali-lab 2>/dev/null | awk -F: '/^Autostart:/ {gsub(/^[[:space:]]+/, "", $2); print $2}' || true)
+snapshots=$(sudo -n virsh snapshot-list kali-lab --name 2>/dev/null | sed '/^[[:space:]]*$/d' | wc -l)
+python3 - "$state" "$network" "$autostart" "$snapshots" <<'PY'
+import json
+import sys
+print(json.dumps({
+    "domain": "kali-lab",
+    "state": sys.argv[1],
+    "isolated_network_active": sys.argv[2] == "yes",
+    "autostart": sys.argv[3],
+    "snapshot_count": int(sys.argv[4]),
+}, sort_keys=True))
+PY
+"""
+    result = run_remote(args.host, [], ["bash", "-lc", script], capture=True)
+    pretty_json(result.stdout)
+
+
+def command_lab_power(args: argparse.Namespace) -> None:
+    verb = {"start": "start", "shutdown": "shutdown", "reboot": "reboot"}[args.lab_command]
+    run_remote(args.host, ["sudo", "-n"], ["virsh", verb, "kali-lab"])
+
+
+def kali_ssh_argv(host: str) -> list[str]:
+    if not KALI_LAB_KEY.is_file():
+        raise SystemExit(f"Missing dedicated Kali lab key: {KALI_LAB_KEY}")
+    return [
+        "ssh",
+        "-J",
+        host,
+        "-i",
+        str(KALI_LAB_KEY),
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "IdentitiesOnly=yes",
+        "-o",
+        "PasswordAuthentication=no",
+        "-o",
+        "KbdInteractiveAuthentication=no",
+        f"{KALI_LAB_USER}@{KALI_LAB_ADDRESS}",
+    ]
+
+
+def command_lab_shell(args: argparse.Namespace) -> None:
+    os.execvp("ssh", kali_ssh_argv(args.host))
+
+
+def command_lab_run(args: argparse.Namespace) -> None:
+    command = args.command[1:] if args.command[:1] == ["--"] else args.command
+    if not command:
+        raise SystemExit("A Kali command is required after --")
+    subprocess.run([*kali_ssh_argv(args.host), shlex.join(command)], check=True)
+
+
+def command_lab_console(args: argparse.Namespace) -> None:
+    os.execvp(
+        "ssh",
+        ["ssh", "-t", args.host, "sudo", "-n", "virsh", "console", "kali-lab"],
+    )
+
+
+def command_lab_snapshots(args: argparse.Namespace) -> None:
+    run_remote(
+        args.host,
+        ["sudo", "-n"],
+        ["virsh", "snapshot-list", "kali-lab", "--tree"],
+    )
+
+
 def command_passthrough(args: argparse.Namespace, prefix: Sequence[str]) -> None:
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
@@ -181,6 +261,19 @@ def build_parser() -> argparse.ArgumentParser:
     cockpit = subparsers.add_parser("cockpit", help="Open a loopback Cockpit SSH tunnel")
     cockpit.add_argument("--port", type=int, default=9090)
     cockpit.set_defaults(func=command_cockpit)
+
+    lab = subparsers.add_parser("lab", help="Control the isolated Kali VM")
+    lab_subparsers = lab.add_subparsers(dest="lab_command", required=True)
+    lab_subparsers.add_parser("status", help="Show Kali lab state").set_defaults(func=command_lab_status)
+    lab_subparsers.add_parser("start", help="Start Kali").set_defaults(func=command_lab_power)
+    lab_subparsers.add_parser("shutdown", help="Request a clean shutdown").set_defaults(func=command_lab_power)
+    lab_subparsers.add_parser("reboot", help="Request a clean reboot").set_defaults(func=command_lab_power)
+    lab_subparsers.add_parser("shell", help="Open key-only SSH through EdCore").set_defaults(func=command_lab_shell)
+    lab_run = lab_subparsers.add_parser("run", help="Run a key-only command inside Kali")
+    lab_run.add_argument("command", nargs=argparse.REMAINDER)
+    lab_run.set_defaults(func=command_lab_run)
+    lab_subparsers.add_parser("console", help="Open the libvirt serial console").set_defaults(func=command_lab_console)
+    lab_subparsers.add_parser("snapshots", help="List Kali snapshots").set_defaults(func=command_lab_snapshots)
 
     for name, prefix, help_text in (
         ("user", [], "Run a command as edsys-admin"),

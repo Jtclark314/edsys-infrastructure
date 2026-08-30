@@ -1,0 +1,12 @@
+<network>
+  <name>security-lab-bootstrap</name>
+  <forward mode="nat"/>
+  <bridge name="virbr78" stp="on" delay="0"/>
+  <domain name="bootstrap.security-lab.invalid" localOnly="yes"/>
+  <ip address="192.168.78.1" netmask="255.255.255.0">
+    <dhcp>
+      <range start="192.168.78.100" end="192.168.78.199"/>
+      <host mac="52:54:00:ed:77:10" name="kali-lab" ip="192.168.78.10"/>
+    </dhcp>
+  </ip>
+</network>
