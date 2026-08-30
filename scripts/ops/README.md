@@ -5,6 +5,9 @@ Status: helper scripts for local EdSys operations. Prefer report-only behavior u
 ## Scripts
 
 - `edsys-container-recovery.py` - manifest-driven, health-gated Docker recovery and audit.
+- `install-edcore-control-plane.sh` - root-only, host-guarded EdCore bootstrap for the dedicated admin account, diagnostics, GUI bridge, loopback Cockpit, maintenance timers, and private Tailscale transport. It requires a separately staged public key and live peer addresses and keeps rollback material off Git.
+- `edcore-session` - root-only bridge into Jeremy's active EdCore Hyprland session for reviewed GUI commands.
+- `edcore-control.py` - 9950x client for EdCore health, shell/root/session commands, live Hyprland inspection, screenshots, input, clipboard operations, and the loopback Cockpit tunnel.
 - `arr-transfer-arbiter.py` - fail-closed, SAB-priority mutual exclusion for SABnzbd and qBittorrent. It verifies every pause handoff, persists operator modes and latched faults, and never logs job names or API material.
 - `deploy-netdata-compute.sh` - rollback-safe installer for the nine-node `edsys-compute` Netdata Parent/Child topology. It aligns the four Proxmox hosts and four Ubuntu satellites while keeping the runtime stream key and Cloud material outside Git.
 - `verify-netdata-compute.py` - strict local-API acceptance check for the exact nine reachable nodes, shared group label, and eight receiving streams.

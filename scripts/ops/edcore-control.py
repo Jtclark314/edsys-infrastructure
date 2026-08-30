@@ -1,0 +1,245 @@
+#!/usr/bin/env python3
+"""Small, auditable 9950x control client for the EdCore workhorse."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import pathlib
+import shlex
+import subprocess
+import sys
+from typing import Sequence
+
+
+DEFAULT_HOST = os.environ.get("EDCORE_SSH_HOST", "edcore-admin")
+
+
+def ssh_base(host: str) -> list[str]:
+    return [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ClearAllForwardings=yes",
+        host,
+    ]
+
+
+def remote_command(prefix: Sequence[str], command: Sequence[str]) -> str:
+    return shlex.join([*prefix, *command])
+
+
+def run_remote(
+    host: str,
+    prefix: Sequence[str],
+    command: Sequence[str],
+    *,
+    capture: bool = False,
+    input_bytes: bytes | None = None,
+) -> subprocess.CompletedProcess[bytes]:
+    argv = [*ssh_base(host), remote_command(prefix, command)]
+    return subprocess.run(
+        argv,
+        check=True,
+        input=input_bytes,
+        stdout=subprocess.PIPE if capture else None,
+    )
+
+
+def session(host: str, command: Sequence[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+    return run_remote(
+        host,
+        ["sudo", "-n", "/usr/local/bin/edcore-session"],
+        command,
+        **kwargs,
+    )
+
+
+def pretty_json(raw: bytes, fields: Sequence[str] | None = None) -> None:
+    value = json.loads(raw)
+    if fields and isinstance(value, list):
+        value = [{field: item.get(field) for field in fields} for item in value]
+    print(json.dumps(value, indent=2, sort_keys=True))
+
+
+def command_status(args: argparse.Namespace) -> None:
+    script = r"""
+set -e
+printf '{'
+printf '"hostname":'; hostname -s | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().strip()))'
+printf ',"kernel":'; uname -r | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().strip()))'
+printf ',"uptime_seconds":'; cut -d. -f1 /proc/uptime
+printf ',"failed_system_units":'; systemctl --failed --no-legend | wc -l
+printf ',"tailscale_state":'; sudo -n tailscale status --json | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin).get("BackendState", "Unknown")))'
+printf ',"graphical_session":'; sudo -n /usr/local/bin/edcore-session hyprctl -j activeworkspace >/dev/null 2>&1 && printf true || printf false
+printf '}\n'
+"""
+    result = run_remote(args.host, [], ["bash", "-lc", script], capture=True)
+    pretty_json(result.stdout)
+
+
+def command_shell(args: argparse.Namespace) -> None:
+    os.execvp("ssh", ["ssh", args.host])
+
+
+def command_cockpit(args: argparse.Namespace) -> None:
+    print(f"Cockpit tunnel is available at https://127.0.0.1:{args.port}", file=sys.stderr)
+    os.execvp(
+        "ssh",
+        [
+            "ssh",
+            "-N",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ExitOnForwardFailure=yes",
+            "-L",
+            f"127.0.0.1:{args.port}:127.0.0.1:9090",
+            args.host,
+        ],
+    )
+
+
+def command_passthrough(args: argparse.Namespace, prefix: Sequence[str]) -> None:
+    command = args.command[1:] if args.command[:1] == ["--"] else args.command
+    if not command:
+        raise SystemExit("A command is required after --")
+    run_remote(args.host, prefix, command)
+
+
+def command_gui_json(args: argparse.Namespace) -> None:
+    mapping = {
+        "windows": ("clients", ("address", "class", "title", "workspace", "mapped")),
+        "active": ("activewindow", None),
+        "monitors": ("monitors", None),
+        "workspaces": ("workspaces", None),
+    }
+    hypr_command, fields = mapping[args.gui_command]
+    result = session(args.host, ["hyprctl", "-j", hypr_command], capture=True)
+    pretty_json(result.stdout, fields)
+
+
+def command_gui_dispatch(args: argparse.Namespace) -> None:
+    if args.gui_command == "close":
+        dispatcher = ["hyprctl", "dispatch", "killactive"]
+    elif args.gui_command == "workspace":
+        dispatcher = ["hyprctl", "dispatch", "workspace", args.workspace]
+    elif args.gui_command == "exec":
+        if not args.command:
+            raise SystemExit("A desktop command is required")
+        dispatcher = ["hyprctl", "dispatch", "exec", shlex.join(args.command)]
+    else:
+        raise AssertionError(args.gui_command)
+    session(args.host, dispatcher)
+
+
+def command_gui_type(args: argparse.Namespace) -> None:
+    session(args.host, ["wtype", "--", args.text])
+
+
+def command_gui_key(args: argparse.Namespace) -> None:
+    session(args.host, ["wtype", "-k", args.key])
+
+
+def command_gui_pointer(args: argparse.Namespace) -> None:
+    if args.gui_command == "move":
+        command = ["ydotool", "mousemove", "--absolute", "--", str(args.x), str(args.y)]
+    else:
+        button = {"left": "0xC0", "right": "0xC1", "middle": "0xC2"}[args.button]
+        command = ["ydotool", "click", button]
+    session(args.host, command)
+
+
+def command_gui_screenshot(args: argparse.Namespace) -> None:
+    destination = pathlib.Path(args.output).expanduser().resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    result = session(args.host, ["grim", "-"], capture=True)
+    destination.write_bytes(result.stdout)
+    print(destination)
+
+
+def command_gui_clipboard(args: argparse.Namespace) -> None:
+    if args.gui_command == "clipboard-get":
+        result = session(args.host, ["wl-paste", "--no-newline"], capture=True)
+        sys.stdout.buffer.write(result.stdout)
+        if sys.stdout.isatty():
+            print()
+    else:
+        session(args.host, ["wl-copy"], input_bytes=args.text.encode())
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--host", default=DEFAULT_HOST, help="SSH alias (default: %(default)s)")
+    subparsers = parser.add_subparsers(dest="action", required=True)
+
+    subparsers.add_parser("status", help="Show a compact health summary").set_defaults(func=command_status)
+    subparsers.add_parser("shell", help="Open an interactive admin shell").set_defaults(func=command_shell)
+
+    cockpit = subparsers.add_parser("cockpit", help="Open a loopback Cockpit SSH tunnel")
+    cockpit.add_argument("--port", type=int, default=9090)
+    cockpit.set_defaults(func=command_cockpit)
+
+    for name, prefix, help_text in (
+        ("user", [], "Run a command as edsys-admin"),
+        ("root", ["sudo", "-n"], "Run a command as root"),
+        ("session", ["sudo", "-n", "/usr/local/bin/edcore-session"], "Run in Jeremy's live desktop session"),
+    ):
+        command_parser = subparsers.add_parser(name, help=help_text)
+        command_parser.add_argument("command", nargs=argparse.REMAINDER)
+        command_parser.set_defaults(func=lambda args, p=prefix: command_passthrough(args, p))
+
+    gui = subparsers.add_parser("gui", help="Inspect or control the live Omarchy desktop")
+    gui_subparsers = gui.add_subparsers(dest="gui_command", required=True)
+    for name in ("windows", "active", "monitors", "workspaces"):
+        gui_subparsers.add_parser(name).set_defaults(func=command_gui_json)
+    gui_subparsers.add_parser("close", help="Close the active window").set_defaults(func=command_gui_dispatch)
+
+    workspace = gui_subparsers.add_parser("workspace", help="Switch workspace")
+    workspace.add_argument("workspace")
+    workspace.set_defaults(func=command_gui_dispatch)
+
+    gui_exec = gui_subparsers.add_parser("exec", help="Launch a desktop program")
+    gui_exec.add_argument("command", nargs=argparse.REMAINDER)
+    gui_exec.set_defaults(func=command_gui_dispatch)
+
+    gui_type = gui_subparsers.add_parser("type", help="Type literal text")
+    gui_type.add_argument("text")
+    gui_type.set_defaults(func=command_gui_type)
+
+    gui_key = gui_subparsers.add_parser("key", help="Send one named key through wtype")
+    gui_key.add_argument("key")
+    gui_key.set_defaults(func=command_gui_key)
+
+    gui_move = gui_subparsers.add_parser("move", help="Move the pointer to absolute coordinates")
+    gui_move.add_argument("x", type=int)
+    gui_move.add_argument("y", type=int)
+    gui_move.set_defaults(func=command_gui_pointer)
+
+    gui_click = gui_subparsers.add_parser("click", help="Click a pointer button")
+    gui_click.add_argument("button", choices=("left", "right", "middle"), default="left", nargs="?")
+    gui_click.set_defaults(func=command_gui_pointer)
+
+    screenshot = gui_subparsers.add_parser("screenshot", help="Save a remote desktop screenshot locally")
+    screenshot.add_argument("output")
+    screenshot.set_defaults(func=command_gui_screenshot)
+
+    gui_subparsers.add_parser("clipboard-get", help="Read the desktop clipboard").set_defaults(func=command_gui_clipboard)
+    clipboard_set = gui_subparsers.add_parser("clipboard-set", help="Set the desktop clipboard")
+    clipboard_set.add_argument("text")
+    clipboard_set.set_defaults(func=command_gui_clipboard)
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    try:
+        args.func(args)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(exc.returncode) from exc
+
+
+if __name__ == "__main__":
+    main()

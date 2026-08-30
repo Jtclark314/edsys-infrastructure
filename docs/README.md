@@ -28,6 +28,7 @@ This folder documents deployment standards for EdSys infrastructure. It should s
   decoder, storage, USB arbitration, and recovery source.
 - `CONTAINER_RECOVERY.md` - ordered 9950x Docker recovery architecture and operations.
 - `REBOOT_ACCEPTANCE.md` - one-shot full-host reboot recovery and acceptance gate.
+- `EDCORE_CONTROL_PLANE.md` - dedicated 9950x-to-EdCore admin, GUI, Cockpit, diagnostics, and Tailnet control plane.
 - `ARR_TRANSFER_ARBITER.md` - fail-closed SABnzbd/qBittorrent mutual exclusion and operator controls.
 - `NETDATA_COMPUTE.md` - authoritative nine-node Netdata Parent/Child deployment and recovery procedure.
 - `../docker/netbox/README.md` - production NetBox platform, access, backup, restore, and upgrade boundary.

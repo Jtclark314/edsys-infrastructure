@@ -1,0 +1,80 @@
+---
+- name: Verify the EdCore workhorse control plane
+  hosts: edcore-workhorse
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Read the short hostname
+      ansible.builtin.command: hostname -s
+      register: edcore_hostname
+      changed_when: false
+
+    - name: Require the intended host
+      ansible.builtin.assert:
+        that:
+          - edcore_hostname.stdout == "edcore-workhorse"
+
+    - name: Validate the effective SSH daemon configuration
+      ansible.builtin.command: sshd -t
+      changed_when: false
+
+    - name: Collect required system unit state
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ item }}"
+      loop:
+        - sshd.service
+        - tailscaled.service
+        - cockpit.socket
+        - auditd.service
+        - smartd.service
+      changed_when: false
+
+    - name: Collect required timer state
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ item }}"
+      loop:
+        - fstrim.timer
+        - sysstat-collect.timer
+        - sysstat-summary.timer
+      changed_when: false
+
+    - name: Verify passwordless privilege escalation
+      ansible.builtin.command: id -u
+      register: edcore_effective_uid
+      changed_when: false
+
+    - name: Require root through the dedicated control account
+      ansible.builtin.assert:
+        that:
+          - edcore_effective_uid.stdout == "0"
+
+    - name: Verify access to the live Omarchy session
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/edcore-session
+          - hyprctl
+          - -j
+          - activeworkspace
+      changed_when: false
+
+    - name: Read Tailscale backend state
+      ansible.builtin.shell: |
+        set -o pipefail
+        tailscale status --json | python3 -c \
+          'import json,sys; print(json.load(sys.stdin).get("BackendState", "Unknown"))'
+      args:
+        executable: /bin/bash
+      register: edcore_tailscale_state
+      changed_when: false
+
+    - name: Require an enrolled Tailnet connection
+      ansible.builtin.assert:
+        that:
+          - edcore_tailscale_state.stdout == "Running"

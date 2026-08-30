@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+target_user="${EDSYS_EDCORE_DESKTOP_USER:-jeremy}"
+
+if (($# == 0)); then
+  echo "Usage: edcore-session COMMAND [ARG ...]" >&2
+  exit 2
+fi
+
+if ((EUID != 0)); then
+  echo "edcore-session must be invoked through the EdSys admin sudo path." >&2
+  exit 1
+fi
+
+target_uid="$(id -u "$target_user")"
+runtime_dir="/run/user/${target_uid}"
+bus_address="unix:path=${runtime_dir}/bus"
+
+if [[ ! -d "$runtime_dir" ]]; then
+  echo "The ${target_user} user manager is not running: ${runtime_dir}" >&2
+  exit 1
+fi
+
+declare -a session_environment=(
+  "XDG_RUNTIME_DIR=${runtime_dir}"
+  "DBUS_SESSION_BUS_ADDRESS=${bus_address}"
+  "YDOTOOL_SOCKET=${runtime_dir}/ydotool.sock"
+)
+
+while IFS='=' read -r key value; do
+  case "$key" in
+    DISPLAY|WAYLAND_DISPLAY|HYPRLAND_INSTANCE_SIGNATURE|XDG_CURRENT_DESKTOP|XDG_SESSION_TYPE)
+      session_environment+=("${key}=${value}")
+      ;;
+  esac
+done < <(
+  runuser -u "$target_user" -- \
+    env XDG_RUNTIME_DIR="$runtime_dir" DBUS_SESSION_BUS_ADDRESS="$bus_address" \
+    systemctl --user show-environment
+)
+
+exec runuser -u "$target_user" -- env "${session_environment[@]}" "$@"

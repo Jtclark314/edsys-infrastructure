@@ -1,0 +1,9 @@
+all:
+  hosts:
+    edcore-workhorse:
+      ansible_host: edcore-admin
+      ansible_user: edsys-admin
+      ansible_python_interpreter: /usr/bin/python3
+      ansible_ssh_common_args: >-
+        -o BatchMode=yes
+        -o ClearAllForwardings=yes

@@ -49,8 +49,11 @@ Controller public keys remain live private host state and never belong in Git.
 ## EdCore Omarchy Workhorse
 
 `90-edsys-omarchy-workhorse.conf` is the sanitized SSH policy accepted on
-`edcore-workhorse`. It is intentionally stricter than the 9950x policy because
-the workhorse does not currently need local or remote forwarding.
+`edcore-workhorse`. It permits local TCP and stream-local forwarding for
+reviewed loopback services while continuing to deny remote forwarding, agent
+forwarding, X11, SSH tunnels, password login, and direct root login. The
+dedicated `edsys-admin` account is key-only, password-locked, and source
+restricted in its private `authorized_keys` entry.
 
 Install it from a physical console or an already proven key-authenticated
 session, validate before reload, and verify a fresh connection before closing
@@ -64,7 +67,10 @@ sudo sshd -t
 sudo systemctl reload sshd
 ```
 
-The accepted UFW boundary is default-deny incoming, TCP/22 from
-`192.168.50.50` only, and no LocalSend ingress. Public keys and the live UFW
-ruleset remain private host state rather than Git content. Omarchy's
-user-persistent workhorse posture is `omarchy-toggle-idle stay-awake`.
+The accepted LAN UFW boundary is default-deny incoming, TCP/22 from the
+canonical 9950x only, and the existing Sunshine ports from Nimo only. Tailscale
+is a second private transport; reviewed Tailnet policy is its primary identity
+gate, with exact-peer UFW rules retained as defense in depth. Public keys,
+Tailnet addresses, pairing state, and the live ruleset remain private host state
+rather than Git content. Omarchy's user-persistent workhorse posture is
+`omarchy-toggle-idle stay-awake`.

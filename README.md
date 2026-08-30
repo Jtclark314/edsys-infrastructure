@@ -13,6 +13,7 @@ This repo should describe how services are deployed, but it must not contain liv
 - [Docker Compose standard](docs/DOCKER_COMPOSE_STANDARD.md)
 - [Config template standard](docs/CONFIG_TEMPLATE_STANDARD.md)
 - [9950x full-host reboot acceptance](docs/REBOOT_ACCEPTANCE.md)
+- [EdCore Omarchy control plane](docs/EDCORE_CONTROL_PLANE.md)
 - [ARR transfer arbiter](docs/ARR_TRANSFER_ARBITER.md)
 - [Netdata compute topology](docs/NETDATA_COMPUTE.md)
 - [NetBox deployment](docker/netbox/README.md)
@@ -55,6 +56,7 @@ edsys-infrastructure/
 - `.env.example` files.
 - Service implementation docs.
 - Host-side service agents and private-control MCP implementations whose tracked configuration remains sanitized.
+- Reviewed workhorse control scripts and acceptance playbooks whose private keys and live addresses stay outside Git.
 - Operational commands that are safe to run after review.
 
 ## What Does Not Belong Here
