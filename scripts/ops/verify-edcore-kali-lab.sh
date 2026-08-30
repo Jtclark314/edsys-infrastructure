@@ -81,7 +81,8 @@ else
   fail "bootstrap firewall rules removed"
 fi
 
-if virsh snapshot-list kali-lab --name | grep -q '^clean-baseline-'; then
+snapshot_names="$(virsh snapshot-list kali-lab --name)"
+if grep -q '^clean-baseline-' <<<"$snapshot_names"; then
   pass "clean baseline snapshot"
 else
   fail "clean baseline snapshot"

@@ -23,18 +23,25 @@ Tailnet, Docker networks, or the public Internet after bootstrap.
 - Recovery: a shut-down libvirt snapshot named with the
   `clean-baseline-YYYYMMDD` convention.
 
-The isolated network is intentionally reusable for future vulnerable target
-VMs. Target definitions must be separately reviewed and must never bridge this
-network to production EdSys systems.
+The same isolated network also contains the separately controlled
+`metasploitable2-lab` training target at `192.168.77.20`. It is deliberately
+vulnerable, never autostarts, and must never bridge to production EdSys
+systems.
 
 ## Source files
 
 - `security-lab-network.xml` - persistent isolated final network.
 - `security-lab-bootstrap-network.xml` - temporary NAT bootstrap network.
+- `kali-lab-isolated.network` - final MAC-matched, no-gateway Kali networkd
+  configuration.
+- `kali.sources` - official Kali 2026.2 deb822 repository definition pinned to
+  the installed Kali archive keyring.
 - `kali-lab-preseed.cfg.in` - secret-free automated installer template. The
   deployment script substitutes only the dedicated public key.
 - `../../scripts/ops/install-edcore-kali-lab.sh` - guarded installer.
 - `../../scripts/ops/verify-edcore-kali-lab.sh` - read-only acceptance.
+- `../../scripts/ops/install-kali-lab-starter-tools.sh` - guarded, temporary
+  public-only bootstrap for the explicitly scoped beginner tool set.
 
 ## Accepted deployment
 
@@ -85,9 +92,74 @@ edcore-control lab shutdown
 edcore-control lab snapshots
 ```
 
+## Metasploitable 2 target
+
+Rapid7's official Metasploitable documentation points to its SourceForge
+project as an official download location. The guarded target installer uses
+that exact project path, requires the pinned SourceForge-published SHA-256 and
+archive size, rejects unsafe ZIP paths and symlinks, verifies the VMDK before
+conversion, and imports it without starting it. Upstream publishes hashes but
+does not publish a detached signature for this legacy image.
+
+The target uses two vCPUs, 2 GiB RAM, a dedicated qcow2 disk, legacy-compatible
+BIOS/IDE/e1000 devices, loopback-only graphics, and exactly one NIC on
+`security-lab`. A permanent host route-deny rule supplements libvirt's
+no-forward network. Its accepted recovery point uses the
+`clean-vulnerable-baseline-YYYYMMDD` convention.
+
+Deploy and verify on EdCore:
+
+```bash
+sudo ./install-edcore-metasploitable2-target.sh
+sudo ./verify-edcore-metasploitable2-target.sh
+```
+
+Operate from 9950x:
+
+```bash
+edcore-control target status
+edcore-control target start
+edcore-control target console
+edcore-control target shutdown
+edcore-control target stop
+edcore-control target snapshots
+edcore-control target restore-clean
+```
+
+This legacy guest does not reliably handle libvirt ACPI shutdown requests.
+Try `target shutdown` first; if it remains running, `target stop` is the
+explicit force-off action for this disposable training target. Restore its
+clean snapshot before beginning a new exercise.
+
+A safe first exercise is discovery and service inventory only:
+
+```bash
+edcore-control lab start
+edcore-control lab wait
+edcore-control target start
+edcore-control target wait
+edcore-control lab run -- nmap -sn 192.168.77.20
+edcore-control lab run -- sudo nmap -Pn -p- -sV --version-light 192.168.77.20
+edcore-control target stop
+edcore-control target restore-clean
+edcore-control lab shutdown
+```
+
 `lab shell` and `lab run` use the dedicated 9950x-only guest key through the
 `edcore-admin` jump host; the private key is never staged on EdCore or stored
 in Git.
+
+The current beginner tool set is deliberately narrower than Kali's large meta
+packages: Nmap, Metasploit Framework, ExploitDB/SearchSploit, and OpenBSD
+netcat. The installer temporarily hot-plugs a second NIC on the reviewed NAT
+bootstrap network, denies RFC1918 and link-local forwarding before permitting
+public package egress, installs the exact packages, then removes the NIC,
+network, guest configuration, and every bootstrap firewall rule. It finishes
+with negative LAN/Internet tests on the restored isolated guest:
+
+```bash
+scripts/ops/install-kali-lab-starter-tools.sh
+```
 
 ## Boundaries
 

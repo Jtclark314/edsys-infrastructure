@@ -10,6 +10,7 @@ import pathlib
 import shlex
 import subprocess
 import sys
+import time
 from typing import Sequence
 
 
@@ -19,6 +20,7 @@ KALI_LAB_USER = os.environ.get("EDCORE_KALI_LAB_USER", "kali")
 KALI_LAB_KEY = pathlib.Path(
     os.environ.get("EDCORE_KALI_LAB_KEY", "~/.ssh/edsys_kali_lab_key")
 ).expanduser()
+TARGET_DOMAIN = "metasploitable2-lab"
 
 
 def ssh_base(host: str) -> list[str]:
@@ -182,6 +184,98 @@ def command_lab_snapshots(args: argparse.Namespace) -> None:
     )
 
 
+def command_lab_wait(args: argparse.Namespace) -> None:
+    deadline = time.monotonic() + args.timeout
+    while time.monotonic() < deadline:
+        result = subprocess.run(
+            [*kali_ssh_argv(args.host), "true"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if result.returncode == 0:
+            print("kali_ready=yes")
+            return
+        time.sleep(2)
+    raise SystemExit(f"Kali did not become ready within {args.timeout} seconds")
+
+
+def command_target_status(args: argparse.Namespace) -> None:
+    script = rf"""
+set -e
+state=$(sudo -n virsh domstate {TARGET_DOMAIN} 2>/dev/null || printf absent)
+autostart=$(sudo -n virsh dominfo {TARGET_DOMAIN} 2>/dev/null | awk -F: '/^Autostart:/ {{gsub(/^[[:space:]]+/, "", $2); print $2}}' || true)
+snapshots=$(sudo -n virsh snapshot-list {TARGET_DOMAIN} --name 2>/dev/null | sed '/^[[:space:]]*$/d' | wc -l)
+lease=$(sudo -n virsh net-dhcp-leases security-lab 2>/dev/null | awk '$3 == "52:54:00:ed:77:20" {{print $5; exit}}' | cut -d/ -f1)
+python3 - "$state" "$autostart" "$snapshots" "$lease" <<'PY'
+import json
+import sys
+print(json.dumps({{
+    "domain": "{TARGET_DOMAIN}",
+    "state": sys.argv[1],
+    "autostart": sys.argv[2],
+    "snapshot_count": int(sys.argv[3]),
+    "lease": sys.argv[4] or None,
+}}, sort_keys=True))
+PY
+"""
+    result = run_remote(args.host, [], ["bash", "-lc", script], capture=True)
+    pretty_json(result.stdout)
+
+
+def command_target_power(args: argparse.Namespace) -> None:
+    verb = {
+        "start": "start",
+        "shutdown": "shutdown",
+        "stop": "destroy",
+        "reboot": "reboot",
+    }[args.target_command]
+    run_remote(args.host, ["sudo", "-n"], ["virsh", verb, TARGET_DOMAIN])
+
+
+def command_target_console(args: argparse.Namespace) -> None:
+    os.execvp(
+        "ssh",
+        ["ssh", "-t", args.host, "sudo", "-n", "virsh", "console", TARGET_DOMAIN],
+    )
+
+
+def command_target_snapshots(args: argparse.Namespace) -> None:
+    run_remote(
+        args.host,
+        ["sudo", "-n"],
+        ["virsh", "snapshot-list", TARGET_DOMAIN, "--tree"],
+    )
+
+
+def command_target_restore(args: argparse.Namespace) -> None:
+    script = rf"""
+set -euo pipefail
+state=$(sudo -n virsh domstate {TARGET_DOMAIN} | xargs)
+[[ "$state" == "shut off" ]] || {{ echo "Stop {TARGET_DOMAIN} before restoring its baseline." >&2; exit 1; }}
+snapshot=$(sudo -n virsh snapshot-list {TARGET_DOMAIN} --name | grep '^clean-vulnerable-baseline-' | sort | tail -1)
+[[ -n "$snapshot" ]] || {{ echo "No clean vulnerable baseline snapshot exists." >&2; exit 1; }}
+sudo -n virsh snapshot-revert {TARGET_DOMAIN} "$snapshot"
+printf 'restored_snapshot=%s\n' "$snapshot"
+"""
+    run_remote(args.host, [], ["bash", "-lc", script])
+
+
+def command_target_wait(args: argparse.Namespace) -> None:
+    script = rf"""
+set -euo pipefail
+for ((attempt=1; attempt<={args.timeout}; attempt++)); do
+  if timeout 1 bash -c '</dev/tcp/192.168.77.20/80' 2>/dev/null; then
+    echo target_ready=yes
+    exit 0
+  fi
+  sleep 1
+done
+echo "Metasploitable target did not become ready within {args.timeout} seconds." >&2
+exit 1
+"""
+    run_remote(args.host, [], ["bash", "-lc", script])
+
+
 def command_passthrough(args: argparse.Namespace, prefix: Sequence[str]) -> None:
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
@@ -274,6 +368,23 @@ def build_parser() -> argparse.ArgumentParser:
     lab_run.set_defaults(func=command_lab_run)
     lab_subparsers.add_parser("console", help="Open the libvirt serial console").set_defaults(func=command_lab_console)
     lab_subparsers.add_parser("snapshots", help="List Kali snapshots").set_defaults(func=command_lab_snapshots)
+    lab_wait = lab_subparsers.add_parser("wait", help="Wait for key-only Kali SSH readiness")
+    lab_wait.add_argument("--timeout", type=int, default=180)
+    lab_wait.set_defaults(func=command_lab_wait)
+
+    target = subparsers.add_parser("target", help="Control the isolated Metasploitable 2 target")
+    target_subparsers = target.add_subparsers(dest="target_command", required=True)
+    target_subparsers.add_parser("status", help="Show target state").set_defaults(func=command_target_status)
+    target_subparsers.add_parser("start", help="Start the target").set_defaults(func=command_target_power)
+    target_subparsers.add_parser("shutdown", help="Request a clean shutdown").set_defaults(func=command_target_power)
+    target_subparsers.add_parser("stop", help="Force off the disposable legacy target").set_defaults(func=command_target_power)
+    target_subparsers.add_parser("reboot", help="Request a clean reboot").set_defaults(func=command_target_power)
+    target_subparsers.add_parser("console", help="Open the target console").set_defaults(func=command_target_console)
+    target_subparsers.add_parser("snapshots", help="List target snapshots").set_defaults(func=command_target_snapshots)
+    target_subparsers.add_parser("restore-clean", help="Restore the newest clean vulnerable baseline").set_defaults(func=command_target_restore)
+    target_wait = target_subparsers.add_parser("wait", help="Wait for the target web service readiness marker")
+    target_wait.add_argument("--timeout", type=int, default=180)
+    target_wait.set_defaults(func=command_target_wait)
 
     for name, prefix, help_text in (
         ("user", [], "Run a command as edsys-admin"),

@@ -51,6 +51,8 @@ d-i finish-install/reboot_in_progress note
 ### Install the dedicated public key and fail-closed guest policy
 d-i preseed/late_command string \
     /bin/sh -c "printf '%s\n' '# Managed for the EdSys Kali security lab.' 'auto lo' 'iface lo inet loopback' '' 'auto eth0' 'iface eth0 inet dhcp' > /target/etc/network/interfaces"; \
+    install -d -o root -g root -m 0755 /target/etc/apt/sources.list.d; \
+    /bin/sh -c "printf '%s\n' 'Types: deb' 'URIs: http://http.kali.org/kali/' 'Suites: kali-rolling' 'Components: main contrib non-free non-free-firmware' 'Signed-By: /usr/share/keyrings/kali-archive-keyring.gpg' > /target/etc/apt/sources.list.d/kali.sources"; \
     install -d -o 1000 -g 1000 -m 0700 /target/home/kali/.ssh; \
     /bin/sh -c "printf '%s\n' '@KALI_LAB_SSH_PUBLIC_KEY@' > /target/home/kali/.ssh/authorized_keys"; \
     chown 1000:1000 /target/home/kali/.ssh/authorized_keys; \

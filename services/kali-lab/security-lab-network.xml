@@ -7,6 +7,7 @@
     <dhcp>
       <range start="192.168.77.100" end="192.168.77.199"/>
       <host mac="52:54:00:ed:77:10" name="kali-lab" ip="192.168.77.10"/>
+      <host mac="52:54:00:ed:77:20" name="metasploitable2-lab" ip="192.168.77.20"/>
     </dhcp>
   </ip>
 </network>

@@ -1,0 +1,10 @@
+[Match]
+MACAddress=52:54:00:ed:77:10
+
+[Network]
+Address=192.168.77.10/24
+LinkLocalAddressing=no
+IPv6AcceptRA=no
+LLMNR=no
+MulticastDNS=no
+DNSDefaultRoute=no
