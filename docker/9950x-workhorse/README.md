@@ -81,6 +81,12 @@ curl -fsS 'http://192.168.50.50:3017/search?q=USA%20FIFA%20World%20Cup%202026%20
 
 LiteLLM keeps `store_model_in_db=true`; models added through the UI/database, including OpenAI-backed chat and Codex entries, must be preserved during config changes. The sanitized config adds local model routes plus `router_settings.model_group_alias` aliases for EdSys client use. Do not put provider API keys in this config.
 
+Ask Foothills uses the explicit `foothills-query-local` route backed by the
+32K-context `ask-foothills-qwen35:latest` Ollama alias, with
+`foothills-query-local-fallback` backed by `gpt-oss:20b`. Its service key is
+restricted to those route names. The primary route's 300-second timeout is
+model-specific and intentionally longer than the general broker default.
+
 Private runtime artifacts live outside Git:
 
 - `/opt/edsys-workhorse/litellm/snapshots/` — DB/model registry snapshots before broker changes.

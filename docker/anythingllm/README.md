@@ -2,6 +2,12 @@
 
 Sanitized deployable source for the existing AnythingLLM Compose project.
 
+The default Ollama model is the qualified `ask-foothills-qwen35:latest` alias.
+This reuses the shared Qwen 3.5 35B weights instead of retaining a separate
+AnythingLLM-only model. Individual AnythingLLM workspaces may still have their
+own saved provider/model selection; verify those settings before assuming the
+Compose default controls an existing workspace.
+
 - Docker publishes host UI port `3002` only on loopback and the `9950x` LAN address. The exact Tailnet address is provided by the reviewed FreeBind socket proxy in `../../scripts/network/README.md`.
 - Persistent application state and the read-only reviewed RAG source live under `/mnt/ai-store`.
 - Runtime provider and broker settings are read from root-managed files under `/etc/edsys-secrets`; their contents never belong in Git.

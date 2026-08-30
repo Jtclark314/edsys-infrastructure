@@ -17,7 +17,7 @@ services:
       FOOTHILLS_QUERY_DB: /srv/foothills/project/project-management/project-controls/foothills-query-index.sqlite3
       FOOTHILLS_OPERATIONAL_SNAPSHOT_DB: /srv/foothills/operational/current.sqlite3
       ASK_FOOTHILLS_AUDIT_DB: /var/lib/ask-foothills/audit.sqlite3
-      FOOTHILLS_QUERY_MODEL: foothills-query-best
+      FOOTHILLS_QUERY_MODEL: foothills-query-local
       ASK_FOOTHILLS_DEV_AUTH: "false"
     ports:
       - "${ASK_FOOTHILLS_LAN_BIND_ADDRESS:-192.168.50.50}:3036:3036"

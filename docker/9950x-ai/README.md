@@ -9,7 +9,17 @@ Deployable source for the shared Ollama, Qdrant, Infinity, and Wyoming voice fou
 - No service binds `0.0.0.0` or `[::]` on the host. Container-internal listeners may still use `0.0.0.0` inside the isolated Docker network.
 - The external `ai-net` network must already exist.
 
-Runtime data remains under `/mnt/ai-store`; it does not belong in Git. All six images are pinned to the digests verified live on 2026-07-13.
+Runtime data remains under `/mnt/ai-store`; it does not belong in Git. All six
+images are pinned to reviewed digests. The Ollama `0.33.2` digest was verified
+live on 2026-08-30; the other five image digests were verified on 2026-07-13.
+
+Ollama and Infinity both reserve the NVIDIA GPU. Ollama automatically chooses
+full or partial offload based on model and context size; verify the actual
+split with `ollama ps` instead of assuming the GPU is active from container
+environment variables alone. Ask Foothills uses model-specific Ollama aliases
+with a 32K context so its retrieval prompts do not inherit Ollama's smaller
+GPU-derived default context. Do not raise the global context for voice and
+other lightweight clients.
 
 ## Validate and deploy
 
@@ -18,6 +28,29 @@ docker compose --project-name ai -f docker/9950x-ai/compose.yaml config --quiet
 docker compose --project-name ai -f docker/9950x-ai/compose.yaml up -d --pull never --no-build
 docker compose --project-name ai -f docker/9950x-ai/compose.yaml ps
 ```
+
+After recreating Ollama, verify GPU device admission and model offload:
+
+```bash
+docker inspect ollama --format '{{json .HostConfig.DeviceRequests}}'
+ollama run ask-foothills-qwen35 "Return only: ready"
+ollama ps
+```
+
+Create or refresh the Ask-specific alias after the underlying weights are
+present:
+
+```bash
+docker cp docker/9950x-ai/models/ask-foothills-qwen35.Modelfile \
+  ollama:/tmp/ask-foothills-qwen35.Modelfile
+docker exec ollama ollama create ask-foothills-qwen35 \
+  -f /tmp/ask-foothills-qwen35.Modelfile
+```
+
+The alias shares the underlying `qwen3.5:35b` model layers and therefore adds
+only manifest metadata, not another full copy. The evaluated `gemma4:26b`
+candidate was retired because it did not reliably satisfy the strict
+structured-answer contract.
 
 Use project name `ai` so this source manages the existing Compose project. Recreate and health-check one service at a time during a binding change; do not restart the whole AI stack blindly.
 

@@ -1,0 +1,7 @@
+FROM qwen3.5:35b
+
+# Ask Foothills retrieval prompts currently require more than Ollama's
+# hardware-derived 4K default, but do not need a global context increase.
+PARAMETER num_ctx 32768
+PARAMETER num_predict 1024
+PARAMETER temperature 0

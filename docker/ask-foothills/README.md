@@ -49,6 +49,20 @@ curl --fail http://100.87.137.47:3036/healthz
 The health endpoint reports catalog/index readiness without admitting a user.
 All application and source endpoints require a valid Access assertion.
 
+## Local inference route
+
+Production sets `FOOTHILLS_QUERY_MODEL=foothills-query-local`. LiteLLM sends
+that route to the 32K-context `ask-foothills-qwen35:latest` Ollama alias and
+falls back to local `gpt-oss:20b`. The service virtual key must be limited to
+those two route names. The 300-second model timeout and 360-second application
+hard limit are deliberate: the live acceptance corpus includes large
+multi-source evidence prompts whose valid completions can exceed 100 seconds.
+
+The 2026-08-30 controlled acceptance passed all 12 scope, contract, billing,
+conflict, arithmetic, negative-control, and representative-page vision cases.
+Do not promote a replacement model on a one-prompt smoke test; rerun the
+source-grounded suite and require strict structured output first.
+
 ## Recovery and backup
 
 Docker's `restart: unless-stopped` and the container health check provide

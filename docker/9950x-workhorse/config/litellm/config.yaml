@@ -21,6 +21,20 @@ model_list:
       model: ollama/nomic-embed-text:latest
       api_base: http://host.docker.internal:11434
 
+  # Ask Foothills stays on an explicit local route. The model-specific Ollama
+  # alias fixes its context and deterministic generation parameters without
+  # changing the defaults used by voice and other lightweight clients.
+  - model_name: foothills-query-local
+    litellm_params:
+      model: ollama_chat/ask-foothills-qwen35:latest
+      api_base: http://host.docker.internal:11434
+      timeout: 300
+  - model_name: foothills-query-local-fallback
+    litellm_params:
+      model: ollama_chat/gpt-oss:20b
+      api_base: http://host.docker.internal:11434
+      timeout: 240
+
   # New local-first use-case routes.
   - model_name: edsys-voice-fast
     litellm_params:
@@ -57,6 +71,8 @@ router_settings:
         - edsys-voice-quality
     - edsys-voice-quality:
         - edsys-voice-fast
+    - foothills-query-local:
+        - foothills-query-local-fallback
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

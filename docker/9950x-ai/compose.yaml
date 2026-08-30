@@ -2,7 +2,7 @@ name: ai
 
 services:
   ollama:
-    image: ollama/ollama@sha256:46399ef084d97b381955b5dc585c5d836dbe7ed3f79f170d1c04660fed511e3a
+    image: ollama/ollama@sha256:020e4134285e2ef4d8fd801234176de3b4faadc992a3eb06c8e66a2f9d4c4ba2
     container_name: ollama
     restart: unless-stopped
     networks: [ai-net]
@@ -11,6 +11,13 @@ services:
       - "192.168.50.50:11434:11434"
     environment:
       OLLAMA_HOST: 0.0.0.0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     volumes:
       - /mnt/ai-store/models/ollama:/root/.ollama
       - /mnt/ai-store/cache:/root/.cache

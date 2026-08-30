@@ -18,7 +18,7 @@ services:
       UID: "1000"
       GID: "1000"
       OLLAMA_BASE_PATH: http://ollama:11434
-      OLLAMA_MODEL_PREF: gemma4:26b
+      OLLAMA_MODEL_PREF: ask-foothills-qwen35:latest
 
 networks:
   ai-net:
