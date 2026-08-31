@@ -2,7 +2,7 @@
 
 ## Current Design
 
-`9950x` is the single EdSys Netdata Parent. The three retained Proxmox hosts
+`9950x` is the single EdSys Netdata Parent. The four current Proxmox hosts
 and the authoritative `netbox` Ubuntu VM are Netdata Children and stream to
 the parent over the LAN:
 
@@ -11,8 +11,9 @@ the parent over the LAN:
 - `pve-node0` — child
 - `pve-node1` — child
 - `pve-node2` — child
+- `pve-node3` — child and current EdCore bare-metal identity
 
-All five nodes carry the host label `group=edsys-compute`. The authoritative
+All six nodes carry the host label `group=edsys-compute`. The authoritative
 local dashboard and API are on `9950x` TCP `19999`.
 
 The streaming API key is generated at deployment time, stored only in
@@ -32,11 +33,11 @@ sudo scripts/ops/deploy-netdata-compute.sh --apply
 
 The installer:
 
-1. Preflights SSH and child-to-parent LAN reachability for the three Proxmox
+1. Preflights SSH and child-to-parent LAN reachability for the four Proxmox
    nodes and the separately provisioned `netbox` satellite.
 2. Stores private pre-change configuration under
    `/var/backups/edsys-netdata-compute/<UTC timestamp>/` on every affected host.
-3. Aligns the three Debian 13 Proxmox hosts and the NetBox Ubuntu 24.04 satellite to
+3. Aligns the four Debian 13 Proxmox hosts and the NetBox Ubuntu 24.04 satellite to
    the signed Netdata edge APT repository. The satellite web interface binds only
    to loopback; the deployer configures their outbound streams.
 4. Configures exact hostnames and the shared `edsys-compute` label.
@@ -47,7 +48,7 @@ The installer:
 5. Sets the Parent's Docker collector to a 10-second cadence while retaining
    Docker service discovery and Docker/cgroup charts.
 6. Restarts the Parent first and each Child individually.
-7. Requires the exact five-node topology and four receiving streams before
+7. Requires the exact six-node topology and five receiving streams before
    reporting success.
 
 If configuration deployment fails, the script restores the prior
@@ -81,13 +82,13 @@ scripts/ops/deploy-netdata-compute.sh --check
 
 The check fails unless:
 
-- the active node set is exactly the five names above; archived stale history
+- the active node set is exactly the six names above; archived stale history
   for the four retired EdCore nodes is allowed but no active stream is;
 - every node is reachable, with its alert engine either online or in the
   bounded post-restart `initializing` state;
 - every node has `group=edsys-compute`;
-- `9950x` reports Parent mode and four receiving streams. Its historical total
-  may remain above five because Netdata retains stale node history.
+- `9950x` reports Parent mode and five receiving streams. Its historical total
+  may remain above six because Netdata retains stale node history.
 
 Direct API inspection remains available at:
 

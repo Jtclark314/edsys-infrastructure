@@ -1,0 +1,7 @@
+table inet edsys_security_lab {
+    chain forward {
+        type filter hook forward priority -10; policy accept;
+        iifname "vmbr77" counter drop comment "Never route security-lab traffic"
+        oifname "vmbr77" counter drop comment "Never route traffic into security-lab"
+    }
+}

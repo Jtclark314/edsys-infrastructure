@@ -1,0 +1,14 @@
+[Unit]
+Description=EdSys security-lab forwarding guard
+After=network-pre.target
+Before=network.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/edsys-security-lab-guard start
+ExecStop=/usr/local/sbin/edsys-security-lab-guard stop
+
+[Install]
+WantedBy=multi-user.target

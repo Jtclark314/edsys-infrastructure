@@ -28,20 +28,18 @@ def test_secret_content_is_streamed_only_over_ssh_standard_input():
     assert '<"${tmpdir}/${satellite}-stream.conf"' in source
 
 
-def test_automation_first_enrollment_is_explicit_and_fingerprint_gated():
+def test_current_children_are_explicit_and_strictly_host_key_checked():
     source = DEPLOY.read_text(encoding="utf-8")
-    assert 'automation_ip="192.168.50.82"' in source
-    assert "--automation-host-key" in source
-    assert "ssh-keyscan -T 5 -t ed25519" in source
-    assert "SHA256:[A-Za-z0-9+/]{43}" in source
-    assert "The live ${automation_ip} ED25519 host key did not match" in source
+    assert "pve_children=(pve-node0 pve-node1 pve-node2 pve-node3)" in source
+    assert "satellites=(netbox)" in source
+    assert "192.168.50.51 192.168.50.52 192.168.50.53 192.168.50.54 192.168.50.81" in source
+    assert "UserKnownHostsFile=${operator_home}/.ssh/known_hosts" in source
     assert "StrictHostKeyChecking=no" not in source
     assert "StrictHostKeyChecking=accept-new" not in source
 
 
-def test_known_hosts_change_is_private_backed_up_and_rolled_back():
+def test_deployer_does_not_mutate_operator_known_hosts():
     source = DEPLOY.read_text(encoding="utf-8")
-    assert "operator-known_hosts.before" in source
-    assert "known_hosts_mutated=1" in source
-    assert "restoring the operator SSH known_hosts file" in source
-    assert 'install -m 0600 -o "$operator_user"' in source
+    assert "ssh-keyscan" not in source
+    assert "operator-known_hosts.before" not in source
+    assert "known_hosts_mutated" not in source

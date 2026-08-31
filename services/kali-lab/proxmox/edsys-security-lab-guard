@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+case "${1:-start}" in
+  start)
+    if /usr/sbin/nft list table inet edsys_security_lab >/dev/null 2>&1; then
+      /usr/sbin/nft delete table inet edsys_security_lab
+    fi
+    exec /usr/sbin/nft -f /etc/edsys/security-lab.nft
+    ;;
+  stop)
+    if /usr/sbin/nft list table inet edsys_security_lab >/dev/null 2>&1; then
+      /usr/sbin/nft delete table inet edsys_security_lab
+    fi
+    ;;
+  verify)
+    test "$(cat /proc/sys/net/ipv4/ip_forward)" = 0
+    test "$(cat /proc/sys/net/ipv6/conf/all/forwarding)" = 0
+    /usr/sbin/nft list table inet edsys_security_lab | grep -q 'iifname "vmbr77".*drop'
+    /usr/sbin/nft list table inet edsys_security_lab | grep -q 'oifname "vmbr77".*drop'
+    ;;
+  *)
+    echo "usage: $0 {start|stop|verify}" >&2
+    exit 2
+    ;;
+esac

@@ -1,174 +1,85 @@
-# EdCore Kali Security Lab
+# EdCore Proxmox Security Lab
 
-This service definition builds one deliberately isolated Kali Linux virtual
-machine on `edcore-workhorse`. It does not bridge the VM to the EdSys LAN,
-Tailnet, Docker networks, or the public Internet after bootstrap.
+Status: current deployment source for the isolated Kali and Metasploitable lab
+on `pve-node3` (EdCore v3).
 
-## Design
+## Current design
 
-- Hypervisor: KVM/QEMU through the system libvirt connection.
-- Management: Cockpit Machines through the existing loopback-only Cockpit
-  tunnel, plus the `edcore-control lab` commands on `9950x`.
-- Guest: stable Kali point release, installed from the official signed
-  installer image as a headless `kali-linux-core` system.
-- Authentication: a dedicated Ed25519 key whose private half stays on `9950x`.
-  The guest account has no usable password and direct root login is disabled.
-- Final network: `security-lab`, `192.168.77.0/24`, no libvirt forwarding and
-  no host firewall route to the LAN, Tailnet, or Internet.
-- Bootstrap network: a temporary libvirt NAT network used only for the install
-  and first controlled update. It is destroyed and undefined before
-  acceptance.
-- Storage: a dynamically allocated 160 GiB qcow2 disk on EdCore's encrypted
-  Btrfs filesystem.
-- Recovery: a shut-down libvirt snapshot named with the
-  `clean-baseline-YYYYMMDD` convention.
+- Proxmox host: `pve-node3` at the reviewed LAN management address.
+- Lab bridge: `vmbr77`, `192.168.77.1/24`, no physical bridge ports and no
+  gateway.
+- DHCP-only service: dedicated `dnsmasq`; DNS is disabled (`port=0`) and the
+  router and DNS DHCP options are deliberately empty.
+- Kali: VMID 330, reservation `192.168.77.10`, off by default, deletion
+  protection enabled.
+- Metasploitable 2: VMID 331, reservation `192.168.77.20`, off by default,
+  deletion protection enabled.
+- Host forwarding: IPv4 and IPv6 forwarding are disabled. A persistent nftables
+  forward-hook table drops traffic entering or leaving `vmbr77` even if a
+  future host change enables forwarding accidentally.
+- Guest access: Kali uses key-only SSH through the `pve-node3` jump host.
+  Metasploitable is intentionally vulnerable and has no production-network
+  attachment.
 
-The same isolated network also contains the separately controlled
-`metasploitable2-lab` training target at `192.168.77.20`. It is deliberately
-vulnerable, never autostarts, and must never bridge to production EdSys
-systems.
+The lab is never to be attached to `vmbr0`, NAT, a physical network, the EdSys
+LAN, the Tailnet, or the Internet. Both guests remain shut off except during a
+bounded training session.
 
-## Source files
+## Deployable source
 
-- `security-lab-network.xml` - persistent isolated final network.
-- `security-lab-bootstrap-network.xml` - temporary NAT bootstrap network.
-- `kali-lab-isolated.network` - final MAC-matched, no-gateway Kali networkd
-  configuration.
-- `kali.sources` - official Kali 2026.2 deb822 repository definition pinned to
-  the installed Kali archive keyring.
-- `kali-lab-preseed.cfg.in` - secret-free automated installer template. The
-  deployment script substitutes only the dedicated public key.
-- `../../scripts/ops/install-edcore-kali-lab.sh` - guarded installer.
-- `../../scripts/ops/verify-edcore-kali-lab.sh` - read-only acceptance.
-- `../../scripts/ops/install-kali-lab-starter-tools.sh` - guarded, temporary
-  public-only bootstrap for the explicitly scoped beginner tool set.
+The current Proxmox host definitions live under [`proxmox/`](proxmox/):
 
-## Accepted deployment
+- `edsys-security-lab.interfaces`
+- `security-lab-dnsmasq.conf`
+- `security-lab.nft`
+- `99-edsys-security-lab.conf`
+- `edsys-security-lab-guard` and its systemd unit
+- `edsys-security-lab-dhcp.service`
+- guarded `install.sh`
+- read-only `verify.sh`
 
-The first live deployment passed on 2026-08-30 with Kali 2026.2. The official
-archive signature and exact installer checksum passed before QEMU saw the
-media. The bootstrap updater reported zero pending packages. The final guest
-has no default route or resolver, cannot reach the EdSys LAN or Internet, and
-accepts key-only SSH only from EdCore's isolated bridge address. The VM is
-shut down by default and has the internal snapshot
-`clean-baseline-20260830`.
-
-## Deployment
-
-Create a dedicated key on `9950x`; keep the private file outside Git. Copy only
-the public half and this reviewed source to private staging on EdCore, then run:
+Deployment is explicit and host-guarded:
 
 ```bash
-sudo ./install-edcore-kali-lab.sh \
-  --public-key-file /private/staging/edsys-kali-lab.pub \
-  --source-dir /private/staging/kali-lab
+sudo services/kali-lab/proxmox/install.sh --apply
 ```
 
-The script refuses the wrong hostname, rejects malformed keys, verifies the
-official Kali archive-key fingerprint, authenticates the signed SHA256SUMS,
-verifies the installer image, applies narrowly scoped temporary UFW rules,
-blocks bootstrap access to RFC1918/link-local destinations, and refuses to
-overwrite an existing VM. If a first staging attempt is safely interrupted
-before a domain exists, `--resume-staged` revalidates the signed media,
-networks, and disk instead of repeating the package transaction.
-
-After the installer finishes, use the dedicated key through the EdCore jump
-host to perform the first update. Replace the guest's temporary DHCP stanza
-with the final static `192.168.77.10/24` configuration and no gateway or DNS,
-shut it down cleanly, replace its NIC with `security-lab`, detach the installer
-media, and remove the bootstrap network and every bootstrap-labeled UFW rule.
-Boot once on the isolated network, prove the negative LAN/Internet tests, shut
-down again, create the internal `clean-baseline-YYYYMMDD` snapshot, and run the
-verifier.
-
-The 9950x helper keeps ordinary use short and auditable:
+Verification is safe and read-only:
 
 ```bash
+ssh pve-node3 sudo /path/to/verify.sh
+edcore-control isolation
 edcore-control lab status
-edcore-control lab start
-edcore-control lab run -- uname -a
-edcore-control lab shell
-edcore-control lab shutdown
-edcore-control lab snapshots
-```
-
-## Metasploitable 2 target
-
-Rapid7's official Metasploitable documentation points to its SourceForge
-project as an official download location. The guarded target installer uses
-that exact project path, requires the pinned SourceForge-published SHA-256 and
-archive size, rejects unsafe ZIP paths and symlinks, verifies the VMDK before
-conversion, and imports it without starting it. Upstream publishes hashes but
-does not publish a detached signature for this legacy image.
-
-The target uses two vCPUs, 2 GiB RAM, a dedicated qcow2 disk, legacy-compatible
-BIOS/IDE/e1000 devices, loopback-only graphics, and exactly one NIC on
-`security-lab`. A permanent host route-deny rule supplements libvirt's
-no-forward network. Its accepted recovery point uses the
-`clean-vulnerable-baseline-YYYYMMDD` convention.
-
-Deploy and verify on EdCore:
-
-```bash
-sudo ./install-edcore-metasploitable2-target.sh
-sudo ./verify-edcore-metasploitable2-target.sh
-```
-
-Operate from 9950x:
-
-```bash
 edcore-control target status
-edcore-control target start
-edcore-control target console
-edcore-control target shutdown
-edcore-control target stop
-edcore-control target snapshots
-edcore-control target restore-clean
 ```
 
-This legacy guest does not reliably handle libvirt ACPI shutdown requests.
-Try `target shutdown` first; if it remains running, `target stop` is the
-explicit force-off action for this disposable training target. Restore its
-clean snapshot before beginning a new exercise.
+## Accepted recovery points
 
-A safe first exercise is discovery and service inventory only:
+- Kali `clean-baseline-20260830`
+- Kali `starter-tools-baseline-20260830`
+- Metasploitable `clean-vulnerable-baseline-20260830`
 
-```bash
-edcore-control lab start
-edcore-control lab wait
-edcore-control target start
-edcore-control target wait
-edcore-control lab run -- nmap -sn 192.168.77.20
-edcore-control lab run -- sudo nmap -Pn -p- -sV --version-light 192.168.77.20
-edcore-control target stop
-edcore-control target restore-clean
-edcore-control lab shutdown
-```
+The corresponding verified recovery images and manifests remain private on AI
+Store outside Git, Obsidian, chat, and RAG. Their hashes are validated in the
+private recovery area before use.
 
-`lab shell` and `lab run` use the dedicated 9950x-only guest key through the
-`edcore-admin` jump host; the private key is never staged on EdCore or stored
-in Git.
+## Legacy Omarchy/libvirt files
 
-The current beginner tool set is deliberately narrower than Kali's large meta
-packages: Nmap, Metasploit Framework, ExploitDB/SearchSploit, and OpenBSD
-netcat. The installer temporarily hot-plugs a second NIC on the reviewed NAT
-bootstrap network, denies RFC1918 and link-local forwarding before permitting
-public package egress, installs the exact packages, then removes the NIC,
-network, guest configuration, and every bootstrap firewall rule. It finishes
-with negative LAN/Internet tests on the restored isolated guest:
+The XML, preseed, systemd-networkd, and Omarchy/libvirt installer files still
+present in this folder are retained only as dated rebuild history. The
+`install-edcore-kali-lab.sh`, `install-kali-lab-starter-tools.sh`, and
+`install-edcore-metasploitable2-target.sh` flows are host-guarded for the
+retired `edcore-workhorse` identity and are **not** the current pve-node3
+procedure.
 
-```bash
-scripts/ops/install-kali-lab-starter-tools.sh
-```
+## Backups and recovery
 
-## Boundaries
+Host configuration is selected by
+`scripts/backup/edsys-collect-remotes.sh`. Runtime VM storage and raw recovery
+images remain private outside Git. Before changing the bridge or VM NICs:
 
-- Do not store captured credentials, packet captures, forensic images, private
-  assessment evidence, or guest disk images in Git.
-- Do not enable VM autostart by default.
-- Do not add a physical bridge or macvtap interface.
-- Do not add libvirt forwarding to `security-lab`.
-- Do not install `kali-linux-everything`; add tools only for an explicitly
-  scoped and authorized assessment.
-- Security testing is limited to systems Jeremy owns or has explicit
-  authorization to assess.
+1. confirm both VMs are stopped;
+2. verify off-host recovery-image hashes;
+3. retain the current Proxmox snapshots;
+4. change one layer at a time;
+5. rerun `verify.sh` and `edcore-control isolation`.

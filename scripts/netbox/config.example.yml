@@ -8,6 +8,7 @@ proxmox_hosts:
   - pve-node0
   - pve-node1
   - pve-node2
+  - pve-node3
 docker_hosts:
   - localhost
   - arr-server
@@ -19,6 +20,7 @@ network_hosts:
   - pve-node0
   - pve-node1
   - pve-node2
+  - pve-node3
   - edrouter-node0
   - pihole-primary
   - pihole-secondary

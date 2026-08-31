@@ -46,7 +46,12 @@ sudo sshd -t && sudo systemctl reload ssh.service
 
 Controller public keys remain live private host state and never belong in Git.
 
-## EdCore Omarchy Workhorse
+## Historical EdCore Omarchy Workhorse
+
+The configuration below is retained only as dated evidence for the destroyed
+temporary Omarchy installation. Its hostname-specific deployment path is not
+current and must not be applied to `pve-node3`; current Proxmox control and
+isolation source is documented in `docs/EDCORE_CONTROL_PLANE.md`.
 
 `90-edsys-omarchy-workhorse.conf` is the sanitized SSH policy accepted on
 `edcore-workhorse`. It permits local TCP and stream-local forwarding for

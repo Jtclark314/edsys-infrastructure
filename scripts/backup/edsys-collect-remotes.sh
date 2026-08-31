@@ -138,6 +138,7 @@ collect_tar_excluding "pihole-secondary-config" "jeremy" "192.168.50.6" "${PIHOL
 collect_tar "pve-node0-config" "root" "192.168.50.51" "/etc/pve" "/etc/network/interfaces" "/etc/hosts" "/etc/hostname"
 collect_tar "pve-node1-config" "root" "192.168.50.52" "/etc/pve" "/etc/network/interfaces" "/etc/hosts" "/etc/hostname"
 collect_tar "pve-node2-config" "root" "192.168.50.53" "/etc/pve" "/etc/network/interfaces" "/etc/hosts" "/etc/hostname"
+collect_tar "pve-node3-config" "root" "192.168.50.54" "/etc/pve" "/etc/network/interfaces" "/etc/network/interfaces.d" "/etc/edsys" "/etc/sysctl.d/99-edsys-security-lab.conf" "/etc/systemd/system/edsys-security-lab-guard.service" "/etc/systemd/system/edsys-security-lab-dhcp.service" "/usr/local/sbin/edsys-security-lab-guard" "/usr/local/sbin/verify-edsys-security-lab" "/etc/hosts" "/etc/hostname"
 
 collect_text "arr-server-docker-baseline" "jeremy" "192.168.50.201" "hostnamectl; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || true; findmnt"
 collect_text "family-services-docker-baseline" "jeremy" "192.168.50.78" "hostnamectl; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || true; findmnt"

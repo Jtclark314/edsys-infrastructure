@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the authoritative five-node EdSys Netdata parent topology."""
+"""Verify the authoritative six-node EdSys Netdata parent topology."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ EXPECTED = {
     "pve-node0",
     "pve-node1",
     "pve-node2",
+    "pve-node3",
 }
 RETIRED = {
     "edcore-automation",

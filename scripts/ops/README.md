@@ -5,12 +5,11 @@ Status: helper scripts for local EdSys operations. Prefer report-only behavior u
 ## Scripts
 
 - `edsys-container-recovery.py` - manifest-driven, health-gated Docker recovery and audit.
-- `install-edcore-control-plane.sh` - root-only, host-guarded EdCore bootstrap for the dedicated admin account, diagnostics, GUI bridge, loopback Cockpit, maintenance timers, and private Tailscale transport. It requires a separately staged public key and live peer addresses and keeps rollback material off Git.
-- `edcore-session` - root-only bridge into Jeremy's active EdCore Hyprland session for reviewed GUI commands.
-- `edcore-control.py` - 9950x client for EdCore health, shell/root/session commands, live Hyprland inspection, screenshots, input, clipboard operations, and the loopback Cockpit tunnel.
+- `edcore-control.py` - current 9950x client for the Proxmox-based EdCore v3 host. It reports node/HA/lab status, opens a loopback Proxmox web tunnel, runs reviewed root commands, controls VMIDs 300/330/331, verifies lab isolation, and reaches Kali through the `pve-node3` jump host.
+- `install-edcore-control-plane.sh` and `edcore-session` - retained Omarchy-only bootstrap/session helpers for dated history. Their hostname guard refuses the current `pve-node3`; do not use them for EdCore v3.
 - `arr-transfer-arbiter.py` - fail-closed, SAB-priority mutual exclusion for SABnzbd and qBittorrent. It verifies every pause handoff, persists operator modes and latched faults, and never logs job names or API material.
-- `deploy-netdata-compute.sh` - rollback-safe installer for the nine-node `edsys-compute` Netdata Parent/Child topology. It aligns the four Proxmox hosts and four Ubuntu satellites while keeping the runtime stream key and Cloud material outside Git.
-- `verify-netdata-compute.py` - strict local-API acceptance check for the exact nine reachable nodes, shared group label, and eight receiving streams.
+- `deploy-netdata-compute.sh` - rollback-safe installer for the six-node `edsys-compute` Netdata Parent/Child topology. It aligns the four Proxmox hosts plus the NetBox guest with the 9950x Parent while keeping the runtime stream key and Cloud material outside Git.
+- `verify-netdata-compute.py` - strict local-API acceptance check for the exact six reachable nodes, shared group label, and five receiving streams.
 - `install-arr-transfer-arbiter.sh` - root-only installer for the arbiter, systemd watchdog service, health timer, SAB boot-pause settings, and qBittorrent `restart: "no"` posture. Replaced live files are backed up privately before mutation.
 - `install-container-recovery.sh` - validated installer for the recovery manifest, systemd units, Docker drop-in, and deterministic host-shutdown posture with live restore disabled.
 - `docker-cleanup-report.sh` - prints Docker disk/reclaimable/exited-container/unused-volume candidates without pruning or deleting anything.

@@ -1,113 +1,119 @@
-# EdCore Omarchy Control Plane
+# EdCore Proxmox Control Plane
 
-Status: deployment source for the dedicated EdCore workhorse. Live addresses,
-keys, Tailnet identity, pairing records, rollback archives, and host state are
-private runtime material and are not stored here.
+Status: current deployment and operator source for EdCore v3 (`pve-node3`).
 
-## Control model
+## Boundary
 
-- The canonical 9950x host owns a unique Ed25519 key for the locked
-  `edsys-admin` account on EdCore.
-- The key is accepted only from 9950x's LAN and Tailnet addresses.
-- `edsys-admin` has passwordless sudo so reviewed automation does not depend on
-  a shared human password.
-- OpenSSH remains key-only, denies root login, agent forwarding, X11, remote
-  forwarding, and SSH tunnels. Local forwarding is retained for loopback-only
-  tools such as Cockpit.
-- `/usr/local/bin/edcore-session` crosses from the root control path into
-  Jeremy's existing Hyprland session without storing session secrets.
-- `hyprctl`, `grim`, `wl-copy`, `wtype`, and the private `ydotoold` socket
-  provide inspection, screenshots, clipboard access, keyboard input, and mouse
-  input for the active Omarchy desktop.
-- Cockpit listens only on `127.0.0.1:9090`; it is reached through an SSH local
-  tunnel and is never opened directly on the LAN or Tailnet.
-- Tailscale is a secondary private transport for key-only OpenSSH and the
-  already-paired Sunshine/Moonlight session. It does not advertise routes, act
-  as an exit node, enable Tailscale SSH, or use Serve/Funnel.
+- Canonical controller: `9950x`.
+- Current EdCore identity: `pve-node3`; key-only OpenSSH lands as root on the
+  Proxmox host.
+- LAN management: the reviewed `pve-node3` SSH alias and Proxmox HTTPS endpoint.
+- Tailnet management: Tailscale is installed with DNS, accepted routes,
+  advertised routes, and Tailscale SSH disabled. Final interactive device
+  authorization and the resulting fallback SSH alias remain to be confirmed.
+- Home Assistant: VMID 300.
+- Kali lab: VMID 330, `vmbr77` only, off by default.
+- Metasploitable target: VMID 331, `vmbr77` only, off by default.
 
-## Source files
+No password, private key, Tailnet address, auth URL, VM image, or runtime log
+belongs in Git, Obsidian, chat, or RAG.
 
-- `scripts/ops/install-edcore-control-plane.sh` - root-only, host-guarded,
-  rollback-backed bootstrap.
-- `scripts/ops/edcore-session` - root-to-live-session execution bridge.
-- `scripts/ops/edcore-control.py` - 9950x CLI for shell, sudo, GUI, screenshots,
-  clipboard, pointer input, and a Cockpit tunnel.
-- `scripts/security/90-edsys-omarchy-workhorse.conf` - reviewed OpenSSH policy.
-- `ansible/playbooks/edcore-control-acceptance.yml` - read-only live acceptance.
+## 9950x helper
 
-## Private prerequisites
-
-The operator supplies at deployment time:
-
-1. a dedicated public key whose private half remains on 9950x;
-2. 9950x's current Tailnet IPv4 address;
-3. Nimo's current Tailnet IPv4 address; and
-4. an interactive Tailscale authorization completed on EdCore.
-
-Do not copy these values into this repository. Tailnet access policy remains the
-primary identity boundary for traffic accepted through Tailscale's managed
-netfilter rules. The installer also adds exact-peer UFW rules as defense in
-depth; do not treat those rules as a substitute for reviewed Tailnet grants.
-
-## Deployment
-
-Review and stage the installer, session helper, SSH policy, and public key on
-EdCore. Then run the installer from EdCore's physical or graphical session:
+The current helper is `scripts/ops/edcore-control.py`; the installed user entry
+point is `~/.local/bin/edcore-control`.
 
 ```bash
-sudo ./install-edcore-control-plane.sh \
-  --public-key-file /private/staging/edcore-admin.pub \
-  --source-dir /private/staging/source \
-  --hub-tailnet-ip TAILNET_IPV4_OF_9950X \
-  --nimo-tailnet-ip TAILNET_IPV4_OF_NIMO
+edcore-control status
+edcore-control isolation
+edcore-control web
+edcore-control shell
+edcore-control root -- pveversion
+
+edcore-control ha status
+edcore-control ha snapshots
+
+edcore-control lab status
+edcore-control lab start
+edcore-control lab wait
+edcore-control lab shell
+edcore-control lab snapshots
+edcore-control lab shutdown
+edcore-control lab restore-starter
+
+edcore-control target status
+edcore-control target start
+edcore-control target wait
+edcore-control target snapshots
+edcore-control target shutdown
+edcore-control target restore-clean
 ```
 
-The installer validates the host and inputs, creates a private rollback folder
-under `/var/backups/edsys-edcore-control/`, installs the reviewed packages,
-configures services, and pauses for interactive Tailnet enrollment when needed.
-Keep the local terminal open until new LAN and Tailnet admin sessions pass.
+`web` opens an SSH local forward rather than publishing the Proxmox UI through a
+new listener. Kali SSH uses the dedicated private guest key through the
+`pve-node3` jump host. The target has no general-purpose SSH helper because it
+is deliberately vulnerable.
 
-## 9950x use
+## Isolation contract
 
-Install the helper privately on 9950x, or invoke it from this checkout:
+The current host-side source is `services/kali-lab/proxmox/`:
+
+- `vmbr77` has address `192.168.77.1/24`, no physical ports, and no gateway;
+- the dedicated dnsmasq instance provides DHCP only, with DNS disabled and no
+  router or DNS option;
+- IPv4 and IPv6 forwarding remain disabled;
+- an nftables forward-hook guard drops traffic entering or leaving `vmbr77`;
+- both lab VMs have only `vmbr77`, autostart disabled, and deletion protection;
+- both VMs are stopped except during a bounded training exercise.
+
+Verify after any host-network or VM-NIC change:
 
 ```bash
-scripts/ops/edcore-control.py status
-scripts/ops/edcore-control.py shell
-scripts/ops/edcore-control.py root -- systemctl status tailscaled
-scripts/ops/edcore-control.py gui windows
-scripts/ops/edcore-control.py gui screenshot /tmp/edcore.png
-scripts/ops/edcore-control.py cockpit
+ssh pve-node3 /usr/local/sbin/verify-edsys-security-lab
+edcore-control isolation
 ```
 
-The default SSH alias is `edcore-admin`. To exercise the fallback route without
-changing source, use:
+Never attach VMID 330 or 331 to `vmbr0`, NAT, a physical network, the EdSys LAN,
+the Tailnet, or the Internet.
 
-```bash
-EDCORE_SSH_HOST=edcore-admin-tailnet scripts/ops/edcore-control.py status
-```
+## Recovery points
 
-## Acceptance
+- Home Assistant: `clean-haos-18-2-baseline-20260830`
+- Kali: `clean-baseline-20260830`
+- Kali with starter tools: `starter-tools-baseline-20260830`
+- Metasploitable: `clean-vulnerable-baseline-20260830`
 
-From the infrastructure repository on 9950x:
+The off-host recovery images and their hash manifest are private AI Store
+material. VM restore commands remain explicit and snapshot-specific; they do
+not delete other guests or bypass Proxmox protection.
+
+## Monitoring and backup
+
+- Netdata on `pve-node3` streams to the 9950x Parent as part of the exact
+  six-node/five-stream topology.
+- Both Homepage dashboards link to pve-node3 and Home Assistant and monitor the
+  current endpoints.
+- `scripts/backup/edsys-collect-remotes.sh` selects Proxmox, network, isolated
+  lab, sysctl, nftables, DHCP, verifier, and systemd host configuration into the
+  private backup staging area.
+- NetBox is the authoritative structured inventory; the plan-gated sync records
+  pve-node3, VMIDs 300/330/331, current IP assignments, and retired prior
+  identities without automatic deletion.
+
+## Legacy Omarchy control files
+
+`install-edcore-control-plane.sh`, `edcore-session`, the old Ansible inventory,
+and the older libvirt installers remain only as dated Omarchy history. Their
+hostname guards reject `pve-node3`. They are not current deployment or recovery
+instructions.
+
+## Source validation
 
 ```bash
 python3 -m py_compile scripts/ops/edcore-control.py
-bash -n scripts/ops/install-edcore-control-plane.sh scripts/ops/edcore-session
-ansible-playbook \
-  -i ansible/inventory/edcore-workhorse.yml \
-  ansible/playbooks/edcore-control-acceptance.yml
+pytest -q scripts/ops/tests/test_edcore_control.py
+bash -n \
+  services/kali-lab/proxmox/install.sh \
+  services/kali-lab/proxmox/verify.sh \
+  services/kali-lab/proxmox/edsys-security-lab-guard
 ```
-
-Also verify a fresh key-only login on both routes, a Cockpit tunnel bound only
-to loopback, one disposable screenshot, Sunshine reachability from Nimo, no
-failed units, and the effective SSH configuration. Remove disposable images and
-do not commit live output.
-
-## Vendor references
-
-- [Tailscale Linux installation](https://tailscale.com/docs/install/linux)
-- [`tailscale up` reference](https://tailscale.com/docs/reference/tailscale-cli/up)
-- [Tailscale client preferences](https://tailscale.com/docs/features/client/manage-preferences)
-- [Tailscale netfilter modes](https://tailscale.com/docs/reference/netfilter-modes)
-- [Tailscale firewall ports](https://tailscale.com/docs/reference/faq/firewall-ports)

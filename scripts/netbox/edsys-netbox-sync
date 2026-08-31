@@ -455,6 +455,24 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
     vm_names = {item.get("name") for item in network.get("proxmox_resources", [])}
     vm_names.update({"node1-services", "family-services", "arr-server", "edrouter-node0", "arr-vm", "netbox"})
 
+    # A retired identity may retain the same historical address now owned by a
+    # fresh active identity (for example pve-edcore -> pve-node3).  NetBox does
+    # not permit an IP address that is a current primary to be reassigned even
+    # transiently.  Precompute active physical-device addresses so the retired
+    # record remains offline/history-only without attempting to steal the live
+    # assignment earlier in the deterministic plan.
+    active_device_addresses: set[str] = set()
+    for candidate in network.get("devices", []):
+        candidate_retired = any(
+            token in str(candidate.get("status", "")).lower()
+            for token in ("retired", "destroyed")
+        )
+        if candidate_retired or candidate.get("hostname") in vm_names or candidate.get("ip") in vm_ips:
+            continue
+        for value in [candidate.get("ip"), *[item.get("ip") for item in candidate.get("interfaces") or []]]:
+            if stable_inventory_ip(value):
+                active_device_addresses.add(address_with_mask(value))
+
     plan.upsert(
         "vlan:1", "ipam/vlans/", {"vid": 1, "name": "DEFAULT_VLAN"},
         {"vid": 1, "name": "DEFAULT_VLAN", "status": "active", "site": ref("site:edsys-home"), "tenant": ref("tenant:edsys"), "description": "EdSys core untagged LAN"},
@@ -510,6 +528,15 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
         if name in set(network.get("proxmox_cluster", {}).get("nodes", [])):
             payload["cluster"] = ref("cluster:gadgetlab")
         plan.upsert(key, "dcim/devices/", {"name": name}, payload)
+        # A retired device must not keep a primary IP.  Clearing the pointer
+        # before IP-address upserts also permits a reviewed address reuse (for
+        # example, a fresh host identity on the same physical management IP)
+        # without NetBox rejecting the reassignment mid-plan.
+        if is_retired:
+            plan.patch_ref(
+                f"clear-primary-ip:{name}", key,
+                {"primary_ip4": None, "primary_ip6": None},
+            )
 
         interfaces = device.get("interfaces") or [{"name": "management0", "ip": device.get("ip"), "mac": device.get("mac"), "state": "UP"}]
         primary_ip_ref = None
@@ -537,7 +564,8 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
             ip = interface.get("ip")
             if valid_ip(ip) and not stable_inventory_ip(ip):
                 host_local_addresses.add(address_with_mask(ip))
-            if stable_inventory_ip(ip):
+            address_reused_by_active = is_retired and stable_inventory_ip(ip) and address_with_mask(ip) in active_device_addresses
+            if stable_inventory_ip(ip) and not address_reused_by_active:
                 ipkey = f"ip:{address_with_mask(ip)}"
                 plan.upsert(
                     ipkey, "ipam/ip-addresses/", {"address": address_with_mask(ip)},
@@ -552,7 +580,12 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
                 )
                 if ip == device.get("ip") or (primary_ip_ref is None and str(ip).startswith("192.168.50.")):
                     primary_ip_ref = ipkey
-        if device.get("ip") and valid_ip(device["ip"]) and primary_ip_ref is None:
+        retired_primary_reused = (
+            is_retired
+            and valid_ip(device.get("ip"))
+            and address_with_mask(device["ip"]) in active_device_addresses
+        )
+        if device.get("ip") and valid_ip(device["ip"]) and primary_ip_ref is None and not retired_primary_reused:
             ifkey = f"interface:{name}:management0"
             if not any(op["key"] == ifkey for op in plan.operations):
                 plan.upsert(
@@ -579,7 +612,7 @@ def add_network_inventory(plan: Plan, network: dict[str, Any]):
                     ),
                 },
             )
-        if primary_ip_ref:
+        if primary_ip_ref and not is_retired:
             plan.patch_ref(f"primary-ip:{name}", key, {"primary_ip4": ref(primary_ip_ref)})
 
     # Retain, but explicitly de-authorize, host-local Docker bridge addresses

@@ -1,0 +1,7 @@
+# EdSys isolated security lab. No physical ports and no gateway.
+auto vmbr77
+iface vmbr77 inet static
+    address 192.168.77.1/24
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0

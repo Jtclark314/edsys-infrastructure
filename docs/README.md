@@ -24,11 +24,12 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `../scripts/network/README.md` - FreeBind systemd socket proxy for exact-address Tailnet AI access without Docker boot dependency on `tailscale0`.
 - `../scripts/deploy/README.md` - deployment preparation helpers.
 - `../scripts/ops/README.md` - operations/report helpers.
-- `../scripts/sdr/README.md` - isolated EdCore SDR receiver deployment,
-  decoder, storage, USB arbitration, and recovery source.
+- `../services/kali-lab/README.md` - current pve-node3 isolated Kali and
+  Metasploitable lab deployment, containment, verification, and recovery source.
+- `../scripts/sdr/README.md` - historical retired EdCore SDR receiver source.
 - `CONTAINER_RECOVERY.md` - ordered 9950x Docker recovery architecture and operations.
 - `REBOOT_ACCEPTANCE.md` - one-shot full-host reboot recovery and acceptance gate.
-- `EDCORE_CONTROL_PLANE.md` - dedicated 9950x-to-EdCore admin, GUI, Cockpit, diagnostics, and Tailnet control plane.
+- `EDCORE_CONTROL_PLANE.md` - current 9950x-to-pve-node3 Proxmox, HAOS, and isolated-lab control plane.
 - `ARR_TRANSFER_ARBITER.md` - fail-closed SABnzbd/qBittorrent mutual exclusion and operator controls.
 - `NETDATA_COMPUTE.md` - authoritative nine-node Netdata Parent/Child deployment and recovery procedure.
 - `../docker/netbox/README.md` - production NetBox platform, access, backup, restore, and upgrade boundary.

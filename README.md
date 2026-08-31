@@ -13,12 +13,12 @@ This repo should describe how services are deployed, but it must not contain liv
 - [Docker Compose standard](docs/DOCKER_COMPOSE_STANDARD.md)
 - [Config template standard](docs/CONFIG_TEMPLATE_STANDARD.md)
 - [9950x full-host reboot acceptance](docs/REBOOT_ACCEPTANCE.md)
-- [EdCore Omarchy control plane](docs/EDCORE_CONTROL_PLANE.md)
+- [EdCore Proxmox control plane](docs/EDCORE_CONTROL_PLANE.md)
 - [ARR transfer arbiter](docs/ARR_TRANSFER_ARBITER.md)
 - [Netdata compute topology](docs/NETDATA_COMPUTE.md)
 - [NetBox deployment](docker/netbox/README.md)
 - [NetBox synchronization](scripts/netbox/README.md)
-- [EdCore SDR deployment](scripts/sdr/README.md)
+- [EdCore SDR historical deployment](scripts/sdr/README.md)
 - [Fleet Autopilot host agent and Proxmox MCP](services/fleet-autopilot/README.md)
 
 ## Folder Map

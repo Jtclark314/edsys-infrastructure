@@ -6,14 +6,14 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 verify_script="${repo_root}/scripts/ops/verify-netdata-compute.py"
 parent_ip="192.168.50.50"
 group_name="edsys-compute"
-pve_children=(pve-node0 pve-node1 pve-node2)
+pve_children=(pve-node0 pve-node1 pve-node2 pve-node3)
 satellites=(netbox)
 
 usage() {
   cat <<'EOF'
 Usage: deploy-netdata-compute.sh --check | --apply
 
---check  Verify the exact five-node parent/child topology without changing it.
+--check  Verify the exact six-node parent/child topology without changing it.
 --apply  Back up configuration, align packages, deploy the topology, and verify it.
 EOF
 }
@@ -207,7 +207,7 @@ REMOTE_BACKUP
 done
 backup_started=1
 
-echo "Aligning Netdata edge packages on the three Debian 13 Proxmox hosts."
+echo "Aligning Netdata edge packages on the four Debian 13 Proxmox hosts."
 for child in "${pve_children[@]}"; do
   scp "${scp_options[@]}" /usr/share/keyrings/netdata-archive-keyring.gpg "root@${child}:/tmp/netdata-archive-keyring.gpg"
   ssh "${ssh_options[@]}" "root@${child}" 'bash -s' <<'REMOTE_INSTALL'
@@ -300,7 +300,7 @@ cat >"${tmpdir}/parent-stream.conf" <<EOF
 [${stream_key}]
     type = api
     enabled = yes
-    allow from = 192.168.50.51 192.168.50.52 192.168.50.53 192.168.50.81
+    allow from = 192.168.50.51 192.168.50.52 192.168.50.53 192.168.50.54 192.168.50.81
     db = dbengine
     health enabled = auto
     postpone alerts on connect = 1m
@@ -335,7 +335,7 @@ for _ in {1..30}; do
 done
 curl -fsS --max-time 3 "http://127.0.0.1:19999/api/v1/info" >/dev/null
 
-echo "Configuring and starting the three Proxmox Netdata children."
+echo "Configuring and starting the four Proxmox Netdata children."
 for child in "${pve_children[@]}"; do
   cat >"${tmpdir}/${child}-netdata.conf" <<EOF
 # Managed by EdSys deploy-netdata-compute.sh.
@@ -454,7 +454,7 @@ REMOTE_NETBOX_MONITORING
   fi
 done
 
-echo "Waiting for all four child streams to become reachable on 9950x."
+echo "Waiting for all five child streams to become reachable on 9950x."
 for _ in {1..90}; do
   if python3 "$verify_script" >/dev/null 2>&1; then
     break

@@ -1,0 +1,14 @@
+[Unit]
+Description=DHCP only for the isolated EdSys security lab
+After=network-online.target edsys-security-lab-guard.service
+Wants=network-online.target
+Requires=edsys-security-lab-guard.service
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/etc/edsys/security-lab-dnsmasq.conf
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

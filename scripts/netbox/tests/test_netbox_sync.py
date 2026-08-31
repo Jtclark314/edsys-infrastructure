@@ -97,12 +97,59 @@ def test_retired_device_is_offline_and_its_address_is_deprecated():
     device = operations["device:pve-edcore"]["payload"]
     interface = operations["interface:pve-edcore:vmbr0"]["payload"]
     address = operations["ip:192.168.50.54/24"]["payload"]
+    clear_primary = operations["clear-primary-ip:pve-edcore"]["payload"]
     assert device["status"] == "offline"
     assert device["custom_fields"]["retired"] is True
     assert {item["$ref"] for item in device["tags"]} >= {"tag:retired"}
     assert interface["enabled"] is False
     assert address["status"] == "deprecated"
     assert address["dns_name"] == ""
+    assert clear_primary == {"primary_ip4": None, "primary_ip6": None}
+    assert "primary-ip:pve-edcore" not in operations
+
+
+def test_retired_device_does_not_steal_address_reused_by_active_identity():
+    plan = MODULE.Plan("sync-network")
+    MODULE.add_network_inventory(
+        plan,
+        {
+            "devices": [
+                {
+                    "hostname": "pve-edcore",
+                    "category": "virtualization",
+                    "role": "Retired Proxmox identity",
+                    "status": "retired",
+                    "ip": "192.168.50.54",
+                    "interfaces": [{"name": "vmbr0", "state": "DOWN", "ip": "192.168.50.54/24"}],
+                    "source": "test",
+                    "confidence": "high",
+                    "last_verified": "2026-08-29",
+                },
+                {
+                    "hostname": "pve-node3",
+                    "category": "virtualization",
+                    "role": "Current Proxmox identity",
+                    "status": "active",
+                    "ip": "192.168.50.54",
+                    "interfaces": [{"name": "vmbr0", "state": "UP", "ip": "192.168.50.54/24"}],
+                    "source": "test",
+                    "confidence": "high",
+                    "last_verified": "2026-08-30",
+                },
+            ],
+            "subnets": [],
+            "proxmox_resources": [],
+            "proxmox_cluster": {"nodes": ["pve-node3"]},
+        },
+    )
+    address_operations = [item for item in plan.operations if item["key"] == "ip:192.168.50.54/24"]
+    assert len(address_operations) == 1
+    assert address_operations[0]["payload"]["status"] == "active"
+    assert address_operations[0]["payload"]["assigned_object_id"] == {"$ref": "interface:pve-node3:vmbr0"}
+    operations = {item["key"]: item for item in plan.operations}
+    assert operations["clear-primary-ip:pve-edcore"]["payload"] == {"primary_ip4": None, "primary_ip6": None}
+    assert "primary-ip:pve-edcore" not in operations
+    assert operations["primary-ip:pve-node3"]["payload"]["primary_ip4"] == {"$ref": "ip:192.168.50.54/24"}
 
 
 def test_retired_vm_is_offline_and_excluded_from_sanitized_export():
