@@ -24,6 +24,7 @@ KALI_LAB_KEY = pathlib.Path(
     os.environ.get("EDCORE_KALI_LAB_KEY", "~/.ssh/edsys_kali_lab_key")
 ).expanduser()
 KALI_BASELINE = "starter-tools-baseline-20260830"
+KALI_PERSONAL_BASELINE = "personal-login-baseline-20260830"
 TARGET_BASELINE = "clean-vulnerable-baseline-20260830"
 
 
@@ -361,6 +362,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     lab_subparsers.add_parser("restore-starter").set_defaults(
         func=lambda args: restore_snapshot(args, KALI_VMID, KALI_BASELINE)
+    )
+    lab_subparsers.add_parser("restore-personal").set_defaults(
+        func=lambda args: restore_snapshot(args, KALI_VMID, KALI_PERSONAL_BASELINE)
     )
 
     target = subparsers.add_parser(

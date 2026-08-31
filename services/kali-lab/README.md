@@ -17,9 +17,11 @@ on `pve-node3` (EdCore v3).
 - Host forwarding: IPv4 and IPv6 forwarding are disabled. A persistent nftables
   forward-hook table drops traffic entering or leaving `vmbr77` even if a
   future host change enables forwarding accidentally.
-- Guest access: Kali uses key-only SSH through the `pve-node3` jump host.
-  Metasploitable is intentionally vulnerable and has no production-network
-  attachment.
+- Guest access: the locked-password `kali` automation account uses key-only
+  SSH through the `pve-node3` jump host. A separate personal `jeremy` console
+  account has ordinary password-backed sudo; the credential remains private
+  inside the guest and must never be stored in Git or RAG. Metasploitable is
+  intentionally vulnerable and has no production-network attachment.
 
 The lab is never to be attached to `vmbr0`, NAT, a physical network, the EdSys
 LAN, the Tailnet, or the Internet. Both guests remain shut off except during a
@@ -57,6 +59,7 @@ edcore-control target status
 
 - Kali `clean-baseline-20260830`
 - Kali `starter-tools-baseline-20260830`
+- Kali personal console login `personal-login-baseline-20260830`
 - Metasploitable `clean-vulnerable-baseline-20260830`
 
 The corresponding verified recovery images and manifests remain private on AI

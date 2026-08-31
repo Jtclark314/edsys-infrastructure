@@ -39,4 +39,5 @@ def test_parser_routes_expected_current_commands() -> None:
     assert parser.parse_args(["isolation"]).action == "isolation"
     assert parser.parse_args(["ha", "status"]).ha_command == "status"
     assert parser.parse_args(["lab", "restore-starter"]).lab_command == "restore-starter"
+    assert parser.parse_args(["lab", "restore-personal"]).lab_command == "restore-personal"
     assert parser.parse_args(["target", "restore-clean"]).target_command == "restore-clean"

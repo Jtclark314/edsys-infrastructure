@@ -22,6 +22,7 @@ for vmid in 330 331; do
 done
 qm listsnapshot 330 | grep -Fq clean-baseline-20260830
 qm listsnapshot 330 | grep -Fq starter-tools-baseline-20260830
+qm listsnapshot 330 | grep -Fq personal-login-baseline-20260830
 qm listsnapshot 331 | grep -Fq clean-vulnerable-baseline-20260830
 [[ $(qm status 330) == 'status: stopped' ]]
 [[ $(qm status 331) == 'status: stopped' ]]

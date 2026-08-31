@@ -41,6 +41,7 @@ edcore-control lab shell
 edcore-control lab snapshots
 edcore-control lab shutdown
 edcore-control lab restore-starter
+edcore-control lab restore-personal
 
 edcore-control target status
 edcore-control target start
@@ -82,6 +83,7 @@ the Tailnet, or the Internet.
 - Home Assistant: `clean-haos-18-2-baseline-20260830`
 - Kali: `clean-baseline-20260830`
 - Kali with starter tools: `starter-tools-baseline-20260830`
+- Kali with accepted personal console login: `personal-login-baseline-20260830`
 - Metasploitable: `clean-vulnerable-baseline-20260830`
 
 The off-host recovery images and their hash manifest are private AI Store
