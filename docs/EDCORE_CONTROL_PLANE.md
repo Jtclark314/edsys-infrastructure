@@ -8,9 +8,10 @@ Status: current deployment and operator source for EdCore v3 (`pve-node3`).
 - Current EdCore identity: `pve-node3`; key-only OpenSSH lands as root on the
   Proxmox host.
 - LAN management: the reviewed `pve-node3` SSH alias and Proxmox HTTPS endpoint.
-- Tailnet management: Tailscale is installed with DNS, accepted routes,
-  advertised routes, and Tailscale SSH disabled. Final interactive device
-  authorization and the resulting fallback SSH alias remain to be confirmed.
+- Tailnet management: Tailscale is authorized and online as a client-only
+  fallback. Tailnet ping and ordinary key-only OpenSSH through the private
+  `pve-node3-tailnet` alias pass; Tailscale DNS, accepted routes, advertised
+  routes, Tailscale SSH, exit-node, Serve, and Funnel roles are disabled.
 - Home Assistant: VMID 300.
 - Kali lab: VMID 330, `vmbr77` only, off by default.
 - Metasploitable target: VMID 331, `vmbr77` only, off by default.
