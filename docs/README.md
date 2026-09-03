@@ -35,6 +35,9 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `../docker/netbox/README.md` - production NetBox platform, access, backup, restore, and upgrade boundary.
 - `../scripts/netbox/README.md` - plan-gated discovery, reconciliation, validation, and sanitized export.
 - `../services/fleet-autopilot/README.md` - cross-host inventory/drift collector, guarded Portal action worker, and private Proxmox stdio MCP.
+- `../services/music-assistant/README.md` - read-only NFS source that lets the
+  official HAOS Music Assistant app index the `9950x` music tree independently
+  of Plex.
 
 ## Rule
 

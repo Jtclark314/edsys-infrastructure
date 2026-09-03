@@ -20,6 +20,7 @@ This repo should describe how services are deployed, but it must not contain liv
 - [NetBox synchronization](scripts/netbox/README.md)
 - [EdCore SDR historical deployment](scripts/sdr/README.md)
 - [Fleet Autopilot host agent and Proxmox MCP](services/fleet-autopilot/README.md)
+- [Music Assistant local-library source](services/music-assistant/README.md)
 
 ## Folder Map
 
@@ -40,8 +41,11 @@ edsys-infrastructure/
 |-- scripts/
 |   `-- README.md
 |-- services/
-|   `-- fleet-autopilot/
-|       `-- README.md
+|   |-- fleet-autopilot/
+|   |   `-- README.md
+|   `-- music-assistant/
+|       |-- README.md
+|       `-- music-assistant.exports
 `-- templates/
     |-- docker-compose.service-template.yml
     |-- service.env.example
