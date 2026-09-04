@@ -1,0 +1,19 @@
+sunshine_name = 9950x Desktop
+capture = x11
+# Qualified XRandR output id for the existing DP-0 primary monitor.
+output_name = 1
+encoder = nvenc
+upnp = disabled
+address_family = ipv4
+origin_web_ui_allowed = pc
+lan_encryption_mode = 2
+wan_encryption_mode = 2
+hevc_mode = 2
+av1_mode = 1
+controller = disabled
+min_log_level = 2
+ping_timeout = 10000
+file_apps = /home/jeremy/.config/sunshine/apps.json
+file_state = /home/jeremy/.config/sunshine/sunshine_state.json
+credentials_file = /home/jeremy/.config/sunshine/credentials.json
+log_path = /home/jeremy/.config/sunshine/sunshine.log

@@ -1,0 +1,12 @@
+[Unit]
+Description=Exact-peer private Sunshine firewall
+Before=edsys-sunshine.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/edsys-sunshine/firewall.py
+RemainAfterExit=yes
+# Do not remove protection when this unit is stopped.
+
+[Install]
+WantedBy=multi-user.target

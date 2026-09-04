@@ -1,0 +1,6 @@
+{
+  "lan_interface": "enp7s0",
+  "lan_clients": ["192.0.2.10"],
+  "tailnet_interface": "tailscale0",
+  "tailnet_clients": ["100.64.0.10"]
+}

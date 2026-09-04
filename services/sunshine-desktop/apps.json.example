@@ -1,0 +1,15 @@
+{
+  "env": {},
+  "apps": [
+    {
+      "name": "Desktop",
+      "image-path": "desktop.png",
+      "prep-cmd": [
+        {
+          "do": "/usr/local/libexec/edsys-sunshine/desktop.py acquire",
+          "undo": "/usr/local/libexec/edsys-sunshine/desktop.py restore"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+name: sunshine-desktop
+description: Private single-client Nimo access to the 9950x physical X11 desktop with reversible 1080p layout.
+host: 9950x
+runtime: Native Sunshine package with guarded systemd supervisor
+ports:
+  - {host: 47990, protocol: tcp, exposure: loopback administration only}
+  - {host: 47984, protocol: tcp, exposure: exact Nimo LAN and Tailnet peers only}
+  - {host: 47989, protocol: tcp, exposure: exact Nimo LAN and Tailnet peers only}
+  - {host: 48010, protocol: tcp, exposure: exact Nimo LAN and Tailnet peers only}
+  - {host: '47998,47999,48000,48002,48010', protocol: udp, exposure: exact Nimo LAN and Tailnet peers only}
+volumes:
+  - /home/jeremy/.config/sunshine
+  - /home/jeremy/.local/state/edsys-sunshine
+environment:
+  display: ':0'
+  xauthority: /run/user/1000/gdm/Xauthority
+  example: sunshine.conf.example
+secrets_required:
+  - Locally initialized web administration account
+  - Privately paired Nimo identity
+backup:
+  required: true
+  paths:
+    - /home/jeremy/.config/sunshine
+    - /etc/edsys-sunshine
+  coverage: Existing encrypted include roots cover config and etc; fresh application restore to be confirmed.
+monitoring:
+  healthcheck: systemctl is-active edsys-sunshine edsys-sunshine-firewall
+  acceptance: Owner-accepted encrypted HEVC LAN streaming, normal disconnect restoration and reconnect pass.
+restore_notes: Stop Sunshine and invoke desktop.py restore with console X11 environment; preserve missing-monitor snapshot and use retained XRDP fallback.
+owner: Jeremy
+last_verified: '2026-09-04'

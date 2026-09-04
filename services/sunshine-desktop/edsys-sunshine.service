@@ -1,0 +1,36 @@
+[Unit]
+Description=9950x private console desktop streaming
+Requires=edsys-sunshine-firewall.service
+BindsTo=edsys-sunshine-firewall.service
+After=edsys-sunshine-firewall.service display-manager.service
+StartLimitIntervalSec=120
+StartLimitBurst=8
+
+[Service]
+Type=simple
+User=jeremy
+Group=jeremy
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/run/user/1000/gdm/Xauthority
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+Environment=XDG_SESSION_TYPE=x11
+Environment=XDG_CURRENT_DESKTOP=ubuntu:GNOME
+Environment=HOME=/home/jeremy
+UMask=0077
+ExecStart=/usr/local/libexec/edsys-sunshine/desktop.py supervise
+ExecStopPost=/usr/local/libexec/edsys-sunshine/desktop.py restore
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+KillMode=mixed
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=yes
+ProtectSystem=strict
+ReadWritePaths=/home/jeremy/.config/sunshine /home/jeremy/.local/state/edsys-sunshine
+RestrictAddressFamilies=AF_UNIX AF_INET AF_NETLINK
+
+[Install]
+WantedBy=graphical.target
