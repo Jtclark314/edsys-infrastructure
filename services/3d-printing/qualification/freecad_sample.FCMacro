@@ -1,0 +1,49 @@
+# Editable native feature sample; no printer or manufacturing approval.
+import os, math, json, traceback
+from pathlib import Path
+import FreeCAD as App, FreeCADGui as Gui, Part
+from PySide import QtCore
+
+root = Path(os.environ['EDSYS_3D_WORKSPACE']) / 'projects/example-project'
+report = root / 'brief/qualification/freecad.json'
+report.parent.mkdir(parents=True, exist_ok=True)
+
+def qualify():
+    try:
+        doc = App.newDocument('Qualification')
+        block = doc.addObject('Part::Box', 'Block')
+        block.Length, block.Width, block.Height = 30, 20, 10
+        bore = doc.addObject('Part::Cylinder', 'Bore')
+        bore.Radius, bore.Height = 2, 10
+        bore.Placement.Base = App.Vector(15, 10, 0)
+        cut = doc.addObject('Part::Cut', 'PartWithHole')
+        cut.Base, cut.Tool = block, bore
+        block.Visibility = bore.Visibility = False
+        doc.recompute()
+        expected = 6000 - math.pi * 4 * 10
+        assert cut.Shape.isValid() and abs(cut.Shape.Volume - expected) < 1e-6
+        path = root / 'source/freecad-sample.FCStd'
+        doc.saveAs(str(path))
+        App.closeDocument(doc.Name)
+        reopened = App.openDocument(str(path))
+        assert reopened.getObject('PartWithHole').Shape.isValid()
+        assert reopened.getObject('Block').Length.Value == 30
+        assert abs(reopened.getObject('PartWithHole').Shape.Volume - expected) < 1e-6
+        Gui.activeDocument().activeView().viewAxonometric()
+        Gui.activeDocument().activeView().fitAll()
+        Gui.activeDocument().activeView().saveImage(str(root / 'previews/freecad-sample.png'), 800, 600, 'White')
+        exchange = App.newDocument('StepExchange')
+        Part.insert(str(root / 'exports/cadquery-sample.step'), exchange.Name)
+        exchange.recompute()
+        solids = [o for o in exchange.Objects if hasattr(o, 'Shape') and len(o.Shape.Solids)]
+        assert len(solids) == 1 and abs(solids[0].Shape.Volume - expected) < 1e-6
+        report.write_text(json.dumps({'status':'pass','version':App.Version()[:3], 'native_history_reopened':True,'STEP_geometry_valid':True}))
+        print('PASS FreeCAD native feature save/reopen and CadQuery STEP inspection')
+    except Exception:
+        report.write_text(json.dumps({'status':'fail','error':traceback.format_exc()}))
+    finally:
+        for name in list(App.listDocuments()):
+            App.closeDocument(name)
+        QtCore.QTimer.singleShot(1000, Gui.getMainWindow().close)
+
+QtCore.QTimer.singleShot(1000, qualify)

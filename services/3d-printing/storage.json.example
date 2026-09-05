@@ -1,0 +1,6 @@
+{
+  "mount": "/mnt/ai-store",
+  "uuid": "REPLACE_WITH_VERIFIED_AI_STORE_FILESYSTEM_UUID",
+  "fstype": "ext4",
+  "workspace": "/mnt/ai-store/3d-printing"
+}

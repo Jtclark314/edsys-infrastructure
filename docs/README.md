@@ -39,6 +39,8 @@ This folder documents deployment standards for EdSys infrastructure. It should s
   official HAOS Music Assistant app index the `9950x` music tree independently
   of Plex.
 
+- `../services/3d-printing/README.md` - 9950x mount-guarded portable CAD/modeling/slicer stack, isolated dependency locks, offline qualification and selective rollback.
+
 ## Rule
 
 Use this repo for deployable definitions and repeatable commands. Do not store runtime data or secrets here.
