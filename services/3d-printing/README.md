@@ -1,8 +1,10 @@
 # 9950x isolated 3D workstation
 
-Scope: approved installation/workspace/software qualification steps 1–3 only.
-No physical printer, material profile, print job, plugin platform or AI-generation
-service is commissioned. Owning current-state guide: EdSys-Master
+Scope: approved installation/workspace/software qualification steps 1–3, followed
+by the owner-confirmed Ender-3 V3 KE 0.4 mm/Zyltech pink PLA software baseline.
+Stock-LAN connection testing and local uncalibrated slicing pass; physical
+calibration, delivery and print approval remain pending. No extra plugin platform
+or AI-generation service is commissioned. Owning current-state guide: EdSys-Master
 `docs/9950X_3D_PRINTING.md`.
 
 ## Source and installed layout
@@ -135,3 +137,28 @@ edsys-3d freecad
 edsys-3d blender
 edsys-3d cadquery /absolute/path/to/source.py
 ```
+
+## Post-install Ender KE profile baseline
+
+The current owning guide records the owner-confirmed Ender-3 V3 KE and Zyltech
+pink PLA starting recipe. Use the bundled **KE 0.4 mm** printer, not SE/plain V3,
+and Orca's **CrealityPrint** host type for the stock interface. Native Test uses
+HTTP `/info`; status observation uses TCP 9999. No Moonraker installation,
+printer-root access, cloud account, firmware change or hardware-control call
+was required. Connection Test does not qualify upload or print delivery.
+
+The three selected user presets include `Uncalibrated` in their names. Their
+actual JSON and address-bearing app state stay in isolated Orca user-data;
+versioned draft copies live below workspace `printers/ender3-v3-ke` and
+`materials/zyltech-pink-pla`. The baseline project's generated outputs remain
+in `slicing/NOT-APPROVED`; never use generic installation examples as accepted
+machine profiles. Restore only these presets or the private pre-change Orca
+state, retaining project data and other apps. Existing durable backup roots
+already cover these additions.
+
+For isolated Xvfb GUI verification, a private window manager makes native combo
+popups usable. Maximize the app if its initial window requires a layout redraw.
+Do not use the real Sunshine desktop as the automated test display. When using
+Orca CLI `--outputdir`, give `--export-3mf` a **basename**, not an absolute path:
+Orca otherwise prepends the output directory to that absolute path and fails.
+Local slice validation must not call Upload or Print.
