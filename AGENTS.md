@@ -3,7 +3,7 @@
 ## Start Here
 
 - Read `AI_CONTEXT.md` first.
-- Then read `README.md`, `docs/README.md`, and the relevant deployment standard under `docs/`.
+- Then select the relevant service README and deployment standard using `docs/README.md`; do not read unrelated service procedures.
 - Treat this repository as deployable infrastructure definitions, not live runtime state.
 
 ## Rules
@@ -18,7 +18,8 @@
 
 - Start every task with `git status --short --branch`.
 - Search existing service patterns before creating new folders.
-- Keep edits narrow and implementation-focused.
+- Keep edits narrow and implementation-focused; preserve unrelated work. A plan/read-only request does not authorize deployment.
+- Complete already-authorized work and required checks without repeated confirmation of the same scope. Broaden tests only for a concrete reason.
 - Run syntax checks where practical.
 - Before committing, run a risky-string scan such as:
   `git grep -n -I -E "password|token|api[_-]?key|secret|BEGIN (RSA|OPENSSH|PRIVATE) KEY" -- .`
