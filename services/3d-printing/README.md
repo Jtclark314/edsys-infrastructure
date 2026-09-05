@@ -2,8 +2,9 @@
 
 Scope: approved installation/workspace/software qualification steps 1–3, followed
 by the owner-confirmed Ender-3 V3 KE 0.4 mm/Zyltech pink PLA software baseline.
-Stock-LAN connection testing and local uncalibrated slicing pass; physical
-calibration, delivery and print approval remain pending. No extra plugin platform
+Stock self-check, local slicing and API-mediated LAN delivery/execution pass;
+first-layer trial 01 failed physically, so further prints and profile acceptance
+are held pending inspection/correction. No extra plugin platform
 or AI-generation service is commissioned. Owning current-state guide: EdSys-Master
 `docs/9950X_3D_PRINTING.md`.
 
@@ -108,8 +109,9 @@ filesystem, read-only state and symlink traversal.
   GUI rendering pass; CLI thumbnails are not qualified. Use the GUI or separate
   Blender/OpenSCAD previews rather than treating a missing thumbnail as a mesh
   failure.
-- Generated diagnostics remain in `temporary/` or the private maintenance
-  folder. The project `approved/` and `print-results/` remain empty.
+- Generated diagnostics remain in `temporary/` or private maintenance. The
+  original generic qualification project has empty `approved/` and `print-results/`;
+  the separate physical first-layer project now retains one failed trial.
 
 ## Backup and rollback
 
@@ -162,3 +164,25 @@ Do not use the real Sunshine desktop as the automated test display. When using
 Orca CLI `--outputdir`, give `--export-3mf` a **basename**, not an absolute path:
 Orca otherwise prepends the output directory to that absolute path and fails.
 Local slice validation must not call Upload or Print.
+
+## First physical trial: transport pass is not print-quality pass
+
+The 2026-09-04 owner-authorized 40 mm first-layer coupon ran via stock HTTP
+`/upload/<filename>` and WebSocket `opGcodeFile`, using the path returned by
+`reqGcodeFile`. Verify filename/byte count before a single start; the 0.20 field
+in the KE listing is layer-height metadata, not an integer layer count. This
+API-mediated test does not qualify native Orca GUI Upload-and-Print or the
+Creality Print fallback path. No printer firmware/root change was needed.
+
+The job used a local G21/G90/M83 prologue before otherwise stock KE start/end,
+including a fresh bed mesh; persistent presets were unchanged. Printer completion
+and zero firmware errors did **not** mean success: the owner close-up confirms
+a partly formed square with gaps, displaced strands and poor adhesion; no
+material stuck to the nozzle was reported. The owner confirms old glue on the
+plate; removal is the next controlled check, not a proven fix. Require cleaning
+and a cleared-bed gate before a supervised repeat; require first-layer
+acceptance and another
+cleared-bed gate before the dimensional sample.
+The nozzle housing occluded the coupon during deposition; require an unobstructed
+view/direct observation, not telemetry alone. Detailed evidence is private in the
+protected first-layer project; the owning guide records this failed trial.
