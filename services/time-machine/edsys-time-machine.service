@@ -1,0 +1,15 @@
+[Unit]
+Description=EdSys Time Machine observations and isolated rehearsals
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /srv/edsys/edsys-infrastructure/services/time-machine/time_machine.py serve
+Restart=on-failure
+RestartSec=10
+UMask=0007
+NoNewPrivileges=true
+TimeoutStopSec=90
+
+[Install]
+WantedBy=default.target
