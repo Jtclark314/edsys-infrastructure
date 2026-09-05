@@ -27,6 +27,7 @@ from urllib.parse import urlsplit
 STATE = Path("/opt/edsys-workhorse/edsys-ai-portal/data/time-machine")
 LAB_ROOT = Path("/mnt/ai-store/private/time-machine-lab")
 SOURCE = Path(__file__).resolve().parent
+COLLECTOR_VERSION = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 PREFIX = "edsys-tm-lab-"
 LABEL = "com.edsys.time-machine"
 SCENARIOS = {"dns", "storage", "release", "healthy", "ambiguous"}
@@ -93,7 +94,7 @@ def state_of(info):
 
 def observation(scope="portal", run_id=None, phase="observation"):
     return {"version": 1, "id": uuid.uuid4().hex, "observed_at": now(), "scope": scope,
-            "collector_version": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "collector_version": COLLECTOR_VERSION,
             "run_id": run_id, "phase": phase, "nodes": [], "edges": [], "evidence": [], "gaps": []}
 
 
