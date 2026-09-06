@@ -152,33 +152,62 @@ The installer:
    plus a one-minute status-check timer.
 
 The host-level boot prerequisite is managed in Proxmox rather than by this
-guest installer: on `pve-node1`, VMID 301 `node1-services` is onboot order 1 and
-VMID 200 `arr-vm` is onboot order 2, each with a 180-second startup delay. This
-staggers recovery before the in-guest qBittorrent/SAB boot safeguards take over.
+guest installer. ARR VMID 200 now runs on EdCore `pve-node3`, onboot order 20
+with a 180-second delay, after Home Assistant VM300 at order 10. VM301 remains
+on node1 at its existing order 1. The in-guest qBittorrent/SAB boot safeguards
+remain unchanged.
 
 If installation fails after safety control begins, the error path reapplies the
 hold and does not restore an unsafe auto-restart policy. Review the private
 backup manifest before any rollback. Never restore only the old qBittorrent
 restart policy without also arranging an equivalent fail-closed controller.
 
+After migration, `edcore-control status` reports `arr_stack` alongside Home
+Assistant and the lab. Its live status and existing helper tests passed.
+
+## EdCore NVMe Capacity Alert
+
+Install `config/netdata/health.d/edsys-node3-arr-pool.conf` only on node3 at
+`/etc/netdata/health.d/edsys-node3-arr-pool.conf`, then run
+`netdatacli reload-health`. It supplements the stock LVM alerts with warning
+at 75% and critical at 85% shared thin-pool usage. Verify the named
+`edsys_arr_nvme_pool_capacity` alarm through Netdata's local
+`/api/v1/alarms?all` endpoint. Live parsing and clear-state evaluation passed.
+Preserve at least 100 GiB pool headroom; the guest download filesystem's
+free-space check is a separate limit. Logical disk sizes can exceed physical
+pool capacity and must not be treated as reserved space.
+
 ## Verification
 
 ### Proxmox memory budget
 
-As of 2026-09-05, `pve-node1` uses fixed balloon targets with automatic growth
-disabled for its two VMs:
+As of 2026-09-06 UTC, ARR runs on NVMe-backed `pve-node3`:
 
-| VM | Balloon target (MiB) | Shares | Configured memory ceiling (MiB) |
-| --- | ---: | ---: | ---: |
-| 200 `arr-vm` | 6,144 | 0 | 11,808 |
-| 301 `node1-services` | 4,096 | 0 | 16,384 |
+| VM | Node | Current memory policy |
+| --- | --- | --- |
+| 200 `arr-vm` | pve-node3 | Fixed 12,288 MiB; `balloon=0`; four vCPU |
+| 301 `node1-services` | pve-node1 | 4,096 MiB balloon target; `shares=0`; 16,384 MiB ceiling |
 
-`shares=0` disables Proxmox automatic balloon allocation. The memory ceiling
-is not the live allocation; confirm the latter with QMP `query-balloon` and
-check guest `MemAvailable`. Proxmox applies the configured balloon target at
-boot. Do not remove `shares=0` as a temporary maintenance setting: automatic
-growth expanded ARR above 10 GiB after boot during the September 5 repair,
-recreating pressure on this roughly 16 GiB host.
+VM200's 280 GiB system and 300 GiB download disks use `local-lvm` with
+`discard=on`, `iothread=1`, and `ssd=1`. Guest `fstrim.timer` is enabled.
+All Docker state, download staging, repair, and unpacking moved with the VM;
+Plex and NFS media storage remain on 9950x. With Home Assistant, ARR, Kali,
+and Metasploitable all running, configured guest RAM totals 38 GiB on EdCore.
+The lab remains off by default and isolated from ARR's `vmbr0` network.
+
+The installed ZFS storage exporter supports only ZFS streams, so native
+offline migration into LVM-thin is rejected. The completed migration used a
+cold backup/restore with original VMID and MAC, after archive integrity,
+cross-host checksum, and isolated restore/boot verification. The source VM
+registration was preserved and removed under the Proxmox configuration lock;
+original source ZFS disks remain offline for rollback. Never run duplicate
+VM200 instances. Keep the verified off-host AI Store backup for at least seven
+days after acceptance. Raw recovery artifacts remain private outside Git.
+
+The source node's historical September 5 repair used a 6 GiB ARR balloon
+target and 4 GiB VM301 target to prevent automatic memory growth on a roughly
+16 GiB host. That ARR target is superseded by the fixed 12 GiB EdCore
+allocation. Preserve VM301's existing `shares=0` policy on node1.
 
 The previous two 8 GiB floors overcommitted memory before host and ZFS overhead.
 Host swap reads from mechanical storage coincided with Docker control calls

@@ -15,6 +15,7 @@ from typing import Sequence
 
 
 DEFAULT_HOST = os.environ.get("EDCORE_SSH_HOST", "pve-node3")
+ARR_VMID = 200
 HA_VMID = 300
 KALI_VMID = 330
 TARGET_VMID = 331
@@ -84,7 +85,8 @@ guard=failed
 ha_state=$(qm status {HA_VMID} | awk '{{print $2}}')
 kali_state=$(qm status {KALI_VMID} | awk '{{print $2}}')
 target_state=$(qm status {TARGET_VMID} | awk '{{print $2}}')
-python3 - "$pve_version" "$quorate" "$failed_units" "$tailscale_state" "$guard" "$ha_state" "$kali_state" "$target_state" <<'PYJSON'
+arr_state=$(qm status {ARR_VMID} | awk '{{print $2}}')
+python3 - "$pve_version" "$quorate" "$failed_units" "$tailscale_state" "$guard" "$ha_state" "$kali_state" "$target_state" "$arr_state" <<'PYJSON'
 import json
 import sys
 
@@ -98,6 +100,7 @@ print(json.dumps({{
     "home_assistant": sys.argv[6],
     "kali_lab": sys.argv[7],
     "metasploitable2_lab": sys.argv[8],
+    "arr_stack": sys.argv[9],
 }}, sort_keys=True))
 PYJSON
 """
