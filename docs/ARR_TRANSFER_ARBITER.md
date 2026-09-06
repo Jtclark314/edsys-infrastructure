@@ -145,6 +145,48 @@ restart policy without also arranging an equivalent fail-closed controller.
 
 ## Verification
 
+### Proxmox memory budget
+
+As of 2026-09-05, `pve-node1` uses fixed balloon targets with automatic growth
+disabled for its two VMs:
+
+| VM | Balloon target (MiB) | Shares | Configured memory ceiling (MiB) |
+| --- | ---: | ---: | ---: |
+| 200 `arr-vm` | 6,144 | 0 | 11,808 |
+| 301 `node1-services` | 4,096 | 0 | 16,384 |
+
+`shares=0` disables Proxmox automatic balloon allocation. The memory ceiling
+is not the live allocation; confirm the latter with QMP `query-balloon` and
+check guest `MemAvailable`. Proxmox applies the configured balloon target at
+boot. Do not remove `shares=0` as a temporary maintenance setting: automatic
+growth expanded ARR above 10 GiB after boot during the September 5 repair,
+recreating pressure on this roughly 16 GiB host.
+
+The previous two 8 GiB floors overcommitted memory before host and ZFS overhead.
+Host swap reads from mechanical storage coincided with Docker control calls
+exceeding their 15-second timeout and re-latching the safety fault. Check host
+and guest swap activity, I/O pressure, actual VM allocations, and Docker
+latency under sustained downloads before accepting a fault reset. Existing
+swap occupancy alone does not prove ongoing pressure; correlate it with
+swap-in/out rates and control-call latency.
+
+Private pre-change VM configurations are retained under the root-only
+`/var/backups/edsys/sab-pause-20260905/` directory on `pve-node1`. Review host
+capacity before restoring larger allocations. Keep the controller's timeout,
+watchdog, boot-pause settings, and mutual exclusion policy intact.
+
+The matching host and ARR guest policy is
+`config/sysctl/90-edsys-memory.conf`, installed as
+`/etc/sysctl.d/90-edsys-memory.conf`. It sets `vm.swappiness=10` instead of
+the prior value of 60 to reflect the high random-I/O cost of mechanical-disk
+swap. Swap stays enabled. Apply only this file with `sysctl -p`, then check
+`sysctl vm.swappiness`; do not reload unrelated sysctl configuration.
+Rollback removes this dedicated file and restores `vm.swappiness=60`.
+The [kernel documentation](https://docs.kernel.org/admin-guide/sysctl/vm.html#swappiness)
+describes the tradeoff; this policy does not replace adequate RAM headroom.
+
+### Controller checks
+
 ```bash
 sudo systemctl status arr-transfer-arbiter.service --no-pager
 sudo systemctl status arr-transfer-arbiter-health.timer --no-pager
