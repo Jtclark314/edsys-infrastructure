@@ -2,6 +2,24 @@
 
 Status: deployment source and operator contract for `arr-server`.
 
+## Completed torrent policy
+
+As of 2026-09-05, the owner retains torrent downloading but stops seeding at
+completion. qBittorrent persists `Session\GlobalMaxRatio=0`,
+`Session\GlobalMaxSeedingMinutes=0`, and `Session\ShareLimitAction=Stop`.
+The Web API readback is `max_ratio_enabled=true`, `max_ratio=0`,
+`max_seeding_time_enabled=true`, `max_seeding_time=0`, and `max_ratio_act=0`.
+Unset ARR indexer and per-torrent seeding limits inherit these defaults.
+
+This is a qBittorrent completion policy, not a change to the arbiter invariant.
+Normal operation remains `auto`; torrent downloading can still upload pieces
+before completion. Keep the completion action at `Stop` so ARR can import
+before removing completed torrent data. Do not automatically delete payloads
+at the qBittorrent ratio boundary. Private pre-change configuration and job
+metadata are retained on `arr-server` under
+`/var/backups/edsys/arr-cleanup-20260906/`; restoring those settings would
+re-enable the previous seeding behavior and requires owner authorization.
+
 ## Purpose
 
 `arr-transfer-arbiter` prevents SABnzbd and qBittorrent from transferring at
