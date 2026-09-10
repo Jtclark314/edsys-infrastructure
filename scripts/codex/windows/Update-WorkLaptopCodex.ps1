@@ -54,7 +54,7 @@ function Quote-NativeArgument {
 }
 
 function Invoke-Tool {
-    param([string]$File, [string[]]$Arguments = @(), [int]$TimeoutSeconds = 180, [switch]$Mutation)
+    param([string]$File, [string[]]$Arguments = @(), [int]$TimeoutSeconds = 180, [switch]$Mutation, [string]$WorkingDirectory)
     if ($Mutation -and ($PlanOnly -or $script:StopMutations)) { throw 'Mutation disabled for this run.' }
     $command = Get-Command $File -CommandType Application, ExternalScript -ErrorAction Stop | Select-Object -First 1
     $source = $command.Source
@@ -68,6 +68,9 @@ function Invoke-Tool {
     } else {
         $info.FileName = $source
         $info.Arguments = (@($Arguments | ForEach-Object { Quote-NativeArgument $_ }) -join ' ')
+    }
+    if ($WorkingDirectory) {
+        $info.WorkingDirectory = (Resolve-Path -LiteralPath $WorkingDirectory -ErrorAction Stop).ProviderPath
     }
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
@@ -385,8 +388,15 @@ function Invoke-SandboxProbe {
     $workspace = Join-Path $parent ([guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $workspace | Out-Null
     $shell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    $r = Invoke-Tool $Core @('sandbox', '-C', $workspace, '--', $shell, '-NoProfile', '-NonInteractive', '-Command', '[Console]::WriteLine("EDSYS_SANDBOX_OK")') 120 -Mutation
-    if ($r.Code -ne 0) { throw "Native sandbox probe failed (exit $($r.Code)) in a fresh user folder. Diagnostic: $($r.Log)" }
+    # Codex 0.154.0 couples sandbox -C/--cd to -P/--permission-profile.
+    # Set the native process cwd so the existing config/managed policy applies.
+    $r = Invoke-Tool $Core @('sandbox', '--', $shell, '-NoProfile', '-NonInteractive', '-Command', '[Console]::WriteLine("EDSYS_SANDBOX_OK")') 120 -Mutation -WorkingDirectory $workspace
+    if ($r.Code -ne 0) {
+        $detail = if ($r.ErrorText) { $r.ErrorText } else { $r.Text }
+        $detail = (@($detail -split '\r?\n' | Where-Object { $_.Trim() } | Select-Object -First 5) -join ' ')
+        if ($detail.Length -gt 700) { $detail = $detail.Substring(0, 700) }
+        throw "Native sandbox probe failed (exit $($r.Code)). $detail Diagnostic: $($r.Log)"
+    }
     if (@($r.Text -split '\r?\n' | Where-Object { $_.Trim() -ceq 'EDSYS_SANDBOX_OK' }).Count -ne 1) { throw "Native sandbox probe did not return its expected marker. Diagnostic: $($r.Log)" }
     Add-Result 'Native sandbox probe' 'Verified' '' '' 'A harmless PowerShell command ran from a fresh user folder under the installed sandbox configuration. No System32 write access was requested.'
 }

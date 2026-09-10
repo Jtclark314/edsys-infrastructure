@@ -141,10 +141,11 @@ try {
         $env:SystemRoot=$script:RunDirectory
         $script:ProbeSucceeds=$true
         function Invoke-Tool {
-            param($File,$Arguments,$TimeoutSeconds,[switch]$Mutation)
-            Assert ($Arguments[0] -ceq 'sandbox' -and $Arguments[1] -ceq '-C') 'Native sandbox syntax regressed to OS subcommand'
-            Assert ($Arguments[2].StartsWith((Join-Path $script:RunDirectory 'EdSys-Sandbox-Checks'))) 'Probe used an unsafe working directory'
-            Assert (Test-Path -LiteralPath $Arguments[2] -PathType Container) 'Probe workspace missing'
+            param($File,$Arguments,$TimeoutSeconds,[switch]$Mutation,$WorkingDirectory)
+            Assert ($Arguments[0] -ceq 'sandbox' -and $Arguments[1] -ceq '--') 'Probe introduced an OS subcommand or explicit-profile CLI options'
+            Assert ($Arguments -notcontains '-C' -and $Arguments -notcontains '-P') 'Probe must inherit existing permissions through process cwd'
+            Assert ($WorkingDirectory.StartsWith((Join-Path $script:RunDirectory 'EdSys-Sandbox-Checks'))) 'Probe used an unsafe working directory'
+            Assert (Test-Path -LiteralPath $WorkingDirectory -PathType Container) 'Probe workspace missing'
             Assert ($Arguments[-1] -ceq '[Console]::WriteLine("EDSYS_SANDBOX_OK")') 'Probe command is not the harmless marker'
             Assert $Mutation.IsPresent 'Probe did not honor mutation/timeout gate'
             return @{Code=$(if($script:ProbeSucceeds){0}else{1});Text='EDSYS_SANDBOX_OK';Log='fixture-probe'}
@@ -183,7 +184,19 @@ try {
     $native=if($env:OS -eq 'Windows_NT'){Join-Path $PSHOME 'powershell.exe'}else{Join-Path $PSHOME 'pwsh'}
     $r=Invoke-Tool $native @('-NoProfile','-NonInteractive','-Command','[Console]::WriteLine("fixture output"); exit 17') 30
     Assert ($r.Code -eq 17 -and $r.Text -match 'fixture output') 'Native exit code or output lost'
+    $r=Invoke-Tool $native @('-NoProfile','-NonInteractive','-Command','[Console]::WriteLine([IO.Directory]::GetCurrentDirectory())') 30 -WorkingDirectory $script:RunDirectory
+    Assert ($r.Code -eq 0 -and $r.Text.TrimEnd('\','/') -eq $script:RunDirectory.TrimEnd('\','/')) 'Native child did not inherit the requested working directory'
     if($env:OS -eq 'Windows_NT'){
+        # This intentionally invalid invocation stops at argument parsing and
+        # does not run sandbox setup. It reproduces the 0.154.0 CLI constraint.
+        $cli=Join-Path $env:USERPROFILE '.codex\packages\standalone\current\bin\codex.exe'
+        if(Test-Path -LiteralPath $cli){
+            $v=Invoke-Tool $cli @('--version') 30
+            if($v.Text -ceq 'codex-cli 0.154.0'){
+                $bad=Invoke-Tool $cli @('sandbox','-C',$script:RunDirectory,'--','powershell.exe','-NoProfile','-Command','exit 0') 30
+                Assert ($bad.Code -eq 2 -and $bad.ErrorText -match 'permission-profile') 'The exact 0.154.0 argument-parser regression was not reproduced'
+            }
+        }
         $original=Join-Path $script:RunDirectory 'release'; New-Item -ItemType Directory -Path $original|Out-Null
         'payload'|Set-Content (Join-Path $original 'fixture.txt')
         $junction=Join-Path $script:RunDirectory 'current'; New-Item -ItemType Junction -Path $junction -Target $original|Out-Null

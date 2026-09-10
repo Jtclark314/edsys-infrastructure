@@ -95,11 +95,19 @@ sandbox failure records, or change sandbox mode. The subsequently supplied sandb
 used `C:\Windows\System32` as its working directory: sandbox write-ACL grants
 were denied with Windows error 5. These historical entries do not establish
 current sandbox health. `-FinishOnly` now invokes the installed CLI's
-`codex sandbox -C <fresh-user-folder> -- <PowerShell marker command>` under its
-existing sandbox configuration, then reruns doctor. It does not grant System32
-access, clear recorded failures, change security policy or choose a weaker
+`codex sandbox -- <PowerShell marker command>` with the native process working
+directory set to the fresh user folder, then reruns doctor. It does not grant System32
+write access, clear recorded failures, change security policy or choose a weaker
 sandbox. The vendor runtime may refresh its own normal workspace setup.
-Plugin follow-up execution, current sandbox health and fresh local task/tool
+The owner subsequently confirmed curated-plugin identity/flag verification
+and no newer offer from the current catalog. The probe returned exit 2.
+An exact Windows 0.154.0 parser regression reproduced the earlier invocation
+bug: `sandbox -C` requires an explicit permissions profile. The launcher now
+sets `ProcessStartInfo.WorkingDirectory` instead, preserving existing config
+and managed requirements, and includes a short native error diagnostic in its
+failure result. Tests verify the real native child working directory and
+reproduce the parser constraint without running sandbox setup on another
+production device. Current laptop sandbox health and fresh local task/tool
 acceptance remain **to be confirmed**.
 
 Official sources:
