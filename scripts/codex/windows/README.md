@@ -25,6 +25,17 @@ inspection without installing or closing apps; `-NoRestart` leaves the app
 closed after installation. There are no script-root parameter defaults or
 hidden elevation child windows.
 
+After a completed package update, redownload the script and use `-FinishOnly`
+to run curated-plugin follow-up, a harmless native sandbox probe in a fresh
+user folder, and CLI health checks. This mode retains
+a private settings backup, leaves apps running, and does not download or rerun
+CLI/Appx/editor/npm installers. Start a fresh app session after plugin changes.
+`-FinishOnly -PlanOnly` describes this narrow follow-up without applying it.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $update -FinishOnly
+```
+
 The updater resolves candidates before installing, writes `preflight.csv`,
 and attempts each independent surface even when another fails:
 
@@ -35,8 +46,8 @@ and attempts each independent surface even when another fails:
 | ChatGPT Classic | Upgrade the existing app with its exact Microsoft Store ID; distinguish no applicable offer from a verified latest version. |
 | Codex editor extension | Detect existing `openai.chatgpt` in default profiles of VS Code/Insiders, Cursor and Windsurf found on PATH. Stage the highest stable architecture-specific OpenAI Marketplace VSIX, verify its published SHA-256, install, and verify its exact version. Editors need a reload. |
 | Global npm tools | Update only existing `@openai/codex`, `@playwright/mcp`, and `chrome-devtools-mcp` packages to exact resolved stable versions; verify installed versions. |
-| Curated plugins | Refresh the existing `openai-curated` source and update only enabled installed plugins with a newer numeric version and the same plugin ID. Verify installed identities and enabled flags. |
-| Runtime health | Run the CLI doctor, reopen the unified app, observe its process and any running embedded CLI version separately. |
+| Curated plugins | Refresh `openai-curated` through the Git upgrade command only when its metadata identifies a configured Git source. Built-in/local catalogs are inspected through the plugin catalog. Update only enabled installed plugins with a newer numeric version and the same plugin ID. Verify installed identities and enabled flags. |
+| Runtime health | Parse individual doctor checks even when the command returns nonzero; preserve failures and warnings separately. A full run reopens the app and observes its process and running embedded CLI version separately. |
 
 The updater does not downgrade a newer version. It keeps normal app settings,
 profiles, sign-ins, disabled plugins and marketplace identities. It does not
@@ -67,11 +78,34 @@ even on exit 0. A timeout stops subsequent mutations because a detached
 installer service could still be running. No report is automatically uploaded.
 
 The source is validated with isolated behavior tests and native Windows
-PowerShell 5.1 compatibility checks; laptop installation and authenticated
-runtime acceptance are **to be confirmed after the owner runs it**.
+PowerShell 5.1 compatibility checks. The owner's 2026-09-10 result confirms
+standalone and npm Codex `0.154.0`, matching PATH, retained/restarted desktop
+`26.903.9818.0`, and Classic `1.2026.190.0` with no Store offer. No supported
+editor extension was detected. These are owner-provided laptop results, not
+independent inbound verification.
+
+The first follow-up exposed an updater bug: the implicit built-in curated
+catalog was listed but was not a configured Git marketplace. Source-type
+handling is now corrected. The supplied doctor JSON contained 22 passing
+checks, one elevated Windows sandbox provisioning failure
+(`helper_unknown_error`), and one endpoint-protection warning. The warning
+alone does not identify why sandbox setup failed. The revised report preserves
+both findings and does not add endpoint exclusions, disable protection, clear
+sandbox failure records, or change sandbox mode. The subsequently supplied sandbox log contains May 1/6 failures while Codex
+used `C:\Windows\System32` as its working directory: sandbox write-ACL grants
+were denied with Windows error 5. These historical entries do not establish
+current sandbox health. `-FinishOnly` now invokes the installed CLI's
+`codex sandbox -C <fresh-user-folder> -- <PowerShell marker command>` under its
+existing sandbox configuration, then reruns doctor. It does not grant System32
+access, clear recorded failures, change security policy or choose a weaker
+sandbox. The vendor runtime may refresh its own normal workspace setup.
+Plugin follow-up execution, current sandbox health and fresh local task/tool
+acceptance remain **to be confirmed**.
 
 Official sources:
 
+- [Windows sandbox troubleshooting](https://learn.chatgpt.com/docs/windows/windows-sandbox#troubleshooting-and-faq)
+- [Marketplace and doctor commands](https://learn.chatgpt.com/docs/developer-commands)
 - [Codex Windows installer](https://releases.openai.com/codex/install.ps1)
 - [Deploy the Windows app](https://learn.chatgpt.com/docs/enterprise/windows-deployment)
 - [Manage app updates](https://learn.chatgpt.com/docs/enterprise/manage-app-updates)

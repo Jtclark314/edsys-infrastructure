@@ -2,6 +2,7 @@
 [CmdletBinding()]
 param(
     [switch]$PlanOnly,
+    [switch]$FinishOnly,
     [switch]$NoRestart,
     [ValidateRange(0, 120)][int]$CloseDelaySeconds = 20,
     [string]$RuntimeRoot
@@ -278,6 +279,132 @@ function Open-UnifiedApp {
     }
 }
 
+function Update-CuratedPlugins {
+    param([string]$Core)
+    if (-not $script:CoreReady) { throw 'CLI did not pass version verification; plugin changes skipped.' }
+    $before = (Require-Success (Invoke-Tool $core @('plugin', 'list', '--json') 120)) | ConvertFrom-Json
+    $signature = Get-PluginSignature @($before.installed)
+    $before.installed | Select-Object pluginId, version, enabled | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $script:RunDirectory 'plugins-before.json') -Encoding UTF8
+    $markets = (Require-Success (Invoke-Tool $core @('plugin', 'marketplace', 'list', '--json') 120)) | ConvertFrom-Json
+    $curated = @($markets.marketplaces | Where-Object { $_.name -eq 'openai-curated' })
+    if ($curated.Count -eq 0) {
+        Add-Result 'Curated plugins' 'Skipped' '' '' 'Curated marketplace is not configured; no new source added.'
+    } else {
+        if ($curated.Count -ne 1) { throw 'Curated marketplace identity is ambiguous.' }
+        # Listing includes implicit defaults and local sources. Only an explicit
+        # Git source supports the marketplace upgrade subcommand.
+        if ($curated[0].marketplaceSource.sourceType -eq 'git') {
+            $refresh = (Require-Success (Invoke-Tool $core @('plugin', 'marketplace', 'upgrade', 'openai-curated', '--json') 300 -Mutation)) | ConvertFrom-Json
+            if (@($refresh.errors | Where-Object { $null -ne $_ }).Count) { throw 'Configured Git marketplace refresh reported errors; inspect the command diagnostic.' }
+            Add-Result 'Curated catalog' 'Refreshed' '' '' 'Configured Git marketplace refreshed.'
+        } else {
+            Add-Result 'Curated catalog' 'Managed' '' '' 'Built-in or local catalog; no Git upgrade attempted. Checking versions exposed by Codex on the existing channel.'
+        }
+        $catalog = (Require-Success (Invoke-Tool $core @('plugin', 'list', '--available', '--json') 180)) | ConvertFrom-Json
+        $selected = @(Get-RefreshablePlugins @($before.installed) @($catalog.available))
+        $failuresBefore = @($script:Results | Where-Object { $_.Status -in @('Failed','Blocked') }).Count
+        foreach ($p in $selected) {
+            Invoke-Step ('Plugin ' + $p.pluginId) -Mutation {
+                $expected = @($catalog.available | Where-Object { $_.pluginId -ceq $p.pluginId })[0]
+                $r = (Require-Success (Invoke-Tool $core @('plugin', 'add', $p.pluginId, '--json') 300 -Mutation)) | ConvertFrom-Json
+                if ($r.pluginId -cne $p.pluginId -or $r.version -ne $expected.version) { throw 'Plugin install result did not match the selected catalog entry.' }
+                Add-Result ('Plugin ' + $p.pluginId) 'Updated' $p.version $r.version 'Existing enabled plugin updated; same identity and channel.'
+            }
+        }
+        $after = (Require-Success (Invoke-Tool $core @('plugin', 'list', '--json') 120)) | ConvertFrom-Json
+        if ((Get-PluginSignature @($after.installed)) -cne $signature) { $script:StopMutations = $true; throw 'Plugin identity or enabled-state drift detected. Review the settings backup before further plugin changes.' }
+        $after.installed | Select-Object pluginId, version, enabled | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $script:RunDirectory 'plugins-after.json') -Encoding UTF8
+        $failed = @($script:Results | Where-Object { $_.Status -in @('Failed','Blocked') }).Count -gt $failuresBefore
+        $status = if ($failed) { 'Check' } elseif ($selected.Count) { 'Verified' } else { 'NoOffer' }
+        Add-Result 'Curated plugins' $status '' '' 'Installed identities and enabled flags verified. Results reflect the catalog exposed by Codex, not a forced source refresh or channel migration.'
+    }
+}
+
+function Write-DoctorResults {
+    param($Result)
+    # A nonzero doctor exit may still contain a complete, useful JSON report.
+    # Preserve actual failing checks instead of treating the report as unreadable.
+    $report = $Result.Text | ConvertFrom-Json -ErrorAction Stop
+    if ($report.schemaVersion -ne 1 -or -not $report.checks -or $report.checks -is [array]) {
+        throw "Unrecognized doctor report. Diagnostic: $($Result.Log)"
+    }
+    $checks = @($report.checks.PSObject.Properties | ForEach-Object { $_.Value })
+    if (-not $checks.Count) { throw "Doctor report contains no checks. Diagnostic: $($Result.Log)" }
+    $passing = @($checks | Where-Object { $_.status -eq 'ok' }).Count
+    $failing = @($checks | Where-Object { $_.status -eq 'fail' }).Count
+    $warnings = @($checks | Where-Object { $_.status -eq 'warning' }).Count
+    foreach ($check in $checks) {
+        if ($check.status -eq 'ok') { continue }
+        $status = switch ($check.status) { 'fail' { 'Failed' } 'warning' { 'Warning' } default { 'Check' } }
+        $detail = [string]$check.summary
+        if ($check.id -eq 'sandbox.helpers' -and $check.status -eq 'fail') {
+            $detail += ' Use the supported Windows sandbox setup flow; inspect .sandbox\sandbox.log if setup fails. No sandbox settings were changed.'
+        } elseif ($check.id -eq 'security.endpoint') {
+            $detail += ' This warning does not establish the cause of another failure; security policy remains unchanged.'
+        }
+        Add-Result ('Doctor: ' + $check.id) $status '' '' $detail
+    }
+    $consistent = (($report.overallStatus -eq 'ok' -and $passing -eq $checks.Count -and $Result.Code -eq 0) -or
+        ($report.overallStatus -eq 'warning' -and $warnings -gt 0 -and $failing -eq 0) -or
+        ($report.overallStatus -eq 'fail' -and $failing -gt 0))
+    if (-not $consistent) {
+        Add-Result 'Doctor report' 'Failed' '' '' "Unclassified or inconsistent doctor status/exit; inspect $($Result.Log)."
+    }
+    $status = if ($failing -or -not $consistent) { 'Failed' } elseif ($warnings) { 'Warning' } else { 'Checked' }
+    Add-Result 'Codex doctor' $status '' $report.codexVersion "$passing passing, $failing failing, $warnings warning checks. Full redacted diagnostic: $($Result.Log)"
+}
+
+function Invoke-CodexHealth {
+    param([string]$Core)
+    $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $actual = Get-CoreVersion 'codex.exe'
+    $native = Get-CoreVersion $Core
+    Add-Result 'CLI PATH' $(if ($actual -and $actual -eq $native) { 'Verified' } else { 'Check' }) $native $actual 'Compares the default command with the standalone executable; close old terminals to refresh PATH.'
+    if (-not $native) { throw 'Standalone CLI version could not be verified.' }
+    Write-DoctorResults (Invoke-Tool $Core @('doctor', '--json') 180)
+}
+
+function Backup-CodexSettings {
+    param([string]$CodexRoot, [string]$Backup)
+    # Private local settings only; do not read authentication or session stores.
+    foreach ($file in @(Get-ChildItem -LiteralPath $CodexRoot -Filter '*.toml' -File -ErrorAction SilentlyContinue)) { Copy-Item -LiteralPath $file.FullName -Destination $Backup }
+    foreach ($relative in @('plugins\config.json', 'plugins\installed_plugins.json', 'plugins\marketplaces.json')) {
+        $path = Join-Path $CodexRoot $relative
+        if (Test-Path -LiteralPath $path) { Copy-Item -LiteralPath $path -Destination (Join-Path $Backup ([IO.Path]::GetFileName($path))) }
+    }
+    [IO.File]::WriteAllText((Join-Path $Backup 'user-path.txt'), [string][Environment]::GetEnvironmentVariable('Path', 'User'))
+}
+
+function Invoke-SandboxProbe {
+    param([string]$Core)
+    # Test in a new empty user directory, never System32 or a business workspace.
+    # Use the installed runtime and its existing sandbox policy. A successful
+    # native refresh may update its own provisioning status; do not erase it.
+    $parent = Join-Path $env:LOCALAPPDATA 'EdSys-Sandbox-Checks'
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    $workspace = Join-Path $parent ([guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $workspace | Out-Null
+    $shell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $r = Invoke-Tool $Core @('sandbox', '-C', $workspace, '--', $shell, '-NoProfile', '-NonInteractive', '-Command', '[Console]::WriteLine("EDSYS_SANDBOX_OK")') 120 -Mutation
+    if ($r.Code -ne 0) { throw "Native sandbox probe failed (exit $($r.Code)) in a fresh user folder. Diagnostic: $($r.Log)" }
+    if (@($r.Text -split '\r?\n' | Where-Object { $_.Trim() -ceq 'EDSYS_SANDBOX_OK' }).Count -ne 1) { throw "Native sandbox probe did not return its expected marker. Diagnostic: $($r.Log)" }
+    Add-Result 'Native sandbox probe' 'Verified' '' '' 'A harmless PowerShell command ran from a fresh user folder under the installed sandbox configuration. No System32 access was requested.'
+}
+
+function Invoke-FinishOnly {
+    param([string]$Core, [string]$CodexRoot, [string]$Backup)
+    if ($PlanOnly) {
+        Add-Result 'Follow-up plan' 'PlanOnly' '' '' 'Would check available curated plugin updates, run a harmless native sandbox probe in a fresh user folder, and check CLI health. No package installers or app restarts.'
+        return
+    }
+    $script:CoreReady = [bool](Get-CoreVersion $Core)
+    Backup-CodexSettings $CodexRoot $Backup
+    Invoke-Step 'Plugin follow-up' -Mutation { Update-CuratedPlugins $Core }
+    Invoke-Step 'Native sandbox probe' -Mutation { Invoke-SandboxProbe $Core }
+    Invoke-Step 'CLI health and launcher check' { Invoke-CodexHealth $Core }
+    Add-Result 'Follow-up run' 'Check' '' '' 'Applications were left running. Start a fresh session to activate any plugin changes. Sandbox configuration and endpoint policy were not changed; the native sandbox probe may refresh its own workspace setup.'
+}
+
 $exitCode = 0
 try {
     if ($env:OS -ne 'Windows_NT') { throw 'Run this script on the Windows work laptop.' }
@@ -306,9 +433,13 @@ try {
     $npmPackages = @()
     $pluginsBefore = @()
     Write-Host "Work laptop Codex / ChatGPT updater`nLocal reports: $script:RunDirectory" -ForegroundColor Green
-    Write-Host 'Uses stable official releases. Save drafts and finish local Codex tasks before installation.'
+    if ($FinishOnly) { Write-Host 'Focused follow-up: plugins, a sandbox probe in a fresh user folder, and health checks; applications stay open.' }
+    else { Write-Host 'Uses stable official releases. Save drafts and finish local Codex tasks before installation.' }
     Write-Host 'Existing configuration, sign-ins, corporate policy, and prior release directories are retained.'
 
+    if ($FinishOnly) {
+        Invoke-FinishOnly $core $codexRoot $backup
+    } else {
     Invoke-Step 'CLI preflight' {
         $targetCore = Get-StableRelease
         Invoke-WebRequest -UseBasicParsing -Headers @{'User-Agent'='EdSys-WorkLaptop-Updater'} -Uri 'https://releases.openai.com/codex/install.ps1' -OutFile $installer -TimeoutSec 90
@@ -362,13 +493,7 @@ try {
     if ($PlanOnly) {
         Add-Result 'Run' 'PlanOnly' '' '' 'No apps closed, packages installed, or settings changed. Official installers were downloaded for inspection.'
     } else {
-        # Back up only relevant settings/metadata, not credentials or sessions.
-        foreach ($file in @(Get-ChildItem -LiteralPath $codexRoot -Filter '*.toml' -File -ErrorAction SilentlyContinue)) { Copy-Item -LiteralPath $file.FullName -Destination $backup }
-        foreach ($relative in @('plugins\config.json', 'plugins\installed_plugins.json', 'plugins\marketplaces.json')) {
-            $path = Join-Path $codexRoot $relative
-            if (Test-Path -LiteralPath $path) { Copy-Item -LiteralPath $path -Destination (Join-Path $backup ([IO.Path]::GetFileName($path))) }
-        }
-        [IO.File]::WriteAllText((Join-Path $backup 'user-path.txt'), [string][Environment]::GetEnvironmentVariable('Path', 'User'))
+        Backup-CodexSettings $codexRoot $backup
         if ($beforeCore) {
             # A complete local copy survives installer repair of the source tree.
             $oldRoot = Split-Path -Parent (Split-Path -Parent $core)
@@ -441,43 +566,13 @@ try {
                 Add-Result $package.Name 'Updated' $package.Before $after 'Global package verified. Previous exact version is recorded in preflight.csv.'
             }
         }
-        Invoke-Step 'Plugin updates' -Mutation {
-            if (-not $script:CoreReady) { throw 'CLI did not pass version verification; plugin changes skipped.' }
-            $before = (Require-Success (Invoke-Tool $core @('plugin', 'list', '--json') 120)) | ConvertFrom-Json
-            $signature = Get-PluginSignature @($before.installed)
-            $markets = (Require-Success (Invoke-Tool $core @('plugin', 'marketplace', 'list', '--json') 120)) | ConvertFrom-Json
-            if (@($markets.marketplaces | Where-Object { $_.name -eq 'openai-curated' }).Count -eq 0) {
-                Add-Result 'Curated plugins' 'Skipped' '' '' 'Curated marketplace is not configured; no new source added.'
-            } else {
-                $null = Require-Success (Invoke-Tool $core @('plugin', 'marketplace', 'upgrade', 'openai-curated', '--json') 300 -Mutation)
-                $catalog = (Require-Success (Invoke-Tool $core @('plugin', 'list', '--available', '--json') 180)) | ConvertFrom-Json
-                foreach ($p in @(Get-RefreshablePlugins @($before.installed) @($catalog.available))) {
-                    Invoke-Step ('Plugin ' + $p.pluginId) -Mutation {
-                        $null = Require-Success (Invoke-Tool $core @('plugin', 'add', $p.pluginId, '--json') 300 -Mutation)
-                    }
-                }
-                $after = (Require-Success (Invoke-Tool $core @('plugin', 'list', '--json') 120)) | ConvertFrom-Json
-                if ((Get-PluginSignature @($after.installed)) -cne $signature) { $script:StopMutations = $true; throw 'Plugin identity or enabled-state drift detected. Review the settings backup before further plugin changes.' }
-                $after.installed | Select-Object pluginId, version, enabled | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $script:RunDirectory 'plugins-after.json') -Encoding UTF8
-                Add-Result 'Curated plugins' 'Refreshed' '' '' 'Existing enabled curated plugins refreshed on their existing channel; installed identities and enabled flags verified.'
-            }
-        }
-        Invoke-Step 'CLI health and launcher check' {
-            $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine')
-            $actual = Get-CoreVersion 'codex.exe'
-            $native = Get-CoreVersion $core
-            Add-Result 'CLI PATH' $(if ($actual -and $actual -eq $native) { 'Verified' } else { 'Check' }) $native $actual 'Compares the default command with the standalone executable; close old terminals to refresh PATH.'
-            if ($native) {
-                $r = Invoke-Tool $core @('doctor', '--json') 180
-                if ($r.Code -ne 0) { throw "Codex doctor reported an issue. Diagnostic: $($r.Log)" }
-                $null = $r.Text | ConvertFrom-Json
-                Add-Result 'Codex doctor' 'Checked' '' '' 'Redacted diagnostic saved locally. This does not prove authenticated tools or a model task work.'
-            }
-        }
+        Invoke-Step 'Plugin updates' -Mutation { Update-CuratedPlugins $core }
+        Invoke-Step 'CLI health and launcher check' { Invoke-CodexHealth $core }
         if (-not $NoRestart -and -not $script:StopMutations) { Invoke-Step 'Reopen ChatGPT' { Open-UnifiedApp } }
         else { Add-Result 'Desktop restart' 'Check' '' '' 'Open ChatGPT from Start after installers have finished.' }
         Add-Result 'Provider-managed components' 'Check' '' '' 'App-bundled tools follow app/runtime updates. Browser extensions, hosted connectors, custom/pinned MCPs and named editor profiles require their own update UI or owner; no forced channel changes.'
         Add-Result 'Runtime acceptance' 'Check' '' '' 'Open a new task and verify your usual tools. Package checks do not certify runtime/OAuth parity or authorize old-version cleanup.'
+    }
     }
     if (@($script:Results | Where-Object { $_.Status -in @('Failed', 'Blocked') }).Count) { $exitCode = 2 }
 } catch {

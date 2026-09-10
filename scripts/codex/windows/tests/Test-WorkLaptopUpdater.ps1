@@ -57,6 +57,117 @@ try {
         Assert ($script:Results[-1].Status -ceq 'NoOffer') 'Store no-offer misclassified as current or failure'
     }
     Test-StoreNoOffer
+    function Test-CuratedSource {
+        param([string]$SourceType,[bool]$UpgradeFails=$false,[bool]$ReportedError=$false)
+        $script:CoreReady=$true
+        $script:PluginAdded=$false
+        $script:GitCalls=0
+        $script:FixtureSource=$SourceType
+        $script:FixtureUpgradeFails=$UpgradeFails
+        $script:FixtureReportedError=$ReportedError
+        function Invoke-Tool {
+            param($File,$Arguments,$TimeoutSeconds,[switch]$Mutation)
+            if($Arguments[1] -eq 'marketplace' -and $Arguments[2] -eq 'list'){
+                $market=[pscustomobject]@{name='openai-curated'}
+                if($script:FixtureSource){$market|Add-Member marketplaceSource @{sourceType=$script:FixtureSource;source='fixture-source'}}
+                return @{Code=0;Text=(@{marketplaces=@($market)}|ConvertTo-Json -Depth 8)}
+            }
+            if($Arguments[1] -eq 'marketplace' -and $Arguments[2] -eq 'upgrade'){
+                $script:GitCalls++
+                return @{Code=$(if($script:FixtureUpgradeFails){1}else{0});Text=$(if($script:FixtureReportedError){'{"errors":["fixture refresh error"]}'}else{'{}'});Log='fixture-git-error'}
+            }
+            if($Arguments[1] -eq 'add'){
+                Assert ($Arguments[2] -ceq 'example@openai-curated') 'Unexpected plugin identity selected'
+                $script:PluginAdded=$true
+                return @{Code=0;Text='{"pluginId":"example@openai-curated","version":"2.0.0"}'}
+            }
+            if($Arguments[1] -eq 'list'){
+                $version=if($script:PluginAdded){'2.0.0'}else{'1.0.0'}
+                $p=@{pluginId='example@openai-curated';marketplaceName='openai-curated';version=$version;enabled=$true}
+                $off=@{pluginId='disabled@openai-curated';marketplaceName='openai-curated';version='1.0.0';enabled=$false}
+                $a=@{pluginId='example@openai-curated';version='2.0.0'}
+                return @{Code=0;Text=(@{installed=@($p,$off);available=@($a)}|ConvertTo-Json -Depth 8)}
+            }
+            throw 'Unexpected fixture command'
+        }
+        if($UpgradeFails -or $ReportedError){
+            Assert (Rejects {Update-CuratedPlugins 'fixture'}) 'Real Git upgrade failure was swallowed'
+            Assert (-not $script:PluginAdded) 'Plugin install followed a failed Git refresh'
+        }else{
+            Update-CuratedPlugins 'fixture'
+            Assert $script:PluginAdded 'Available update was skipped for built-in/local catalog'
+            Assert ($script:Results[-1].Status -eq 'Verified') 'Plugin verification did not complete'
+        }
+        Assert ($script:GitCalls -eq $(if($SourceType -eq 'git'){1}else{0})) 'Non-Git marketplace received Git upgrade command'
+    }
+    Test-CuratedSource ''
+    Test-CuratedSource 'local'
+    Test-CuratedSource 'git'
+    Test-CuratedSource 'git' $true
+    Test-CuratedSource 'git' $false $true
+    $doctor=@{schemaVersion=1;overallStatus='fail';codexVersion='0.154.0';checks=@{
+        'installation'=@{id='installation';status='ok';summary='fixture installed'}
+        'sandbox.helpers'=@{id='sandbox.helpers';status='fail';summary='fixture setup failure'}
+        'security.endpoint'=@{id='security.endpoint';status='warning';summary='fixture endpoint warning'}
+    }}
+    Write-DoctorResults @{Code=1;Text=($doctor|ConvertTo-Json -Depth 8);Log='fixture-doctor'}
+    Assert ($script:Results[-1].Status -eq 'Failed' -and $script:Results[-1].Detail -match '1 passing, 1 failing, 1 warning') 'Nonzero JSON doctor findings lost'
+    Assert (@($script:Results|Where-Object {$_.Component -eq 'Doctor: sandbox.helpers' -and $_.Status -eq 'Failed'}).Count -eq 1) 'Sandbox failure was hidden'
+    Assert (@($script:Results|Where-Object {$_.Component -eq 'Doctor: security.endpoint' -and $_.Status -eq 'Warning'}).Count -eq 1) 'Endpoint warning was promoted to a failure'
+    Assert (Rejects {Write-DoctorResults @{Code=1;Text='not-json';Log='fixture'}}) 'Invalid doctor JSON was accepted'
+    $doctor.overallStatus='ok';$doctor.checks=@{installation=@{id='installation';status='ok';summary='fixture'}}
+    Write-DoctorResults @{Code=1;Text=($doctor|ConvertTo-Json -Depth 8);Log='fixture'}
+    Assert ($script:Results[-1].Status -eq 'Failed') 'Unexplained exit code was hidden'
+    function Test-FinishMode {
+        $script:FinishCalls=New-Object 'Collections.Generic.List[string]'
+        function Get-CoreVersion {return '0.154.0'}
+        function Backup-CodexSettings {$script:FinishCalls.Add('backup')}
+        function Update-CuratedPlugins {$script:FinishCalls.Add('plugins')}
+        function Invoke-SandboxProbe {$script:FinishCalls.Add('sandbox')}
+        function Invoke-CodexHealth {$script:FinishCalls.Add('health')}
+        function Invoke-Tool {throw 'FinishOnly unexpectedly invoked an installer'}
+        Invoke-FinishOnly 'fixture-core' 'fixture-root' 'fixture-backup'
+        Assert (($script:FinishCalls -join ',') -ceq 'backup,plugins,sandbox,health') 'FinishOnly did not isolate follow-up work'
+        $PlanOnly=$true
+        $script:FinishCalls.Clear()
+        Invoke-FinishOnly 'fixture-core' 'fixture-root' 'fixture-backup'
+        Assert ($script:FinishCalls.Count -eq 0) 'FinishOnly PlanOnly performed work'
+    }
+    Test-FinishMode
+    function Test-SandboxProbe {
+        $oldLocalAppData=$env:LOCALAPPDATA
+        $oldSystemRoot=$env:SystemRoot
+        $env:LOCALAPPDATA=$script:RunDirectory
+        $env:SystemRoot=$script:RunDirectory
+        $script:ProbeSucceeds=$true
+        function Invoke-Tool {
+            param($File,$Arguments,$TimeoutSeconds,[switch]$Mutation)
+            Assert ($Arguments[0] -ceq 'sandbox' -and $Arguments[1] -ceq '-C') 'Native sandbox syntax regressed to OS subcommand'
+            Assert ($Arguments[2].StartsWith((Join-Path $script:RunDirectory 'EdSys-Sandbox-Checks'))) 'Probe used an unsafe working directory'
+            Assert (Test-Path -LiteralPath $Arguments[2] -PathType Container) 'Probe workspace missing'
+            Assert ($Arguments[-1] -ceq '[Console]::WriteLine("EDSYS_SANDBOX_OK")') 'Probe command is not the harmless marker'
+            Assert $Mutation.IsPresent 'Probe did not honor mutation/timeout gate'
+            return @{Code=$(if($script:ProbeSucceeds){0}else{1});Text='EDSYS_SANDBOX_OK';Log='fixture-probe'}
+        }
+        try {
+            Invoke-SandboxProbe 'fixture-core'
+            Assert ($script:Results[-1].Status -eq 'Verified') 'Successful sandbox probe not recorded'
+            $script:ProbeSucceeds=$false
+            Assert (Rejects {Invoke-SandboxProbe 'fixture-core'}) 'Failed sandbox probe was hidden'
+        } finally { $env:LOCALAPPDATA=$oldLocalAppData; $env:SystemRoot=$oldSystemRoot }
+    }
+    Test-SandboxProbe
+    function Test-FinishDispatch {
+        $FinishOnly=$true
+        $script:DispatchSeen=$false
+        function Invoke-FinishOnly {$script:DispatchSeen=$true}
+        function Invoke-Step {throw 'FinishOnly entered the complete installer flow'}
+        $dispatch=$ast.Find({param($n) $n -is [Management.Automation.Language.IfStatementAst] -and $n.Clauses[0].Item1.Extent.Text -ceq '$FinishOnly' -and $n.Extent.Text.Contains('Invoke-FinishOnly')},$true)
+        Assert ($null -ne $dispatch) 'FinishOnly dispatch missing'
+        & ([scriptblock]::Create($dispatch.Extent.Text))
+        Assert $script:DispatchSeen 'FinishOnly dispatch did not select the targeted flow'
+    }
+    Test-FinishDispatch
     Invoke-Step 'expected failure' {throw 'fixture failure'}
     $script:Continued=$false
     Invoke-Step 'independent step' {$script:Continued=$true}
