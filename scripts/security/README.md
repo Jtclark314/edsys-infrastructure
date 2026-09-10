@@ -46,6 +46,14 @@ sudo sshd -t && sudo systemctl reload ssh.service
 
 Controller public keys remain live private host state and never belong in Git.
 
+## Prepared work-laptop access
+
+[Work-laptop SSH installer](work-laptop/README.md) provides a separately
+requested fresh Windows setup for persistent PowerShell and file transfer
+from the exact 9950x Tailnet peer. It is prepared, not deployed. The installer
+requires local elevation and employer/IT approval, refuses existing SSH
+deployments, and includes access revocation and remote acceptance steps.
+
 ## Historical EdCore Omarchy Workhorse
 
 The configuration below is retained only as dated evidence for the destroyed
