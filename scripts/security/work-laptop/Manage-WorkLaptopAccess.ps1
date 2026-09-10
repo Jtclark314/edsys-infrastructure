@@ -3,13 +3,21 @@
 param(
     [ValidateSet('Plan', 'Install', 'Verify', 'Revoke')]
     [string]$Action = 'Plan',
-    [string]$ManifestPath = (Join-Path $PSScriptRoot 'access.json'),
+    [string]$ManifestPath,
     [switch]$EmployerApproved
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+# Windows PowerShell can bind defaults before the script-root automatic
+# variable is available. Resolve file-relative paths only in the script body.
+$installerPath = $PSCommandPath
+if ([string]::IsNullOrWhiteSpace($installerPath)) { $installerPath = $MyInvocation.MyCommand.Path }
+if ([string]::IsNullOrWhiteSpace($installerPath)) { throw 'Run the saved installer with -File; its source path could not be resolved.' }
+$scriptDirectory = Split-Path -Parent $installerPath
+if ([string]::IsNullOrWhiteSpace($ManifestPath)) { $ManifestPath = Join-Path $scriptDirectory 'access.json' }
 
 function Assert-TailnetIPv4 {
     param([string]$Value)
@@ -334,7 +342,7 @@ try {
     $receipt = [ordered]@{ schemaVersion = 1; owner = 'EdSys-WorkLaptopAccess-v1'; computer = $manifest.computer;
         status = 'installing'; updatedAt = ''; configHash = ''; keyHash = '' }
     Save-Receipt 'installing'
-    Copy-Item -LiteralPath $PSCommandPath -Destination (Join-Path $stateRoot 'Manage-WorkLaptopAccess.ps1')
+    Copy-Item -LiteralPath $installerPath -Destination (Join-Path $stateRoot 'Manage-WorkLaptopAccess.ps1')
     Set-AdminOnlyAcl (Join-Path $stateRoot 'Manage-WorkLaptopAccess.ps1')
     Write-PrivateText (Join-Path $stateRoot 'access.json') ($manifest | ConvertTo-Json)
     $ownsInstallation = $true
@@ -376,7 +384,7 @@ try {
     Remove-NetFirewallRule -Name $containRule
     Save-Receipt 'local-verified'
     # Export only the public host key for pinning through the existing outbound SSH path.
-    [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'host-key.pub'),
+    [IO.File]::WriteAllText((Join-Path $scriptDirectory 'host-key.pub'),
         [IO.File]::ReadAllText("$hostKey.pub"), (New-Object Text.UTF8Encoding($false)))
     Write-Host 'INSTALLED. Remote acceptance and reboot verification are still pending.'
     Write-Host "To revoke locally: powershell.exe -NoProfile -File `"$stateRoot\Manage-WorkLaptopAccess.ps1`" -Action Revoke"

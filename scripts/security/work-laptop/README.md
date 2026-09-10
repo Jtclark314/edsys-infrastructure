@@ -1,8 +1,12 @@
 # Work laptop SSH access
 
-Status (2026-09-10): installer and private hub bundle prepared; **not installed**
-on the work laptop. Live Windows acceptance and employer/IT authorization for
-persistent inbound administration remain to be confirmed. The existing outbound
+Status (2026-09-10): corrected installer and private hub bundle prepared;
+**remote installation acceptance remains pending**. The first laptop attempt
+returned only a launcher exit code. A local Plan diagnostic identified an empty
+script-root value during default-parameter binding. The installer now resolves
+relative paths in its body, and a result wrapper captures prerequisite failures
+as well as installation failures. The owner ran with the employer-approval
+attestation; no repeated approval is needed for this same scope. The existing outbound
 laptop-to-hub connection continues to be the bootstrap and public-host-key
 return path. This source does not grant access by itself.
 
@@ -61,11 +65,12 @@ that employer/IT approval covers this persistent inbound administration; the
 previous approval for using AI with work information does not establish it.
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Start-WorkLaptopAccess.ps1 -EmployerApproved
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Start-WorkLaptopAccess.ps1 -Action Install -EmployerApproved
 ```
 
-For a preflight without changing the laptop, run the main script in elevated
-PowerShell with `-Action Plan`. `Plan` is also the default. Installation requires
+For a preflight without changing the laptop, run either launcher or main script
+with `-Action Plan`. `Plan` is the default for both. The launcher reuses an
+already elevated console or requests normal UAC elevation. Installation requires
 `-Action Install -EmployerApproved` and the private manifest. A pre-existing
 OpenSSH server, configuration, listener, reserved firewall rule, or incomplete
 installation is refused for operator review. This is deliberately a fresh
@@ -80,8 +85,17 @@ receipt and use local `Revoke`; do not assume a completed installation or
 delete the containment rule manually. Reinstallation after failed/revoked state
 requires a reviewed recovery instead of automatic erasure of previous state.
 
-The launcher returns only the public host key to the private hub bundle via the
-already trusted outbound SSH connection. If this upload fails, installation
+Each launch writes a new, invocation-bound JSON result containing only status,
+the installer phase, bounded error text, error type, source filename, and line.
+It excludes transcripts, configuration, and key material. The launcher returns
+that diagnostic through the existing trusted outbound SSH connection even
+when preflight fails, and prints the actual failure in the calling console.
+A missing/mismatched result or failed upload is reported without accepting a
+stale success. Windows execution-policy or UAC failures that prevent the wrapper
+from starting still require a visible local-console check.
+
+After installation the launcher also returns the public host key to the private
+hub bundle via that trusted connection. If this upload fails, installation
 may still have passed locally; retain `host-key.pub` and return it through that
 trusted connection. A network key scan alone is not the trust anchor.
 
@@ -143,10 +157,14 @@ delete recovery material or global SSH entries as incidental cleanup.
 python3 -m unittest discover -s scripts/security/work-laptop/tests -v
 ```
 
-Focused tests exercise PowerShell parsing, input-injection rejection, exact
+Fifteen focused tests exercise PowerShell parsing, default-parameter binding,
+invocation-bound success/failure diagnostics, input-injection rejection, exact
 firewall range complements, real OpenSSH configuration parsing, failure-safe
 access closure, domain-name quoting, and host-key-change rejection. Linux tests
 do not establish Windows service, DISM, ACL, domain, or firewall behavior.
+The corrected parameter binding, three script parsers, and failure detail
+extraction also passed in a real Windows PowerShell 5.1 process without running
+the installer or changing that test host's services.
 
 - [Microsoft Windows OpenSSH installation](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_firstuse)
 - [Microsoft Windows OpenSSH configuration](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh-server-configuration)

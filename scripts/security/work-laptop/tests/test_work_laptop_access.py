@@ -26,7 +26,7 @@ class AccessTests(unittest.TestCase):
         self.manifest = dict(schemaVersion=1, computer='THOMPSON-LC086', user='thompson\\jclark',
                              hubAddress='100.100.10.1', laptopAddress='100.100.10.2', publicKey=self.public)
 
-    def ps(self, code, check=True):
+    def ps(self, code, check=True, script=SCRIPT):
         # Load function definitions only. Never execute the Windows installer on
         # the test host, and do not mock a passing live deployment.
         harness = r'''
@@ -40,7 +40,7 @@ foreach ($node in $ast.EndBlock.Statements) {
         . ([scriptblock]::Create($node.Extent.Text))
     }
 }
-'''.replace('__SCRIPT__', str(SCRIPT).replace("'", "''"))
+'''.replace('__SCRIPT__', str(script).replace("'", "''"))
         path = self.root / 'test.ps1'
         path.write_text(harness + '\n' + code)
         result = subprocess.run(['pwsh', '-NoProfile', '-NonInteractive', '-File', str(path)], text=True, capture_output=True)
@@ -58,6 +58,42 @@ foreach ($node in $ast.EndBlock.Statements) {
     def test_both_scripts_parse(self):
         for script in ROOT.glob('*.ps1'):
             self.ps(f"$e=$null; $t=$null; [System.Management.Automation.Language.Parser]::ParseFile('{script}',[ref]$t,[ref]$e)|Out-Null; if ($e.Count) {{ throw ($e|Out-String) }}")
+
+    def test_parameter_binding_does_not_require_script_root(self):
+        self.ps(r'''
+$paramOnly = [scriptblock]::Create($ast.ParamBlock.Extent.Text + "`n 'parameters-bound'")
+if ((& $paramOnly -Action Plan) -cne 'parameters-bound') { throw 'Parameter binding failed' }
+if ((& $paramOnly -Action Install -ManifestPath 'explicit.json' -EmployerApproved) -cne 'parameters-bound') { throw 'Explicit parameter binding failed' }
+''')
+
+    def test_error_receipt_captures_preflight_failure_and_nonzero_status(self):
+        result = self.root / 'failure.json'
+        self.ps(r'''
+$code = Invoke-AccessWithReceipt -Operation { throw 'synthetic prerequisite failure' } -ResultPath '__RESULT__' -Id ('a'*32) -RequestedAction Plan
+if ($code -ne 1) { throw 'Wrong failure exit code' }
+'''.replace('__RESULT__', str(result)), script=ROOT / 'Invoke-WorkLaptopAccess.ps1')
+        data = json.loads(result.read_text())
+        self.assertEqual(data['status'], 'failed')
+        self.assertEqual(data['action'], 'Plan')
+        self.assertEqual(data['error']['message'], 'synthetic prerequisite failure')
+        self.assertEqual(data['runId'], 'a' * 32)
+        self.assertEqual(data['exitCode'], 1)
+
+    def test_success_receipt_and_stale_result_refusal(self):
+        result = self.root / 'success.json'
+        self.ps(r'''
+$code = Invoke-AccessWithReceipt -Operation { } -ResultPath '__RESULT__' -Id ('b'*32) -RequestedAction Plan
+if ($code -ne 0) { throw 'Wrong success exit code' }
+'''.replace('__RESULT__', str(result)), script=ROOT / 'Invoke-WorkLaptopAccess.ps1')
+        old = result.read_bytes()
+        data = json.loads(old)
+        self.assertEqual(data['status'], 'succeeded')
+        self.assertIsNone(data['error'])
+        retried = self.ps(r'''
+Invoke-AccessWithReceipt -Operation { throw 'different failure' } -ResultPath '__RESULT__' -Id ('c'*32) -RequestedAction Plan
+'''.replace('__RESULT__', str(result)), script=ROOT / 'Invoke-WorkLaptopAccess.ps1', check=False)
+        self.assertNotEqual(retried.returncode, 0)
+        self.assertEqual(result.read_bytes(), old)
 
     def test_valid_manifest_roundtrips(self):
         p = self.write_manifest()

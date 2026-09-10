@@ -60,11 +60,11 @@ def prepare(bundle: Path, identity: Path, hub: str, laptop: str) -> dict:
     manifest = dict(schemaVersion=1, computer='THOMPSON-LC086', user='thompson\\jclark',
                     hubAddress=hub, laptopAddress=laptop, publicKey=public)
     write_private(windows / 'access.json', json.dumps(manifest, indent=2) + '\n')
-    for name in ['Manage-WorkLaptopAccess.ps1', 'Start-WorkLaptopAccess.ps1']:
+    for name in ['Manage-WorkLaptopAccess.ps1', 'Start-WorkLaptopAccess.ps1', 'Invoke-WorkLaptopAccess.ps1']:
         shutil.copyfile(SOURCE / name, windows / name)
         (windows / name).chmod(0o600)
     hashes = {name: hashlib.sha256((windows / name).read_bytes()).hexdigest() for name in
-              ['Manage-WorkLaptopAccess.ps1', 'Start-WorkLaptopAccess.ps1', 'access.json']}
+              ['Manage-WorkLaptopAccess.ps1', 'Start-WorkLaptopAccess.ps1', 'Invoke-WorkLaptopAccess.ps1', 'access.json']}
     write_private(windows / 'bundle.json', json.dumps(dict(schemaVersion=1,
                   hubUploadDirectory=str(bundle), hashes=hashes), indent=2) + '\n')
     # This file is usable only after the returned public host key is pinned.
