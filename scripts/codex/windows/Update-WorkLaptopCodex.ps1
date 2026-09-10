@@ -388,7 +388,7 @@ function Invoke-SandboxProbe {
     $r = Invoke-Tool $Core @('sandbox', '-C', $workspace, '--', $shell, '-NoProfile', '-NonInteractive', '-Command', '[Console]::WriteLine("EDSYS_SANDBOX_OK")') 120 -Mutation
     if ($r.Code -ne 0) { throw "Native sandbox probe failed (exit $($r.Code)) in a fresh user folder. Diagnostic: $($r.Log)" }
     if (@($r.Text -split '\r?\n' | Where-Object { $_.Trim() -ceq 'EDSYS_SANDBOX_OK' }).Count -ne 1) { throw "Native sandbox probe did not return its expected marker. Diagnostic: $($r.Log)" }
-    Add-Result 'Native sandbox probe' 'Verified' '' '' 'A harmless PowerShell command ran from a fresh user folder under the installed sandbox configuration. No System32 access was requested.'
+    Add-Result 'Native sandbox probe' 'Verified' '' '' 'A harmless PowerShell command ran from a fresh user folder under the installed sandbox configuration. No System32 write access was requested.'
 }
 
 function Invoke-FinishOnly {
