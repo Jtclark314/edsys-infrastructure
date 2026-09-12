@@ -93,6 +93,13 @@ subnet route taking local traffic. It supports the qualified wired dock and
 Wi-Fi addresses, removes its own stale route off LAN, and refuses conflicting
 unmanaged host routes. It does not disable Tailscale or alter default routing.
 Address changes require requalification; the helper is not a DHCP reservation.
+When changing a client reservation, update both private allowlists: host
+`/etc/edsys-sunshine/clients.json` and Nimo `client.json`. Preserve other verified
+peers, back up both files, atomically reapply only the Sunshine firewall table,
+and invoke the existing SYSTEM route task. Verify the actual source/interface,
+all three stream TCP ports, admin denial, and a real Moonlight session. A zero
+route-task result alone is insufficient because its unqualified/off-LAN path
+also exits successfully. This dependency was missed and corrected on 2026-09-11.
 Its source/config directory grants only administrators/SYSTEM write access.
 Existing EdCore/RDP shortcuts are not modified.
 
