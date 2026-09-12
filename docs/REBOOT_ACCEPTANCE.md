@@ -25,12 +25,14 @@ Tailnet-only SMB socket starts from `multi-user.target` after Tailscale. This
 avoids creating a `basic.target`/`sockets.target` ordering cycle that can leave
 remote listeners absent on an otherwise successful boot.
 
-Docker live restore is deliberately disabled for full-host reboot reliability.
-Dockerd stops containers before systemd removes Docker network namespaces and
-unmounts `/mnt/data-500g`; restart policies plus the ordered recovery service
-then restore the same container identities and gate application health. The
-daemon receives a 120-second container shutdown budget within a three-minute
-systemd stop window.
+Docker live restore remains enabled under the current container-recovery
+policy. Arming records its actual boolean value; acceptance requires the same
+value after reboot and rejects a missing baseline or failed Docker query. The
+container-recovery audit independently checks the desired setting and service
+health. This replaces an obsolete hard-coded requirement for disabled live
+restore. Restart policies and ordered recovery must restore the same container
+identities. The daemon retains its 120-second container shutdown budget within
+a three-minute systemd stop window.
 
 Private run records live under `/var/lib/edsys-reboot-acceptance/` and must not
 enter Git or RAG.

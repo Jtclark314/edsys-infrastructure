@@ -117,6 +117,28 @@ capture_package_versions() {
   done
 }
 
+capture_docker_live_restore() {
+  local actual
+  actual="$(docker info --format '{{.LiveRestoreEnabled}}')" || return 1
+  case "${actual}" in
+    true|false) printf '%s\n' "${actual}" ;;
+    *) echo "Docker returned an invalid live-restore setting" >&2; return 1 ;;
+  esac
+}
+
+verify_docker_live_restore() {
+  local run_dir="$1"
+  [[ -r ${run_dir}/docker-live-restore.before ]] || {
+    echo "missing pre-reboot Docker live-restore baseline" >&2
+    return 1
+  }
+  capture_docker_live_restore >"${run_dir}/docker-live-restore.after" || return 1
+  cmp -s "${run_dir}/docker-live-restore.before" "${run_dir}/docker-live-restore.after" || {
+    echo "Docker live-restore setting changed across reboot" >&2
+    return 1
+  }
+}
+
 write_json_status() {
   local run_id="$1"
   local result="$2"
@@ -175,6 +197,7 @@ arm() {
   capture_failed_units >"${run_dir}/failed-units.before"
   capture_docker_identities >"${run_dir}/docker-identities.before"
   capture_package_versions >"${run_dir}/packages.before"
+  capture_docker_live_restore >"${run_dir}/docker-live-restore.before"
   /home/jeremy/.local/bin/codex --version >"${run_dir}/codex.before"
   chmod 0600 "${run_dir}"/*
 
@@ -219,10 +242,7 @@ full_acceptance() {
   "${SHARE_MOUNT_CHECK}"
   "${AI_PROXY_CHECK}"
   "${CONTAINER_RECOVERY}" audit
-  [[ $(docker info --format '{{.LiveRestoreEnabled}}') == false ]] || {
-    echo "Docker live restore must remain disabled for deterministic host shutdown" >&2
-    return 1
-  }
+  verify_docker_live_restore "${run_dir}"
 
   for unit in "${CORE_ENABLED_SERVICES[@]}"; do
     systemctl is-enabled --quiet "${unit}"
