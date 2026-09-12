@@ -87,7 +87,13 @@ absolute mouse, system-key capture and borderless display.
 `9950x Desktop (Tailscale)` uses the exact private host identity and 15 Mbps.
 
 The SYSTEM task `EdSys Nimo 9950x LAN Route` runs at startup/logon and every
-minute. It manages only an ActiveStore host `/32` route on an up, Preferred,
+minute. An event trigger also runs five seconds after system wake or network
+connection, with minute retries for three minutes while the adapter settles.
+`nimo-route-events.ps1` adds this trigger to the existing SYSTEM task, preserves
+its action and other triggers, and backs up the prior task XML in the protected
+runtime directory. It can be reapplied without duplicate event triggers. This
+uses Windows [event subscriptions](https://learn.microsoft.com/en-us/windows/win32/taskschd/eventtrigger-subscription).
+It manages only an ActiveStore host `/32` route on an up, Preferred,
 explicitly allowed EdSys LAN interface. This avoids the advertised Tailscale
 subnet route taking local traffic. It supports the qualified wired dock and
 Wi-Fi addresses, removes its own stale route off LAN, and refuses conflicting
@@ -126,7 +132,18 @@ python3 -m unittest discover -s services/sunshine-desktop/tests -v
 systemd-analyze verify services/sunshine-desktop/*.service
 ```
 
-Use Windows PowerShell's parser on both scripts before deployment. Test the
+Use Windows PowerShell's parser on all scripts before deployment. Test the
 route task as SYSTEM, not just from an administrator SSH session. Never use
 Moonlight `--help` through a noninteractive Windows SSH session: its blocking
 dialog can capture subsequent single-instance CLI requests.
+
+## 2026-09-12 wake recovery
+
+After Nimo resumed from sleep, its direct host route was absent while the
+existing minute task still showed its previous-night run and missed executions.
+Both peer allowlists and the wired reservation were correct. The existing route
+helper immediately restored direct LAN streaming, confirmed by Jeremy. The wake
+and network-connect event trigger was then deployed and its event query matched
+real local wake/network events. SYSTEM invocation, idempotent registration, and
+positive streaming/negative administration probes passed. A subsequent natural
+sleep/wake recovery remains to be confirmed; the working session was retained.

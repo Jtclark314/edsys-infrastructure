@@ -42,6 +42,7 @@ $triggers = @((New-ScheduledTaskTrigger -AtStartup),(New-ScheduledTaskTrigger -A
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName 'EdSys Nimo 9950x LAN Route' -Action $action -Trigger $triggers -Principal $principal -Settings $settings -Description 'Use the direct qualified EdSys LAN interface for the 9950x; retain Tailscale off LAN.' -Force | Out-Null
+& (Join-Path $PSScriptRoot 'nimo-route-events.ps1')
 & (Join-Path $root 'nimo-route.ps1')
 $shell = New-Object -ComObject WScript.Shell
 $desktop = [Environment]::GetFolderPath('Desktop')
