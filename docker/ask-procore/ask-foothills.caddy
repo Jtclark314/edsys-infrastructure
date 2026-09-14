@@ -1,0 +1,22 @@
+# Replace only the existing Ask Foothills site block in ingress Caddyfile.
+# Cloudflare Access continues to protect this existing hostname.
+http://ask.foothillsproject.com {
+	header Strict-Transport-Security "max-age=15552000; includeSubDomains"
+	redir /procore /procore/ 308
+	handle_path /procore/* {
+		reverse_proxy 192.168.50.50:8765 {
+			header_up Host {host}
+			header_up X-Forwarded-Proto https
+			flush_interval -1
+		}
+	}
+	handle {
+		reverse_proxy 192.168.50.50:3036 {
+			header_up Host {host}
+			header_up X-Real-IP {http.request.header.Cf-Connecting-Ip}
+			header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto https
+		}
+	}
+}
