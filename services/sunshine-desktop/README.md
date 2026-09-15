@@ -1,8 +1,8 @@
 # 9950x Sunshine console desktop
 
 Owner: Jeremy. Qualified host: Ubuntu 24.04, GNOME X11 console `:0`, RTX 5060.
-This is a single-client Desktop-only deployment for Nimo, not a generic server
-installer. XRDP and its separate `:10` desktop remain unchanged recovery paths.
+This is a Desktop-only deployment with one active stream at a time. Nimo is
+qualified; the work-laptop client setup is prepared, with laptop acceptance pending. XRDP and its separate `:10` desktop remain unchanged recovery paths.
 Current acceptance and limitations live in EdSys-Master's
 `docs/9950X_REMOTE_DESKTOP.md`.
 
@@ -112,7 +112,7 @@ Existing EdCore/RDP shortcuts are not modified.
 ## Security, data and rollback
 
 - Mandatory LAN and WAN encryption; UPnP disabled; no public forward, tunnel,
-  Serve or Funnel. Only exact Nimo identities on expected interfaces may reach
+  Serve or Funnel. Only exact approved Nimo/work-laptop identities on expected interfaces may reach
   stream ports. IPv6 stream traffic is denied. Web administration is loopback
   only through both Sunshine origin policy and nft filtering.
 - Streaming TCP: 47984, 47989, 48010. Guarded UDP: 47998, 47999, 48000, 48002,
@@ -147,3 +147,41 @@ and network-connect event trigger was then deployed and its event query matched
 real local wake/network events. SYSTEM invocation, idempotent registration, and
 positive streaming/negative administration probes passed. A subsequent natural
 sleep/wake recovery remains to be confirmed; the working session was retained.
+
+## 2026-09-15 work laptop preparation
+
+The host guard now admits the independently verified work-laptop Tailnet peer,
+with all Nimo LAN/Tailnet entries preserved. Sunshine administration remains
+loopback-only. The previous private client configuration is retained for rollback.
+Sunshine, its guard, and XRDP remain active; no Sunshine restart is required.
+
+`install-work-laptop.ps1` runs locally as the ordinary `THOMPSON\jclark`
+user on `THOMPSON-LC086`. Inbound administration was refused during preflight,
+so the existing trusted outbound SSH connection supplies a private local-run
+bundle and returns a bounded result. The script checks existing signed clients,
+streaming reachability and administration denial before installation. If absent,
+it installs official Moonlight 6.1.0 portable under LocalAppData after a pinned
+archive SHA-256 and Windows Authenticode publisher check. It retains an existing
+valid client and does not request elevation or change Windows services/routes.
+
+The existing trusted SSH path carries a generated pairing PIN only on stdin to
+`pair-local.py`; the helper uses local private recovery credentials solely against
+Sunshine's loopback API. Credentials, PINs, client state, and raw output never
+enter source or shared-drive publication. The helper requires no exposed admin
+port or extra listener. The client verifies the paired Desktop application before
+creating and reading back two shortcuts. Both work-laptop shortcuts use Tailscale
+at 1080p60 HEVC/hardware decoding, 15 Mbps, borderless display, absolute mouse,
+system-key capture, and quit-after cleanup. The ordinary shortcut deliberately
+works away from the EdSys LAN. It does not install Nimo's LAN route task.
+
+Rollback: restore any backed-up shortcuts and remove only this owned portable
+installation; retain pre-existing Moonlight and its state. Remove only the new
+work-laptop host allowlist entry and atomically reapply the existing guard if
+revoking access. Revoke its Sunshine pairing separately if pairing completed.
+
+Verified before handoff: official archive download/hash, Valid Windows signature
+from Cameron Gutman, real Windows PowerShell 5.1 parsing, ten existing host tests,
+and authenticated loopback administration. Work-laptop installed-client inventory,
+local script execution, pairing, GPU decoding, video/audio, normal disconnect,
+display restoration, and reconnect remain **to be confirmed** until local setup
+returns a result and the owner opens a stream. One stream at a time remains required.
