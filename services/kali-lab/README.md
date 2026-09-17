@@ -21,12 +21,16 @@ on `pve-node3` (EdCore v3).
   SSH through the `pve-node3` jump host. A separate personal `jeremy` console
   account has ordinary password-backed sudo; login material remains private
   in local credential storage and must never be stored in Git or RAG.
+  Kali also has owner-authorized public Internet through a separate QEMU
+  user-mode NAT adapter; see [Internet access](internet/README.md).
   Metasploitable is intentionally vulnerable and has no production-network
   attachment.
 
-The lab is never to be attached to `vmbr0`, NAT, a physical network, the EdSys
-LAN, the Tailnet, or the Internet. Both guests remain shut off except during a
-bounded training session.
+The training bridge and vulnerable Metasploitable target must never be
+attached to `vmbr0`, NAT, a physical network, the EdSys LAN, the Tailnet, or
+the Internet. On 2026-09-16 the owner explicitly authorized a separate
+Kali-only user-mode NAT adapter for Internet use. Neither host nor Kali
+forwards lab traffic. Both guests retain disabled autostart.
 
 ## Deployable source
 
@@ -119,8 +123,16 @@ also intentionally requires both lab guests stopped.
 The owner-authorized [streaming setup](streaming/README.md) adds Sunshine
 inside Kali and an exact-Nimo Tailnet socket relay on pve-node3. Double-click
 **Kali Desktop** on Nimo after starting VM 330. The existing noVNC console
-remains available. No guest NIC, gateway, NAT, or forwarding was added; only
-the documented streaming sockets are proxied from the private client.
+remains available. The streaming installation itself added no guest NIC,
+gateway, NAT, or forwarding; only the documented streaming sockets are
+proxied from the private client. The later Internet exception is below.
+
+## Kali-only Internet access
+
+After the offline streaming baseline, the owner authorized Internet access
+for Kali. [Internet setup and recovery](internet/README.md) describes its
+separate user-mode NAT adapter, public DNS, private-destination firewall,
+and verification. Metasploitable remains isolated and stopped.
 
 ## Legacy Omarchy/libvirt files
 

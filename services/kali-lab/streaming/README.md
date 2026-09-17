@@ -2,8 +2,10 @@
 
 Sunshine runs inside Kali VM 330; the existing Moonlight client on Nimo opens
 its Xfce console through a narrowly scoped TCP/UDP relay on pve-node3. This is
-an application proxy, not IP forwarding. Kali retains its sole isolated
-vmbr77 NIC, no gateway or DNS, and no Internet or Tailnet attachment.
+an application proxy, not IP forwarding. Streaming stays on the isolated
+vmbr77 NIC. The owner subsequently authorized a separate Kali-only
+[Internet adapter](../internet/README.md); it does not change this relay
+or attach the vulnerable target to an online network.
 
 ## Owner use
 
@@ -98,8 +100,9 @@ Run `python3 -m unittest discover -s services/kali-lab/streaming/tests -v` and
 validate systemd units on their target hosts. Confirm real Moonlight video,
 audio packets, keyboard and mouse input; reconnect after a clean guest start
 and verify the login screen. Confirm host IPv4/IPv6 forwarding remains zero,
-vmbr77 has no physical uplink, guest routes remain lab-only, non-Nimo clients
-cannot reach the relay, and guest admin 47990 is blocked even from the host.
+vmbr77 has no physical uplink, the lab route remains on eth0 and only the
+approved Internet adapter has a default route, non-Nimo clients cannot reach
+the relay, and guest admin 47990 is blocked even from the host.
 Use the full lab verifier with **both guests stopped**; its running-VM check
 has the preexisting Proxmox firewall-bridge naming limitation documented in
 the parent README.

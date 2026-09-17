@@ -1,0 +1,6 @@
+[Match]
+MACAddress=52:54:00:ed:78:10
+
+[Link]
+NamePolicy=
+Name=kali-wan

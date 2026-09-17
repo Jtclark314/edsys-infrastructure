@@ -1,0 +1,27 @@
+# Dedicated QEMU user-mode adapter: public IPv4 only; no new LAN/host access.
+table inet edsys_kali_internet {
+    set non_public_v4 {
+        type ipv4_addr
+        flags interval
+        elements = { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10,
+            127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12,
+            192.0.0.0/24, 192.0.2.0/24, 192.168.0.0/16,
+            198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24,
+            224.0.0.0/4, 240.0.0.0/4 }
+    }
+    chain output {
+        type filter hook output priority -30; policy accept;
+        oifname "kali-wan" meta nfproto ipv6 counter reject
+        oifname "kali-wan" ip daddr @non_public_v4 counter reject
+    }
+    chain input {
+        type filter hook input priority -30; policy accept;
+        iifname "kali-wan" ct state established,related accept
+        iifname "kali-wan" counter drop
+    }
+    chain forward {
+        type filter hook forward priority -30; policy accept;
+        iifname "kali-wan" counter drop
+        oifname "kali-wan" counter drop
+    }
+}

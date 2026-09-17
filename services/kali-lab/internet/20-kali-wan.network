@@ -1,0 +1,15 @@
+[Match]
+Name=kali-wan
+MACAddress=52:54:00:ed:78:10
+
+[Network]
+Address=10.0.2.15/24
+LinkLocalAddressing=no
+IPv6AcceptRA=no
+IPForward=no
+LLMNR=no
+MulticastDNS=no
+
+[Route]
+Gateway=10.0.2.2
+Metric=100
