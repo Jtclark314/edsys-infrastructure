@@ -1,4 +1,4 @@
-# Kali-only Internet access
+# Kali Internet and approved home-LAN access
 
 Owner-authorized on 2026-09-16 after the initial offline desktop/streaming
 setup. Kali now has two virtual adapters:
@@ -6,7 +6,7 @@ setup. Kali now has two virtual adapters:
 | Adapter | Purpose | Configuration |
 | --- | --- | --- |
 | net0 / eth0 | Existing training lab and Nimo stream relay | vmbr77, 192.168.77.10/24, unchanged |
-| net1 / kali-wan | Public Internet browsing and downloads | QEMU user-mode NAT, 10.0.2.15/24, gateway 10.0.2.2 |
+| net1 / kali-wan | Public Internet and approved 192.168.50.0/24 connections | QEMU user-mode NAT, 10.0.2.15/24, gateway 10.0.2.2 |
 
 Metasploitable VM 331 remains stopped with only its vmbr77 adapter. Neither
 pve-node3 nor Kali forwards IPv4 or IPv6 packets. The lab bridge still has
@@ -14,7 +14,13 @@ no physical uplink, gateway/DNS DHCP options, or kernel NAT. QEMU translates
 only VM 330's dedicated adapter traffic in userspace; no inbound port
 mappings are configured. Moonlight and key-only SSH still use net0.
 
-The guest firewall blocks private, loopback, link-local, shared-address,
+The owner subsequently authorized all destinations in 192.168.50.0/24. An
+explicit output accept for that subnet precedes the private-address reject.
+This permits connections to home devices, including management services;
+access alone performs no scan, but intrusive tests or compromised Kali
+software can affect those devices. Other private subnets remain blocked.
+
+The guest firewall otherwise blocks private, loopback, link-local, shared-address,
 documentation, multicast, and reserved IPv4 destinations on kali-wan, plus
 all IPv6 there. This includes the QEMU host service endpoint 10.0.2.2.
 Using it as an IP gateway does not require opening IP connections to that
@@ -53,8 +59,9 @@ credentials or private Tailnet identity.
 5. Run `verify-host.sh` on pve-node3. In Kali check `ip route`, both forwarding
    sysctls, `nft list table inet edsys_kali_internet`, and active nftables.
    Verify public DNS, HTTPS to example.com and http.kali.org, and a real
-   browser page. Negative TCP tests to 192.168.50.1, 192.168.50.54,
-   10.0.2.2 and a representative shared-address destination must fail.
+   browser page. Bounded connection checks to known live services on
+   192.168.50.54 and 192.168.50.51 must succeed. Negative checks to
+   192.168.51.1, 10.0.2.2 and a shared-address destination must fail.
    `networkctl reload` / `networkctl reconfigure kali-wan` must preserve
    connectivity and streaming. Retain the accepted snapshot
    `internet-enabled-20260916`.
@@ -66,6 +73,11 @@ if unrelated firewall changes have been made since the backup. Restore the
 full pre-change VM snapshot only when its rollback scope is intended. Keep
 all host forwarding guards and the existing streaming relay in place.
 
+For only the LAN exception rollback, remove the 192.168.50.0/24 accept rule
+and atomically replace just `inet edsys_kali_internet`. The private
+`egress-before-lan.nft` backup and `internet-enabled-20260916` snapshot
+retain the prior Internet-only policy. No network adapter changes are needed.
+
 ## Verification and limits
 
 Live acceptance on 2026-09-16 covered DNS, successful HTTPS document retrieval,
@@ -75,7 +87,12 @@ networkd reconfiguration, and active streaming. No guest reboot was needed;
 persistent files and QEMU configuration were validated, while a later cold
 boot remains an additional check.
 
-QEMU user-mode networking is suitable for browsing and package downloads.
+The subsequent LAN exception passed two TCP connection checks to known
+Proxmox management endpoints, continued Internet HTTPS, and rejected
+out-of-scope private destinations. No network scan or exploit was run.
+Forwarding remains disabled and the target remains stopped and isolated.
+
+QEMU user-mode networking is suitable for browsing and TCP/UDP connections.
 It is not a transparent Ethernet connection: some ICMP/raw-packet exercises
 need the separate training interface. Do not interpret a failed Internet
 ping alone as proof that browsing is broken. Reference:

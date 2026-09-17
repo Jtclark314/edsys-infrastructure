@@ -131,7 +131,8 @@ proxied from the private client. The later Internet exception is below.
 
 After the offline streaming baseline, the owner authorized Internet access
 for Kali. [Internet setup and recovery](internet/README.md) describes its
-separate user-mode NAT adapter, public DNS, private-destination firewall,
+separate user-mode NAT adapter, public DNS, private-destination firewall
+with an owner-approved 192.168.50.0/24 exception,
 and verification. Metasploitable remains isolated and stopped.
 
 ## Legacy Omarchy/libvirt files
