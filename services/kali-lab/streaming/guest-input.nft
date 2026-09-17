@@ -1,0 +1,3 @@
+# Include inside the existing default-drop guest input chain.
+iifname "eth0" ip saddr 192.168.77.1 tcp dport { 47984, 47989, 48010 } accept comment "EdSys Kali stream relay"
+iifname "eth0" ip saddr 192.168.77.1 udp dport { 47998, 47999, 48000, 48002, 48010 } accept comment "EdSys Kali stream relay"

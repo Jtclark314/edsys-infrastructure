@@ -1,0 +1,13 @@
+[Unit]
+Description=Exact-peer Kali streaming firewall guard
+After=network-pre.target nftables.service
+Before=kali-sunshine.service kali-stream-tcp@47984.service kali-stream-tcp@47989.service kali-stream-tcp@48010.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/edsys-kali-stream/guard.env
+ExecStart=/usr/local/libexec/edsys-kali-stream/guard.py ${ROLE}
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

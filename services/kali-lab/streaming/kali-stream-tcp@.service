@@ -1,0 +1,24 @@
+[Unit]
+Description=Restricted Kali TCP streaming relay port %i
+After=network-online.target tailscaled.service kali-stream-guard.service
+Requires=kali-stream-guard.service
+StartLimitIntervalSec=0
+
+[Service]
+User=edsys-kali-relay
+Group=edsys-kali-relay
+EnvironmentFile=/etc/edsys-kali-stream/relay.env
+ExecStart=/usr/bin/socat -T 120 TCP4-LISTEN:%i,bind=${BIND_ADDRESS},range=${NIMO_ADDRESS}/32,reuseaddr,fork,max-children=8 TCP4:192.168.77.10:%i,bind=192.168.77.1,connect-timeout=5
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_UNIX
+TasksMax=20
+MemoryMax=64M
+
+[Install]
+WantedBy=multi-user.target

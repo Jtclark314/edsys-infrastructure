@@ -1,0 +1,15 @@
+{
+  "env": {},
+  "apps": [
+    {
+      "name": "Desktop",
+      "image-path": "desktop.png",
+      "prep-cmd": [
+        {
+          "do": "/usr/bin/xrandr --output Virtual-1 --mode 1920x1080 --rate 60",
+          "undo": ""
+        }
+      ]
+    }
+  ]
+}

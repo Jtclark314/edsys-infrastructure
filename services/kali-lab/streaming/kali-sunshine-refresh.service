@@ -1,0 +1,6 @@
+[Unit]
+Description=Reconnect Sunshine to the current LightDM console
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl try-restart kali-sunshine.service

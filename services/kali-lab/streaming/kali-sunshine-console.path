@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh Kali streaming when LightDM replaces console authority
+
+[Path]
+PathChanged=/run/lightdm/root/:0
+Unit=kali-sunshine-refresh.service
+
+[Install]
+WantedBy=graphical.target

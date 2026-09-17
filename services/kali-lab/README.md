@@ -114,6 +114,14 @@ running. In that case inspect the entire bridge path and host guard directly;
 do not remove the firewall to make the checker pass. The full Proxmox verifier
 also intentionally requires both lab guests stopped.
 
+## Moonlight streaming from Nimo
+
+The owner-authorized [streaming setup](streaming/README.md) adds Sunshine
+inside Kali and an exact-Nimo Tailnet socket relay on pve-node3. Double-click
+**Kali Desktop** on Nimo after starting VM 330. The existing noVNC console
+remains available. No guest NIC, gateway, NAT, or forwarding was added; only
+the documented streaming sockets are proxied from the private client.
+
 ## Legacy Omarchy/libvirt files
 
 The XML, preseed, systemd-networkd, and Omarchy/libvirt installer files still

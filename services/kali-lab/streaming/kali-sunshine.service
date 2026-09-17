@@ -1,0 +1,34 @@
+[Unit]
+Description=Kali console streaming as the unprivileged personal user
+After=lightdm.service user@1001.service kali-stream-guard.service
+Requires=kali-stream-guard.service
+Wants=lightdm.service user@1001.service
+StartLimitIntervalSec=0
+
+[Service]
+User=jeremy
+Group=jeremy
+RuntimeDirectory=edsys-kali-sunshine
+RuntimeDirectoryMode=0700
+Environment=HOME=/home/jeremy
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/run/edsys-kali-sunshine/Xauthority
+Environment=XDG_RUNTIME_DIR=/run/user/1001
+Environment=PULSE_SERVER=unix:/run/user/1001/pulse/native
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus
+Environment=QT_QPA_PLATFORM=offscreen
+ExecStartPre=+/usr/local/libexec/edsys-kali-stream/prepare-console.py
+ExecStart=/opt/edsys-sunshine/2026.914.233613/squashfs-root/AppRun /home/jeremy/.config/sunshine/sunshine.conf
+Restart=always
+RestartSec=3
+TimeoutStopSec=10
+KillMode=control-group
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/jeremy/.config/sunshine /run/user/1001
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=graphical.target
