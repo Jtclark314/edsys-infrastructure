@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""Launch the pinned local coding profile without modifying other AI clients."""
+import json
+import argparse
+import os
+from pathlib import Path
+
+source = Path("/srv/edsys/edsys-infrastructure/services/local-coder")
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument("--tools", choices=("all", "code", "browser", "desktop"), default="all")
+options, arguments = parser.parse_known_args()
+config = json.loads((source / "opencode.json").read_text())
+for name, server in config.get("mcp", {}).items():
+    server["enabled"] = options.tools in ("all", name)
+state = Path("/mnt/ai-store/local-coder")
+if not Path("/mnt/ai-store").is_mount():
+    raise SystemExit("AI Store is not mounted; local coder launch stopped")
+os.umask(0o077)
+for name in ("data", "cache", "config", "state", "browser-output", "desktop-notes"):
+    (state / name).mkdir(mode=0o700, parents=True, exist_ok=True)
+env = os.environ.copy()
+env.update({
+    "XDG_DATA_HOME": str(state / "data"),
+    "XDG_CACHE_HOME": str(state / "cache"),
+    "XDG_CONFIG_HOME": str(state / "config"),
+    "XDG_STATE_HOME": str(state / "state"),
+    "OPENCODE_CONFIG_CONTENT": json.dumps(config),
+    "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
+    "OPENCODE_DISABLE_AUTOUPDATE": "1",
+    "OPENCODE_DISABLE_MODELS_FETCH": "1",
+    "OPENCODE_PURE": "1",
+})
+# This profile does not export prompts through the host's optional tracing config.
+for name in tuple(env):
+    if name.startswith("OTEL_"):
+        env.pop(name)
+binary = "/mnt/ai-store/apps/local-coder/opencode-1.18.31/node_modules/.bin/opencode"
+os.execve(binary, [binary, *arguments], env)

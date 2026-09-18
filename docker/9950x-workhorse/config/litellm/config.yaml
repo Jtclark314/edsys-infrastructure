@@ -12,6 +12,18 @@ model_list:
     litellm_params:
       model: ollama_chat/qwen2.5-coder:32b
       api_base: http://host.docker.internal:11434
+  # Dedicated, qualified CPU-only agent model. Existing aliases stay unchanged.
+  - model_name: edsys-coder-agent-local
+    litellm_params:
+      model: ollama_chat/edsys-qwen36-coder:latest
+      api_base: http://ollama-coder:11434
+      timeout: 1800
+      num_retries: 0
+      max_parallel_requests: 1
+    model_info:
+      mode: chat
+      supports_function_calling: true
+      supports_vision: true
   - model_name: edsys-llama-8b
     litellm_params:
       model: ollama_chat/llama3.1:8b

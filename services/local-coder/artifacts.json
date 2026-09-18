@@ -1,0 +1,15 @@
+{
+  "model": "Qwen/Qwen3.6-35B-A3B",
+  "ollama_source": "qwen3.6:35b-a3b-q8_0",
+  "quantization": "Q8_0",
+  "source_manifest_sha256": "0218f872e86baa9c7610509f27db36a7bc52eea7afee24688f81ca74ffcb6c77",
+  "model_blob_sha256": "7d8298ddcbce81ae5b237e42cd551db8352cf362564caa826b5ded02041fdfeb",
+  "model_blob_bytes": 38696955136,
+  "ollama_image": "ollama/ollama@sha256:020e4134285e2ef4d8fd801234176de3b4faadc992a3eb06c8e66a2f9d4c4ba2",
+  "ollama_version": "0.33.2",
+  "opencode_version": "1.18.31",
+  "opencode_npm_integrity": "sha512-J95feefeWwtIaw3irx76WjzWcgQXxmuHmDVphvs5ep9X30fBJ6T6bFhw50i9Kx50MG/xPn5w2pafXIfNtdry9w==",
+  "playwright_mcp_version": "0.0.81",
+  "mcp_python_version": "2.2.0",
+  "pillow_version": "12.3.0"
+}

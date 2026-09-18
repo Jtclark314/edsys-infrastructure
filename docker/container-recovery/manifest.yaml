@@ -167,6 +167,12 @@ tiers:
   - name: dependent-applications
     blocking: false
     projects:
+      - name: edsys-local-coder
+        files: [/srv/edsys/edsys-infrastructure/services/local-coder/compose.yaml]
+        services: [ollama-coder]
+        healthchecks:
+          - url: http://127.0.0.1:11435/api/tags
+            codes: [200]
       - name: anythingllm
         files: [/srv/edsys/edsys-infrastructure/docker/anythingllm/compose.yaml]
         services: [anythingllm]

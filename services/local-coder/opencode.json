@@ -1,0 +1,114 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "edsys-local/edsys-qwen36-coder:latest",
+  "small_model": "edsys-local/edsys-qwen36-coder:latest",
+  "enabled_providers": [
+    "edsys-local"
+  ],
+  "share": "disabled",
+  "autoupdate": false,
+  "provider": {
+    "edsys-local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "EdSys local Qwen3.6 coder",
+      "options": {
+        "baseURL": "http://127.0.0.1:11435/v1",
+        "timeout": 1800000,
+        "headerTimeout": 1800000,
+        "chunkTimeout": 1800000
+      },
+      "models": {
+        "edsys-qwen36-coder:latest": {
+          "name": "Qwen3.6 35B A3B Q8 (local)",
+          "reasoning": true,
+          "tool_call": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "limit": {
+            "context": 65536,
+            "output": 16384
+          },
+          "options": {
+            "temperature": 0.6,
+            "topP": 0.95
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "attachment": true
+        }
+      }
+    }
+  },
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    },
+    "edit": "allow",
+    "bash": "ask",
+    "external_directory": "deny",
+    "webfetch": "deny",
+    "websearch": "deny",
+    "task": "allow",
+    "browser_*": "ask",
+    "desktop_*": "ask",
+    "desktop_desktop_screenshot": "allow"
+  },
+  "compaction": {
+    "auto": true,
+    "prune": true
+  },
+  "agent": {
+    "build": {
+      "steps": 40
+    },
+    "plan": {
+      "steps": 20
+    },
+    "general": {
+      "steps": 20,
+      "model": "edsys-local/edsys-qwen36-coder:latest"
+    },
+    "explore": {
+      "steps": 20,
+      "model": "edsys-local/edsys-qwen36-coder:latest"
+    }
+  },
+  "mcp": {
+    "browser": {
+      "type": "local",
+      "command": [
+        "/mnt/ai-store/apps/local-coder/opencode-1.18.31/node_modules/.bin/playwright-mcp",
+        "--browser",
+        "chrome",
+        "--headless",
+        "--isolated",
+        "--caps",
+        "vision",
+        "--output-dir",
+        "/mnt/ai-store/local-coder/browser-output"
+      ],
+      "enabled": true,
+      "timeout": 120000
+    },
+    "desktop": {
+      "type": "local",
+      "command": [
+        "/srv/edsys/edsys-infrastructure/services/local-coder/desktop-mcp.sh"
+      ],
+      "enabled": true,
+      "timeout": 30000
+    }
+  },
+  "subagent_depth": 1
+}
