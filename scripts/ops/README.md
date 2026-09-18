@@ -79,7 +79,8 @@ part of a source-definition rollback.
 
 Review scripts before running and keep runtime output outside the repo unless it has been sanitized.
 
-The ARR transfer controller contract, maintenance modes, and fault-reset order
+The current concurrent-download policy and retained, disabled ARR controller
+contract, maintenance modes, and fault-reset order
 are documented in [`docs/ARR_TRANSFER_ARBITER.md`](../../docs/ARR_TRANSFER_ARBITER.md).
 
 ## Tests

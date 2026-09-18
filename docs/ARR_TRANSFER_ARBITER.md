@@ -1,6 +1,49 @@
 # ARR Transfer Arbiter
 
-Status: deployment source and operator contract for `arr-server`.
+Status: concurrent downloaders active on `arr-server` as of 2026-09-18;
+the retained mutual-exclusion controller is disabled.
+
+## Current operating policy
+
+The owner selected simultaneous SABnzbd and qBittorrent operation on EdCore.
+`arr-transfer-arbiter.service` and `arr-transfer-arbiter-health.timer` are
+stopped and disabled. Do not enable the arbiter, run its installer, or use
+its mode/fail-safe commands during normal concurrent operation: those actions
+would restore the superseded mutual-exclusion policy.
+
+- qBittorrent has `restart: unless-stopped` in the live
+  `/opt/arr-vpn/docker-compose.yml` and the existing Docker container.
+- SAB persists `start_paused=0` and `preserve_paused_state=0`. Its own
+  `pause_on_post_processing=1` remains enabled; that internal queue pause no
+  longer controls qBittorrent. Both its queue and post-processor were resumed.
+- Both downloaders remain enabled in Sonarr, Radarr, and Lidarr. All six
+  application download-client tests passed after restart.
+- qBittorrent still shares Gluetun's network namespace. When restarting the
+  whole stack, stop dependents, restart Gluetun, wait for VPN health, then
+  start the downloaders and applications. Preserve existing containers and
+  images unless a separate change calls for recreation or upgrades.
+- All 14 previously active containers restarted successfully. The pre-existing
+  inactive Kometa duplicate remains inactive. Download bind identities match
+  across SAB and ARR; all three media roots remain accessible.
+
+VM200 retains four vCPU and fixed 12 GiB RAM. The pre-change guest had about
+10 GiB available, EdCore had about 28 GiB available, the approximately 794 GiB
+NVMe thin pool was 46.68% used, and sampled host/guest swap-in/out was zero.
+These observations support concurrent operation; a simultaneous sustained
+download/repair benchmark and a full-host reboot in this mode remain untested.
+Acceptance used existing jobs and client connection tests, without adding
+downloads. Existing completed torrents remain stopped under the policy below.
+
+Before the change, Compose, SAB/qBittorrent settings, controller state, and
+container/unit metadata were backed up in a root-private timestamped
+`/var/backups/edsys/arr-concurrent-*` directory on `arr-server`.
+For an owner-directed return to mutual exclusion, quiesce both downloaders
+and use the reviewed installer below to restore the complete boot-safety,
+restart-policy, daemon, and health-timer contract together. Do not restore
+individual settings while the other client continues transferring.
+
+The sections describing arbitration below are retained implementation and
+recovery history. They apply only when the arbiter is explicitly reinstated.
 
 ## Completed torrent policy
 
@@ -11,16 +54,16 @@ The Web API readback is `max_ratio_enabled=true`, `max_ratio=0`,
 `max_seeding_time_enabled=true`, `max_seeding_time=0`, and `max_ratio_act=0`.
 Unset ARR indexer and per-torrent seeding limits inherit these defaults.
 
-This is a qBittorrent completion policy, not a change to the arbiter invariant.
-Normal operation remains `auto`; torrent downloading can still upload pieces
-before completion. Keep the completion action at `Stop` so ARR can import
+This completion policy remains active in concurrent operation. Torrent
+downloading can still upload pieces before completion. Keep the completion
+action at `Stop` so ARR can import
 before removing completed torrent data. Do not automatically delete payloads
 at the qBittorrent ratio boundary. Private pre-change configuration and job
 metadata are retained on `arr-server` under
 `/var/backups/edsys/arr-cleanup-20260906/`; restoring those settings would
 re-enable the previous seeding behavior and requires owner authorization.
 
-## Purpose
+## Retained arbiter purpose (inactive)
 
 `arr-transfer-arbiter` prevents SABnzbd and qBittorrent from transferring at
 the same time. SABnzbd has priority in `auto` mode. The safety invariant is:
