@@ -1,0 +1,20 @@
+[Unit]
+Description=EdSys local coder Tailscale owner identity bridge
+After=edsys-local-coder-web.service
+Wants=edsys-local-coder-web.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/mountpoint -q /mnt/ai-store
+ExecStart=/home/jeremy/.local/bin/node /srv/edsys/edsys-infrastructure/services/local-coder/web-proxy.mjs
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=default.target

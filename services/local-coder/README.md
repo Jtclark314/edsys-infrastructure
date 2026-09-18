@@ -63,6 +63,46 @@ permissions. Existing client allowlists and model aliases are preserved. The
 direct local launcher requires no broker credential. Broker credentials can be
 reissued through the existing service-key workflow if restoring from source.
 
+## Private web interface
+
+The persistent OpenCode UI is `https://9950x.taile832fe.ts.net:8444/`, available
+through Tailscale, including Nimo. Nimo has a **Local AI - OpenCode** desktop
+shortcut to the prepared **Local AI Lab** session; the private session link is
+stored outside Git. If starting from the home page, use **Add project** to select
+`/home/jeremy/projects/local-ai-lab`, then **New session**. Qwen is preselected;
+browser and desktop MCPs use the same qualified local profile. Computation and
+files stay on 9950x. The backend starts in this fresh project directory.
+
+`install-web.sh` installs/enables two lingering user services:
+`edsys-local-coder-web.service` serves OpenCode on loopback 4096;
+`edsys-local-coder-web-proxy.service` runs the Node identity bridge on loopback
+4097. Tailscale Serve owns HTTPS 8444. Existing 443/8443 routes are preserved;
+Funnel is not enabled. The bridge admits only the configured owner identity
+injected by Serve, checks the public host and HTTPS route, and rejects foreign
+origins. Mutations and WebSocket upgrades require the same origin. Streaming
+responses and WebSocket connections pass through without buffering.
+
+OpenCode also requires an internal Basic credential injected by the bridge.
+The browser never receives this credential. Owner configuration and generated
+credentials live in `/mnt/ai-store/local-coder/web/` with private permissions,
+not in Git. Missing identity, a wrong owner, or direct unauthenticated backend
+access fails closed. Other processes running as Jeremy remain within the same
+OS trust boundary. Neither service grants sudo access.
+
+Verify with `systemctl --user status edsys-local-coder-web{,-proxy}.service`,
+the HTTPS `/global/health` and `/mcp` endpoints, and
+`node --test tests/test_web_proxy.mjs`. Nimo HTTPS/browser loading and a controlled
+service restart passed. Full-host reboot acceptance remains to be confirmed.
+
+To restore, run `install-web.sh` after restoring the pinned client/runtime. It
+retains existing private credentials and requires the same owner identity.
+User lingering is already enabled on 9950x. To roll back only web access, run
+`tailscale serve --https=8444 off`, then disable/stop the two user services.
+Do not reset all Serve configuration. CLI/model use remains independent.
+`install-nimo-web.ps1 -Url <private-session-url>` restores the shortcut without
+overwriting an unrelated file. If the initial session is deleted, use the base
+UI URL to start another; session links are not credentials or durable source.
+
 ## Install and reproduce
 
 Run `./install.sh` only for an authorized install or recovery. It requires

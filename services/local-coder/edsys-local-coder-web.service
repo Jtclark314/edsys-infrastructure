@@ -1,0 +1,19 @@
+[Unit]
+Description=EdSys local Qwen OpenCode web application
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/home/jeremy/projects/local-ai-lab
+EnvironmentFile=/mnt/ai-store/local-coder/web/server.env
+Environment=PATH=/home/jeremy/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStartPre=/usr/bin/mountpoint -q /mnt/ai-store
+ExecStart=/home/jeremy/.local/bin/edsys-code serve --hostname 127.0.0.1 --port 4096 --cors https://9950x.taile832fe.ts.net:8444
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
