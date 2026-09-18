@@ -135,6 +135,14 @@ separate user-mode NAT adapter, public DNS, private-destination firewall
 with an owner-approved 192.168.50.0/24 exception,
 and verification. Metasploitable remains isolated and stopped.
 
+## Home-network review script
+
+The owner-requested [network review script](review/README.md) is available in
+Kali Documents as `kali_network_review.py`. It defaults to a printed plan,
+forces TCP connect scanning through user-mode NAT, and offers selected-host
+Nmap NSE, HTTP and TLS evidence collection. Delivery was verified offline;
+no live scan was run. Reports stay private outside Git/RAG.
+
 ## Legacy Omarchy/libvirt files
 
 The XML, preseed, systemd-networkd, and Omarchy/libvirt installer files still
