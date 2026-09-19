@@ -7,6 +7,13 @@
   ],
   "share": "disabled",
   "autoupdate": false,
+  "plugin": [
+    "file:///srv/edsys/edsys-infrastructure/services/local-coder/context-plugin.mjs"
+  ],
+  "instructions": [
+    "/srv/edsys/edsys-infrastructure/services/local-coder/AGENT_RULES.md",
+    "/home/jeremy/code/EdSys-Master/docs/context-packs/LOCAL_CODER_STARTUP.md"
+  ],
   "provider": {
     "edsys-local": {
       "npm": "@ai-sdk/openai-compatible",
@@ -55,8 +62,9 @@
       "*.env.example": "allow"
     },
     "edit": "allow",
-    "bash": "ask",
-    "external_directory": "deny",
+    "bash": "allow",
+    "external_directory": "allow",
+    "edsys_*": "allow",
     "webfetch": "deny",
     "websearch": "deny",
     "task": "allow",
@@ -77,14 +85,32 @@
     },
     "general": {
       "steps": 20,
-      "model": "edsys-local/edsys-qwen36-coder:latest"
+      "model": "edsys-local/edsys-qwen36-coder:latest",
+      "permission": {
+        "edsys_save_checkpoint": "deny"
+      },
+      "prompt": "You are a delegated local EdSys agent. The reviewed hook supplies this worktree guidance and checkpoint automatically on every model turn. Use edsys_session_context if an explicit refresh is needed; report missing automatic context before proceeding. Follow the shared EdSys startup briefing and AGENT_RULES. You are not alone: preserve other work. Cite only exact source paths returned by tools or actually provided in your instructions; never construct an unverified citation path. Do not save shared project checkpoints; return concise results, evidence and limitations to the parent. Work only on the bounded task assigned by the parent."
     },
     "explore": {
       "steps": 20,
-      "model": "edsys-local/edsys-qwen36-coder:latest"
+      "model": "edsys-local/edsys-qwen36-coder:latest",
+      "permission": {
+        "edsys_save_checkpoint": "deny",
+        "edit": "deny"
+      },
+      "prompt": "You are a delegated local EdSys agent. The reviewed hook supplies this worktree guidance and checkpoint automatically on every model turn. Use edsys_session_context if an explicit refresh is needed; report missing automatic context before proceeding. Follow the shared EdSys startup briefing and AGENT_RULES. You are not alone: preserve other work. Cite only exact source paths returned by tools or actually provided in your instructions; never construct an unverified citation path. Do not save shared project checkpoints; return concise results, evidence and limitations to the parent. Your assignment is read-only exploration. Do not edit files or run mutating commands. Use specific record queries or source reads and return the findings."
     }
   },
   "mcp": {
+    "edsys": {
+      "type": "local",
+      "command": [
+        "/mnt/ai-store/apps/local-coder/desktop-venv/bin/python",
+        "/srv/edsys/edsys-infrastructure/services/local-coder/knowledge_mcp.py"
+      ],
+      "enabled": true,
+      "timeout": 30000
+    },
     "browser": {
       "type": "local",
       "command": [

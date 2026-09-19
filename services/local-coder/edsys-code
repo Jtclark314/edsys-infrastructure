@@ -9,16 +9,37 @@ source = Path("/srv/edsys/edsys-infrastructure/services/local-coder")
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("--tools", choices=("all", "code", "browser", "desktop"), default="all")
 options, arguments = parser.parse_known_args()
+if any(arg == "--pure" or arg.startswith("--pure=") for arg in arguments):
+    raise SystemExit("The EdSys context hook is required; --pure is not supported by this launcher")
 config = json.loads((source / "opencode.json").read_text())
+instruction_size = 0
+for filename in config.get("instructions", []):
+    path = Path(filename)
+    if not path.is_file():
+        raise SystemExit("Required local-coder instruction file is missing: " + filename)
+    instruction_size += len(path.read_text())
+if instruction_size > 36000:
+    raise SystemExit("Local-coder startup briefing exceeds its 36000-character budget; review before launch")
 for name, server in config.get("mcp", {}).items():
-    server["enabled"] = options.tools in ("all", name)
+    server["enabled"] = name == "edsys" or options.tools in ("all", name)
 state = Path("/mnt/ai-store/local-coder")
 if not Path("/mnt/ai-store").is_mount():
     raise SystemExit("AI Store is not mounted; local coder launch stopped")
 os.umask(0o077)
-for name in ("data", "cache", "config", "state", "browser-output", "desktop-notes"):
+for name in ("data", "cache", "config", "state", "browser-output", "desktop-notes", "project-memory"):
     (state / name).mkdir(mode=0o700, parents=True, exist_ok=True)
+# Permit only the reviewed absolute local hook. Project configs remain disabled;
+# reject the other auto-discovery surfaces instead of enabling arbitrary plugins.
+expected_plugin = (source / "context-plugin.mjs").as_uri()
+if config.get("plugin") != [expected_plugin] or not (source / "context-plugin.mjs").is_file():
+    raise SystemExit("The reviewed EdSys context hook is missing or plugin configuration changed")
+allowed = {"package.json", "package-lock.json", "bun.lock", "bun.lockb", "node_modules", ".gitignore"}
+for directory in (state / "config" / "opencode", Path.home() / ".opencode"):
+    if directory.exists() and any(p.name not in allowed for p in directory.iterdir()):
+        raise SystemExit("Unexpected OpenCode config/plugin surface; review before launch: " + str(directory))
 env = os.environ.copy()
+for name in ("OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR"):
+    env.pop(name, None)
 env.update({
     "XDG_DATA_HOME": str(state / "data"),
     "XDG_CACHE_HOME": str(state / "cache"),
@@ -28,7 +49,7 @@ env.update({
     "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
     "OPENCODE_DISABLE_AUTOUPDATE": "1",
     "OPENCODE_DISABLE_MODELS_FETCH": "1",
-    "OPENCODE_PURE": "1",
+    "OPENCODE_PURE": "0",
 })
 # This profile does not export prompts through the host's optional tracing config.
 for name in tuple(env):

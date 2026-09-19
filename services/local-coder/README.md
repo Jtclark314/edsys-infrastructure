@@ -25,8 +25,9 @@ Owner: Jeremy. Host: 9950x. Runtime state and qualification evidence are under
 - OpenCode model, auxiliary model, and subagents all use the local provider.
   Reasoning content is preserved across calls. Sharing and automatic upgrades
   are disabled; the launcher uses private XDG state and disables project config
-  overrides, external plugins, remote model-catalog fetches, and inherited OTEL
-  exporters. Repository instruction files still apply.
+  overrides, unreviewed plugins, remote model-catalog fetches, and inherited OTEL
+  exporters. One reviewed local context hook is enabled; unexpected global/home
+  config or plugin surfaces stop the launcher. Project config remains disabled.
 
 ## Use
 
@@ -39,12 +40,13 @@ edsys-code --tools desktop
 edsys-code --tools code run 'Inspect this bug and suggest a fix'
 ```
 
-The default `all` profile enables both MCPs. Narrow profiles save context when
-the task only needs code, browser, or desktop tools. Code edits and delegation
-are enabled; shell commands and interactive browser/desktop actions ask for
-approval by default. Do not use automatic approval on an unreviewed repository
-or with consequential external actions. Tool permissions are workflow controls,
-not an OS sandbox.
+The default `all` profile enables browser, desktop and EdSys records/continuity MCPs. The EdSys MCP remains enabled in every tool profile. Narrow profiles save context when
+the task only needs code, browser, or desktop tools. Code edits and delegation are enabled. Jeremy explicitly authorized full terminal
+access on 2026-09-18: Bash and external project paths are allowed without routine
+approval clicks. Interactive browser/desktop actions still ask. The web worker
+allows the existing account sudo policy to apply (`NoNewPrivileges=false`); no
+new sudo rule, account, key, or management listener is installed. These are
+workflow controls, not an OS sandbox or permission for unrelated actions.
 
 Playwright uses a separate ephemeral, headless Chrome profile with its browser
 sandbox enabled. The desktop MCP starts a separate Xvfb display at `:90` or
@@ -62,6 +64,109 @@ service-scoped credential is stored outside Git under
 permissions. Existing client allowlists and model aliases are preserved. The
 direct local launcher requires no broker credential. Broker credentials can be
 reissued through the existing service-key workflow if restoring from source.
+
+## EdSys context and project continuity
+
+The launcher requires two absolute instruction files: local `AGENT_RULES.md`
+and `EdSys-Master/docs/context-packs/LOCAL_CODER_STARTUP.md`. Together they
+provide roughly 3,500 words of operating rules, device aliases/roles, software
+relationships, source ownership and working conventions. They are reviewed
+source, not live health. The launcher refuses missing files or a combined
+36,000-character budget overflow. OpenCode loads them for primary and delegated
+sessions and reloads instructions on subsequent model turns, including after
+compaction. This is external context, not model training.
+
+Pinned OpenCode's `OPENCODE_DISABLE_PROJECT_CONFIG=1` also suppresses automatic
+root AGENTS loading. Keep provider isolation. The reviewed `context-plugin.mjs` automatically supplies
+the current worktree's root AGENTS (CLAUDE fallback), latest private checkpoint
+and grounding freshness on every model call and before compaction. The
+`edsys_session_context` tool provides an explicit refresh when needed. Nested
+instructions must be read when entering their directories. The project is the
+MCP process cwd resolved to its Git worktree root, not the web service's initial
+working directory. The hook invokes the read-only Python context reader with
+argument arrays, uses only Node built-ins, makes no network request and writes
+nothing. Missing/corrupt context stops the model call instead of silently dropping
+notes. The launcher admits only this absolute local plugin, rejects other
+auto-discovery surfaces, clears inherited config overrides and disallows `--pure`
+(which would suppress the required hook). No global project-memory file is copied
+across projects.
+
+`knowledge_mcp.py` exposes four tools through the existing pinned Python MCP
+runtime, with no new package, cloud request, listener or duplicate records DB:
+
+- `edsys_session_context`: project guidance/checkpoint and index health.
+- `edsys_search_records`: bounded, source-cited FTS over the existing grounding
+  SQLite file; historical/superseded records excluded by default.
+- `edsys_read_record`: bounded pages by stable record ID, not arbitrary paths.
+- `edsys_save_checkpoint`: primary-agent private project notes using an expected
+  revision and existing relative evidence files. General/explore agents are
+  denied this tool and return findings to their parent.
+
+Each query opens the index read-only, accepts schema 1, enforces its existing
+15-minute freshness budget, verifies retrieved files against indexed hashes,
+and checks reviewed source roots. Results include path, hash, status, available
+audit date, modification date and index time. An index rebuild is not a fresh
+source audit. Historical retrieval requires an explicit tool flag. No result,
+stale index or changed source is an explicit gap, not a fabricated answer.
+The adapter does not reproduce the Portal's deterministic answer-citation gate;
+model use of the evidence and citations still needs review.
+
+Private checkpoints live at
+`/mnt/ai-store/local-coder/project-memory/<sha256-of-worktree-path>/checkpoint.json`.
+They contain outcome, completed work, decisions, next steps, blockers and file
+hashes. Locking, compare-and-swap revisions, atomic writes and 20 prior revisions
+protect concurrent sessions. Files are 0600 and project directories 0700.
+Changed/deleted evidence is marked on recall. Hashes prove file identity, not
+the truth of model-written claims. Obvious credential patterns are rejected;
+this is not a comprehensive data-loss prevention system. Never store secrets,
+transcripts or business records. Notes are advisory and stay outside Git/RAG;
+reviewed shared facts continue through the existing source publication process.
+
+Use `./install-context.sh` to apply these components to an existing installation
+without reinstalling weights or restarting inference. It checks dependencies,
+runs focused tests, refuses a busy web instance, installs the PowerShell helper
+and reloads only the active OpenCode web unit. Let user work finish, or obtain
+explicit authorization before cancelling a stalled session. Run `install-web.sh`
+for a fresh web installation. Restore previous source/config and unit from Git
+for rollback; retain private checkpoints and sessions. Off-host checkpoint backup
+is not yet accepted and remains part of the private-state backup gap.
+
+## Terminal and PowerShell
+
+The native Bash tool runs on 9950x and can invoke existing local programs and
+SSH aliases. `edsys-powershell --list` describes supported routes. Examples:
+
+```bash
+edsys-powershell --host 9950x --file ./task.ps1
+edsys-powershell --host nimo --file ./task.ps1
+edsys-powershell --host basecamp --file ./task.ps1
+ssh -o BatchMode=yes pve-node3 hostname
+```
+
+Local files run with `pwsh -File`. Remote scripts travel over SSH stdin to a
+small encoded bootstrap using strict host-key checks and existing accounts;
+quotes/newlines/Unicode survive, and no execution-policy bypass is added.
+Remote code is a scriptblock: it has no transferred file or remote PSScriptRoot.
+For scripts with sibling-file dependencies, use the normal terminal/SFTP workflow
+and run the actual remote file. The maintained Windows routes use PowerShell as the SSH default shell; the
+helper explicitly propagates the nested interpreter exit code through it.
+Nonzero exit codes propagate; the default client
+timeout is 300 seconds and is configurable. A timeout cannot guarantee every
+remote child exited, so inspect before retrying consequential commands.
+
+PowerShell file write/read/cleanup acceptance passed on 9950x (PowerShell 7.6.6),
+Nimo and Basecamp (Windows PowerShell 5.1). Existing SSH read-only hostname checks
+passed on router, pve-node0–3, primary/secondary Pi-hole, arr-vm, ingress,
+node1-services, family-services, NetBox and living-room Pi5. These Linux hosts
+have native shells; those checks found no remote `pwsh`. Windows-specific
+cmdlets still require a Windows host.
+
+The work laptop was online but rejected TCP 22; no inbound execution route is
+configured. Maktop's server/SSH role was retired. Neither is claimed remotely
+executable. Adding those endpoints requires a device-side authenticated
+management setup and its own verification. Home Assistant/appliances and
+isolated lab guests retain their owning management procedure; “full terminal”
+does not create an arbitrary shell or administrator account on every device.
 
 ## Private web interface
 
@@ -164,3 +269,30 @@ to be confirmed. Do not copy raw qualification logs into documentation.
 - [Ollama tool loops](https://docs.ollama.com/capabilities/tool-calling)
 - [OpenCode provider configuration](https://opencode.ai/docs/providers/)
 - [Playwright MCP](https://github.com/microsoft/playwright-mcp)
+
+## Context acceptance notes
+
+Twenty Python unit tests and two hook tests passed. A local protocol fixture
+captured actual OpenCode parent, child and continuation requests and proved that
+each received both project guidance and private checkpoint content even with
+all MCP tools disabled. This protocol test uses a fake provider; it is evidence
+of client injection, not Qwen reasoning quality.
+
+Real Qwen fixed the disposable function, passed 3 project tests and 11 independent
+edge cases, delegated an EdSys ownership lookup, ran all three PowerShell targets
+and saved a checkpoint in one turn. A fresh web session recalled the checkpoint,
+reported unchanged evidence, identified the project marker and refused to invent
+an unknown device. Initial child runs skipped the prompt-only context call and
+one cited a nonexistent briefing path; this led to automatic context injection
+and tighter exact-source instructions. Record use and citations still need review.
+
+With tools disabled, real Qwen automatically read a newly saved checkpoint marker,
+revision and unchanged evidence in a fresh web session. After explicit conversation
+compaction, it correctly read a second new checkpoint revision and marker while
+retaining the project guidance and 9950x/Nimo roles. Neither marker was supplied
+in the conversation. This verifies automatic refresh through the deployed hook.
+
+Observed first requests used about 14.4K tokens with the code-only tool profile
+and 19.8K with all tool groups before adding the small automatic project payload.
+The complete coding/delegation/terminal/checkpoint fixture took about 11 minutes
+on this CPU configuration. These are bounded observations, not a general benchmark.

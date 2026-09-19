@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Run local or SSH PowerShell without shell interpolation or policy bypass."""
+import argparse
+import base64
+import json
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+WINDOWS = {'nimo': 'nimo-laptop', 'nimo-laptop': 'nimo-laptop', 'basecamp': 'basecamp', 'foothills-basecamp': 'basecamp'}
+LINUX = ['edrouter-node0', 'pve-node0', 'pve-node1', 'pve-node2', 'pve-node3',
+         'pihole-primary', 'pihole-secondary', 'arr-vm', 'edsys-ingress',
+         'node1-services', 'family-services', 'netbox', 'edsys-edge-livingroom']
+BOOTSTRAP = '''$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue';
+[Console]::InputEncoding=[System.Text.UTF8Encoding]::new($false);
+[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false);
+$global:LASTEXITCODE=0;
+try { $text=[Console]::In.ReadToEnd(); & ([scriptblock]::Create($text)); if ($LASTEXITCODE) { exit $LASTEXITCODE } }
+catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }
+'''
+
+
+def remote_command(host: str, engine: str) -> list[str]:
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,252}', host):
+        raise ValueError('Use an existing SSH host alias or hostname, not SSH options or user@host')
+    if engine not in ('pwsh', 'powershell.exe'):
+        raise ValueError('Unsupported PowerShell engine')
+    encoded = base64.b64encode(BOOTSTRAP.encode('utf-16le')).decode('ascii')
+    command = f'{engine} -NoLogo -NoProfile -NonInteractive -EncodedCommand {encoded}'
+    # Both maintained Windows routes use Windows PowerShell as OpenSSH's
+    # DefaultShell. Its -Command wrapper otherwise collapses nonzero native
+    # exit codes to 1. Propagate the nested interpreter's actual result.
+    if host in WINDOWS:
+        command += '; exit $LASTEXITCODE'
+    return ['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
+            '-o', 'ConnectTimeout=10', WINDOWS.get(host, host),
+            command]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--host', default='9950x', help='9950x/local, nimo, basecamp, or an existing SSH alias')
+    parser.add_argument('--engine', choices=('pwsh', 'powershell.exe'), help='Remote default: Windows PowerShell for nimo/basecamp, pwsh otherwise')
+    parser.add_argument('--file', type=Path, help='Local UTF-8 .ps1 file; remotely runs as a scriptblock without a remote PSScriptRoot')
+    parser.add_argument('--timeout', type=int, default=300, help='Client wait limit in seconds; timeout may not stop a remote child process')
+    parser.add_argument('--list', action='store_true')
+    args = parser.parse_args()
+    if args.list:
+        print(json.dumps({'local': {'host': '9950x', 'engine': 'pwsh'},
+                          'windows': {'nimo': 'nimo-laptop / powershell.exe', 'basecamp': 'basecamp / powershell.exe'},
+                          'linux_ssh': LINUX,
+                          'notes': ['Linux SSH access does not imply PowerShell is installed; use native SSH commands when appropriate.',
+                                    'Work laptop has no configured inbound execution route. Maktop former SSH server role was retired.',
+                                    'Existing SSH accounts, known-host checks and OS permissions apply; no ExecutionPolicy bypass.',
+                                    'Inventory is orientation; verify current reachability.']}, indent=2))
+        return 0
+    if args.file is None or not args.file.is_file() or args.file.stat().st_size > 4_000_000:
+        parser.error('--file must name an existing UTF-8 script of at most 4 MB')
+    if not 1 <= args.timeout <= 86400:
+        parser.error('--timeout must be 1..86400 seconds')
+    try:
+        if args.host in ('9950x', 'local', 'localhost'):
+            argv = [args.engine or 'pwsh', '-NoLogo', '-NoProfile', '-NonInteractive', '-File', str(args.file.resolve())]
+            return subprocess.run(argv, timeout=args.timeout).returncode
+        engine = args.engine or ('powershell.exe' if args.host in WINDOWS else 'pwsh')
+        # Script bytes travel over encrypted stdin, not a command-line argument or log.
+        script = args.file.read_text(encoding='utf-8-sig')
+        return subprocess.run(remote_command(args.host, engine), input=script.encode('utf-8'), timeout=args.timeout).returncode
+    except subprocess.TimeoutExpired:
+        print('PowerShell client timed out; inspect the target before retrying because a remote child may remain.', file=sys.stderr)
+        return 124
+    except (OSError, UnicodeError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

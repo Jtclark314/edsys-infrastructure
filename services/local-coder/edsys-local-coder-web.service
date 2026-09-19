@@ -13,7 +13,8 @@ Restart=always
 RestartSec=5
 TimeoutStopSec=20
 UMask=0077
-NoNewPrivileges=true
+# Owner-authorized terminal profile: existing sudo policy applies to this account.
+NoNewPrivileges=false
 
 [Install]
 WantedBy=default.target

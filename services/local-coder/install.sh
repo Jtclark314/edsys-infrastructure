@@ -6,7 +6,7 @@ source_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 runtime_dir=/mnt/ai-store/apps/local-coder
 client_dir="$runtime_dir/opencode-1.18.31"
 mountpoint -q /mnt/ai-store || { echo 'AI Store must be mounted' >&2; exit 1; }
-for program in docker node npm uv Xvfb xvfb-run xauth xdotool xfwm4 dbus-run-session google-chrome mousepad xcalc; do
+for program in docker node npm uv pwsh Xvfb xvfb-run xauth xdotool xfwm4 dbus-run-session google-chrome mousepad xcalc; do
   command -v "$program" >/dev/null || { echo "Missing dependency: $program" >&2; exit 1; }
 done
 /usr/bin/python3 -c "import tkinter"
@@ -33,6 +33,12 @@ if [[ -e "$launcher" || -L "$launcher" ]]; then
   [[ "$(readlink -f "$launcher")" == "$source_dir/edsys-code" ]] || { echo 'Existing launcher belongs to another installation' >&2; exit 1; }
 else
   ln -s "$source_dir/edsys-code" "$launcher"
+fi
+ps_launcher=/home/jeremy/.local/bin/edsys-powershell
+if [[ -e "$ps_launcher" || -L "$ps_launcher" ]]; then
+  [[ "$(readlink -f "$ps_launcher")" == "$source_dir/edsys-powershell" ]] || { echo 'PowerShell helper belongs to another installation' >&2; exit 1; }
+else
+  ln -s "$source_dir/edsys-powershell" "$ps_launcher"
 fi
 "$launcher" --version
 "$launcher" mcp list
