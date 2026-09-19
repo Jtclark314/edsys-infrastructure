@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh private local-coder conversation archive
+
+[Timer]
+OnStartupSec=30s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

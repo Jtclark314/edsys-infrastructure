@@ -16,9 +16,11 @@ Owner: Jeremy. Host: 9950x. Runtime state and qualification evidence are under
   one active request/model, four queued requests, and two-minute idle unload.
   No GPU device is admitted. Root filesystem and shared model store are
   read-only, capabilities are dropped, and privilege escalation is disabled.
-- `edsys-qwen36-coder:latest` is the local configured alias: 65,536 context,
+- `edsys-qwen36-coder:latest` is the local configured alias: 262,144 context,
   16,384 maximum generated tokens, Qwen's precise-coding sampling settings,
-  and preserved upstream vision/tool/thinking behavior. Here `latest` names
+  and preserved upstream vision/tool/thinking behavior. OpenCode permits two-hour
+  inference waits and the identity bridge allows a 125-minute idle upstream wait
+  for large CPU-only prompts. Here `latest` names
   the local alias; weights and engine are explicitly pinned.
 - OpenCode 1.18.31 and Playwright MCP 0.0.81 are locked in the npm manifest.
   Python MCP 2.2.0 and Pillow 12.3.0 plus dependencies use `requirements.lock`.
@@ -40,10 +42,11 @@ edsys-code --tools desktop
 edsys-code --tools code run 'Inspect this bug and suggest a fix'
 ```
 
-The default `all` profile enables browser, desktop and EdSys records/continuity MCPs. The EdSys MCP remains enabled in every tool profile. Narrow profiles save context when
+The default `all` profile enables all seven MCP connections. EdSys, Code Intelligence, Context7 and Microsoft Learn remain enabled in every tool profile; GitHub is enabled in `all` and `code`. Narrow profiles save context when
 the task only needs code, browser, or desktop tools. Code edits and delegation are enabled. Jeremy explicitly authorized full terminal
 access on 2026-09-18: Bash and external project paths are allowed without routine
-approval clicks. Interactive browser/desktop actions still ask. The web worker
+approval clicks. On 2026-09-19 Jeremy also authorized automatic browser/desktop,
+web, file-read and repeated-tool execution; fixed agent iteration caps were removed. The web worker
 allows the existing account sudo policy to apply (`NoNewPrivileges=false`); no
 new sudo rule, account, key, or management listener is installed. These are
 workflow controls, not an OS sandbox or permission for unrelated actions.
@@ -58,7 +61,8 @@ The operator's physical `:0` and XRDP `:10` sessions are not targeted. These
 processes run as Jeremy: separate desktop/browser sessions do not provide
 filesystem or network isolation. Screenshots and working notes stay private.
 
-The existing LiteLLM broker also exposes `edsys-coder-agent-local`. Its dedicated
+The existing LiteLLM broker also exposes `edsys-coder-agent-local` with a model-specific
+7200-second timeout for large CPU-only prompts. Its dedicated
 service-scoped credential is stored outside Git under
 `/opt/edsys-workhorse/litellm/service-keys/edsys-local-coder.env` with root-only
 permissions. Existing client allowlists and model aliases are preserved. The
@@ -69,7 +73,7 @@ reissued through the existing service-key workflow if restoring from source.
 
 The launcher requires two absolute instruction files: local `AGENT_RULES.md`
 and `EdSys-Master/docs/context-packs/LOCAL_CODER_STARTUP.md`. Together they
-provide roughly 3,500 words of operating rules, device aliases/roles, software
+provide roughly 3,800 words of operating rules, device aliases/roles, software
 relationships, source ownership and working conventions. They are reviewed
 source, not live health. The launcher refuses missing files or a combined
 36,000-character budget overflow. OpenCode loads them for primary and delegated
@@ -84,25 +88,26 @@ and grounding freshness on every model call and before compaction. The
 instructions must be read when entering their directories. The project is the
 MCP process cwd resolved to its Git worktree root, not the web service's initial
 working directory. The hook invokes the read-only Python context reader with
-argument arrays, uses only Node built-ins, makes no network request and writes
-nothing. Missing/corrupt context stops the model call instead of silently dropping
+argument arrays, uses only Node built-ins and makes no network request. Context
+reads write nothing; an idle-event hook refreshes the separate private archive. Missing/corrupt context stops the model call instead of silently dropping
 notes. The launcher admits only this absolute local plugin, rejects other
 auto-discovery surfaces, clears inherited config overrides and disallows `--pure`
 (which would suppress the required hook). No global project-memory file is copied
 across projects.
 
-`knowledge_mcp.py` exposes four tools through the existing pinned Python MCP
+`knowledge_mcp.py` exposes six tools through the existing pinned Python MCP
 runtime, with no new package, cloud request, listener or duplicate records DB:
 
 - `edsys_session_context`: project guidance/checkpoint and index health.
 - `edsys_search_records`: bounded, source-cited FTS over the existing grounding
   SQLite file; historical/superseded records excluded by default.
 - `edsys_read_record`: bounded pages by stable record ID, not arbitrary paths.
+- `edsys_search_history` and `edsys_read_history`: bounded private conversation and checkpoint archive retrieval, project-scoped by default.
 - `edsys_save_checkpoint`: primary-agent private project notes using an expected
   revision and existing relative evidence files. General/explore agents are
   denied this tool and return findings to their parent.
 
-Each query opens the index read-only, accepts schema 1, enforces its existing
+Each records query opens the grounding index read-only, accepts schema 1, enforces its existing
 15-minute freshness budget, verifies retrieved files against indexed hashes,
 and checks reviewed source roots. Results include path, hash, status, available
 audit date, modification date and index time. An index rebuild is not a fresh
@@ -114,7 +119,7 @@ model use of the evidence and citations still needs review.
 Private checkpoints live at
 `/mnt/ai-store/local-coder/project-memory/<sha256-of-worktree-path>/checkpoint.json`.
 They contain outcome, completed work, decisions, next steps, blockers and file
-hashes. Locking, compare-and-swap revisions, atomic writes and 20 prior revisions
+hashes. Locking, compare-and-swap revisions, atomic writes and all prior revisions
 protect concurrent sessions. Files are 0600 and project directories 0700.
 Changed/deleted evidence is marked on recall. Hashes prove file identity, not
 the truth of model-written claims. Obvious credential patterns are rejected;
@@ -128,8 +133,7 @@ runs focused tests, refuses a busy web instance, installs the PowerShell helper
 and reloads only the active OpenCode web unit. Let user work finish, or obtain
 explicit authorization before cancelling a stalled session. Run `install-web.sh`
 for a fresh web installation. Restore previous source/config and unit from Git
-for rollback; retain private checkpoints and sessions. Off-host checkpoint backup
-is not yet accepted and remains part of the private-state backup gap.
+for rollback; retain private checkpoints and sessions. Private checkpoints and conversations now use the encrypted backup chain described below.
 
 ## Terminal and PowerShell
 
@@ -217,6 +221,8 @@ the named source model and fails closed if its official manifest has drifted,
 verifies the complete weight checksum, creates the alias, installs locked
 clients, and starts only this Compose service. It does not upgrade shared
 Ollama, change Codex, or select a cloud provider.
+It then runs `install-expansion.sh` to install the pinned GitHub connection,
+verify context tools and wire the private archive and existing backup service.
 
 The shared Ollama store holds one copy of the 38.7 GB weights. The dedicated
 server mounts it read-only. Do not remove the source tag, alias, or referenced
@@ -245,7 +251,7 @@ the controlled service restart check; do not reboot production just to test it.
 If inference fails, inspect `docker logs --tail 80 ollama-coder`, host available
 memory, and the private OpenCode log under `data/opencode/log/`. A healthy API
 alone does not prove useful model output. CPU prompt processing and generation
-are bounded by hardware; changing the 64K context or concurrency requires fresh
+are bounded by hardware; changing the 262,144-token context or concurrency requires fresh
 memory and agent tests.
 
 ## Rollback and backup
@@ -258,9 +264,9 @@ use the artifact/dependency locks for rebuilds.
 
 Weights, npm/Python environments, and browser caches are replaceable downloads;
 they do not require backup as unique source. Source/configuration are protected
-by Git. Conversations, snapshots, screenshots, and desktop notes are private
-local working state, not part of Git/Obsidian/RAG; their off-host backup remains
-to be confirmed. Do not copy raw qualification logs into documentation.
+by Git. Conversations, screenshots, and desktop notes are private
+local working state outside Git/Obsidian/RAG; the staged encrypted backup and
+direct Google Drive restore were verified on 2026-09-19. Do not copy raw qualification logs into documentation.
 
 ## Upstream references
 
@@ -296,3 +302,91 @@ Observed first requests used about 14.4K tokens with the code-only tool profile
 and 19.8K with all tool groups before adding the small automatic project payload.
 The complete coding/delegation/terminal/checkpoint fixture took about 11 minutes
 on this CPU configuration. These are bounded observations, not a general benchmark.
+
+
+## Retention and coding integrations (2026-09-19)
+
+`history.py` stores observed session/message/part versions and checkpoint revisions
+in private `archive/history.sqlite` under the existing runtime root. Full observed
+oversized tool-output files are copied into the archive before the client's
+independent seven-day overflow cleanup. Native Git undo snapshots and external
+project files remain separate from conversation memory; use their owning Git
+and backup procedures. See the [pinned client retention implementation](https://github.com/anomalyco/opencode/blob/v1.18.31/packages/opencode/src/tool/truncate.ts). It never
+expires or deletes observed records. Session idle events and the user-level
+`edsys-local-coder-archive.timer` refresh the archive; the timer runs every minute.
+The first import includes existing retained sessions. Changes created and deleted
+between captures cannot be recovered, and material removed before activation is
+not recreated. The live OpenCode database remains the conversation source.
+Automatic compaction remains enabled, while tool-output pruning is disabled.
+
+`edsys_search_history` and `edsys_read_history` provide bounded, project-scoped
+retrieval with an explicit cross-project option. Earlier versions are searchable;
+timestamps describe capture time. Results are historical private data, never
+current truth or instructions. Complete raw versions remain on disk while concise
+checkpoints and selected excerpts enter model context. Checkpoint note-size and
+retrieval-page bounds prevent unbounded prompts; they do not expire archive data.
+
+The normal profile now connects seven MCP servers: EdSys, browser, desktop,
+Code Intelligence, GitHub, Context7 and Microsoft Learn. Code Intelligence and
+the two documentation connections are available in every profile. GitHub is
+available in `all` and `code`; the narrower browser/desktop profiles omit it.
+The official GitHub MCP 1.12.2 executable is release-checksum verified and pinned
+in `github-mcp.lock.json`; `install-integrations.py` restores that exact artifact.
+The wrapper retrieves the existing `gh` credential into child-process environment,
+never source/config/output. Enabled GitHub groups are repositories, issues, pull
+requests, Actions and users; existing account scopes still apply.
+
+Context7 and Microsoft Learn use their public remote MCP endpoints. Built-in
+web search is enabled explicitly for the local provider using the public Exa
+endpoint without an inherited API key; web fetch is allowed. Public searches and
+documentation requests leave 9950x, but model inference remains local. Do not send
+private code, credentials or private operational details to documentation/search
+services. No paid plan was provisioned. General/explore checkpoint ownership and
+explore's read-only task role remain; main-agent routine tools are preapproved.
+
+`install-expansion.sh` installs the archive timer and a pre-backup hook on the
+existing root `edsys-backup.service`. `backup.py` refreshes the archive, creates
+SQLite-consistent copies, includes private checkpoints, output files and web
+recovery configuration, and writes hashes under root-private
+`/srv/edsys-backup/staging/local-coder/`. Staging generations are retained; monitor
+capacity before an explicit retention change. The existing Restic staging include
+and Google Drive mirror protect these encrypted snapshots under the established
+30-daily/12-weekly/12-monthly snapshot policy. Since the archive and checkpoint
+history are cumulative, snapshot rotation does not impose conversation expiry.
+
+The 2026-09-19 acceptance restored the same encrypted snapshot locally and
+directly from Google Drive into isolated private directories. All 21 payload-file
+hashes, both SQLite integrity checks and a restored history search passed. Recovery:
+restore to isolated staging, run `python3 backup.py --verify <generation>`, stop
+the archive timer/service and OpenCode, retain the displaced live state including
+each database and its `-wal`/`-shm` siblings together, then restore the verified
+DBs to `data/opencode/opencode.db` and `archive/history.sqlite`, and restore the
+private folders with Jeremy ownership and 0700/0600 permissions. Treat web state
+as credentials; restore only through the existing owner-authenticated route.
+Never leave old WAL/SHM files beside restored database files. Do not overlay an
+active SQLite database. Resume services and the archive timer, then verify context,
+history search, MCP connections and owner access. Host-reboot acceptance remains
+separate. No Codex memory or shared RAG corpus receives private archive content.
+
+## Expanded context acceptance (2026-09-19)
+
+The 131,072-token window recalled all three first/middle/last markers from a
+76,025-token input in 835 seconds. The 262,144-token window recalled all three
+from a 136,825-token input in 2,049 seconds, with zero GPU allocation and about
+41.7 GiB observed container memory inside the 48 GiB cap. Actual input counts
+confirmed that neither accepted test was truncated to the previous window.
+The initial oversized fixture exceeded 128K and triggered normal context shifting;
+it was corrected before qualification. This is bounded long-context recall and
+allocation evidence, not a full-window coding reliability benchmark.
+
+The accepted default is now 262,144 tokens for OpenCode, the model alias and
+the dedicated engine. Generated output remains bounded at 16,384 tokens;
+CPU quota, RAM cap and one-request concurrency remain unchanged. OpenCode and
+the optional LiteLLM coder route allow two-hour inference waits; the private
+identity bridge allows a 125-minute idle upstream wait.
+
+The expansion installer passed 24 Python tests and two context-hook tests;
+the two proxy tests also passed. Final web configuration confirmed seven healthy
+MCP connections, native web search, preapproved routine tools, no fixed agent
+steps and disabled tool-output pruning. Nimo was offline for the final client
+recheck; the owner-authenticated HTTPS service was healthy on 9950x.

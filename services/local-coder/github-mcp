@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+"""Start the checksum-pinned official GitHub server with existing gh credentials."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+
+source = Path(__file__).resolve().parent
+lock = json.loads((source / 'github-mcp.lock.json').read_text())
+binary = Path('/mnt/ai-store/apps/local-coder') / ('github-mcp-' + lock['version']) / 'github-mcp-server'
+if hashlib.sha256(binary.read_bytes()).hexdigest() != lock['binary_sha256']:
+    raise SystemExit('GitHub MCP executable differs from the reviewed artifact')
+env = os.environ.copy()
+env['GH_CONFIG_DIR'] = '/home/jeremy/.config/gh'
+result = subprocess.run(['gh', 'auth', 'token', '--hostname', 'github.com'], env=env, capture_output=True, text=True)
+if result.returncode or not result.stdout.strip():
+    raise SystemExit('GitHub authentication unavailable; restore existing gh login')
+env['GITHUB_PERSONAL_ACCESS_TOKEN'] = result.stdout.strip()
+os.execve(binary, [str(binary), 'stdio', '--toolsets', 'repos,issues,pull_requests,actions,users'], env)

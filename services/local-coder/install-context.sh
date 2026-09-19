@@ -32,4 +32,26 @@ if active:
     subprocess.run(['systemctl','--user','restart','edsys-local-coder-web.service'],check=True)
 print('Context source and PowerShell helper ready; model/engine and other services unchanged')
 PY
-"$source_dir/edsys-code" --tools code mcp list
+# Do not start a second client against the session database while the web
+# process initializes it after restart. Verify the running instance directly.
+python3 - "$source_dir" <<'PY'
+import json, pathlib, subprocess, sys, time, urllib.request
+source = pathlib.Path(sys.argv[1])
+active = subprocess.run(['systemctl','--user','is-active','--quiet','edsys-local-coder-web.service']).returncode == 0
+if not active:
+    subprocess.run([str(source/'edsys-code'),'--tools','code','mcp','list'],check=True)
+    raise SystemExit(0)
+for attempt in range(20):
+    try:
+        with urllib.request.urlopen('https://9950x.taile832fe.ts.net:8444/mcp',timeout=30) as response:
+            groups=json.load(response)
+        expected=set(json.loads((source/'opencode.json').read_text())['mcp'])
+        if set(groups)==expected and all(v.get('status')=='connected' for v in groups.values()):
+            print('Web MCP connections verified:', ', '.join(sorted(groups)))
+            break
+    except (OSError, ValueError):
+        pass
+    time.sleep(1)
+else:
+    raise SystemExit('Web MCP connections did not become healthy after restart')
+PY

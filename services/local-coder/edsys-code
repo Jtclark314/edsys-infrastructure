@@ -21,7 +21,7 @@ for filename in config.get("instructions", []):
 if instruction_size > 36000:
     raise SystemExit("Local-coder startup briefing exceeds its 36000-character budget; review before launch")
 for name, server in config.get("mcp", {}).items():
-    server["enabled"] = name == "edsys" or options.tools in ("all", name)
+    server["enabled"] = name in ("edsys", "code_intelligence", "context7", "microsoft_learn") or options.tools in ("all", name) or (name == "github" and options.tools == "code")
 state = Path("/mnt/ai-store/local-coder")
 if not Path("/mnt/ai-store").is_mount():
     raise SystemExit("AI Store is not mounted; local coder launch stopped")
@@ -38,7 +38,7 @@ for directory in (state / "config" / "opencode", Path.home() / ".opencode"):
     if directory.exists() and any(p.name not in allowed for p in directory.iterdir()):
         raise SystemExit("Unexpected OpenCode config/plugin surface; review before launch: " + str(directory))
 env = os.environ.copy()
-for name in ("OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR"):
+for name in ("OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "EXA_API_KEY"):
     env.pop(name, None)
 env.update({
     "XDG_DATA_HOME": str(state / "data"),
@@ -49,6 +49,8 @@ env.update({
     "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
     "OPENCODE_DISABLE_AUTOUPDATE": "1",
     "OPENCODE_DISABLE_MODELS_FETCH": "1",
+    # Enable the native public-search tool for this custom local provider.
+    "OPENCODE_ENABLE_EXA": "1",
     "OPENCODE_PURE": "0",
 })
 # This profile does not export prompts through the host's optional tracing config.

@@ -1,7 +1,7 @@
 # Official Qwen3.6-35B-A3B, Q8_0. Exact source manifest is in artifacts.json.
 # Preserve the upstream chat/tool template and native thinking support.
 FROM qwen3.6:35b-a3b-q8_0
-PARAMETER num_ctx 65536
+PARAMETER num_ctx 262144
 PARAMETER num_predict 16384
 PARAMETER num_gpu 0
 PARAMETER num_thread 12

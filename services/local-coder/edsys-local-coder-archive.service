@@ -1,0 +1,8 @@
+[Unit]
+Description=Archive private local-coder conversations without expiry
+RequiresMountsFor=/mnt/ai-store
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/python3 /srv/edsys/edsys-infrastructure/services/local-coder/history.py

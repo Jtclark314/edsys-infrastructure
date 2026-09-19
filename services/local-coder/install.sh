@@ -41,4 +41,4 @@ else
   ln -s "$source_dir/edsys-powershell" "$ps_launcher"
 fi
 "$launcher" --version
-"$launcher" mcp list
+"$source_dir/install-expansion.sh"

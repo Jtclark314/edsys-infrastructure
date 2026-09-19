@@ -44,7 +44,7 @@ export function createProxy(config) {
       response.pipe(res);
       response.on('error', () => res.destroy());
     });
-    upstream.setTimeout(35 * 60 * 1000, () => upstream.destroy());
+    upstream.setTimeout(125 * 60 * 1000, () => upstream.destroy());
     upstream.on('error', () => {
       if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain' });
       res.end('Local coding service is starting or unavailable.');

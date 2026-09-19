@@ -268,8 +268,7 @@ class ProjectMemory:
                     os.close(directory_fd)
             finally:
                 Path(temp).unlink(missing_ok=True)
-            for old in sorted(self.folder.glob('revision-*.json'))[:-20]:
-                old.unlink()
+            # Retain every revision. Private history is never automatically expired.
         return {'saved': True, 'project': str(self.root), 'revision': saved['revision'],
                 'updated_at': saved['updated_at'], 'scope': 'private project working notes only'}
 

@@ -148,7 +148,7 @@ class MemoryTests(unittest.TestCase):
             self.save()
         for n in range(1,24):
             self.save(expected_revision=n)
-        self.assertEqual(len(list(self.memory.folder.glob('revision-*.json'))),20)
+        self.assertEqual(len(list(self.memory.folder.glob('revision-*.json'))),23)
         (self.project/'app.py').write_text('print(2)')
         self.assertFalse(self.memory.read()['checkpoint']['evidence'][0]['unchanged'])
         (self.project/'app.py').unlink()

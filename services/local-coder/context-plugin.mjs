@@ -1,4 +1,4 @@
-// Reviewed local OpenCode v1 hook. Built-ins only; no network, package or writes.
+// Reviewed local OpenCode v1 hook. Context reads and private idle-session archiving.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -20,6 +20,13 @@ export const EdSysProjectContext = async ({ directory }) => {
       `Check evidence changes and live conditions before relying on claims.\n` + JSON.stringify(context);
   };
   return {
+    event: async ({ event }) => {
+      if (event.type === 'session.idle' || (event.type === 'session.status' && event.properties?.status?.type === 'idle')) {
+        await execute('/usr/bin/python3', [reader.replace('/knowledge.py', '/history.py')], {
+          timeout: 30000, maxBuffer: 100000, encoding: 'utf8',
+        });
+      }
+    },
     'experimental.chat.system.transform': async (_input, output) => {
       output.system.push(await read());
     },

@@ -20,9 +20,9 @@
       "name": "EdSys local Qwen3.6 coder",
       "options": {
         "baseURL": "http://127.0.0.1:11435/v1",
-        "timeout": 1800000,
-        "headerTimeout": 1800000,
-        "chunkTimeout": 1800000
+        "timeout": 7200000,
+        "headerTimeout": 7200000,
+        "chunkTimeout": 7200000
       },
       "models": {
         "edsys-qwen36-coder:latest": {
@@ -33,7 +33,7 @@
             "field": "reasoning_content"
           },
           "limit": {
-            "context": 65536,
+            "context": 262144,
             "output": 16384
           },
           "options": {
@@ -55,36 +55,27 @@
     }
   },
   "permission": {
-    "read": {
-      "*": "allow",
-      "*.env": "deny",
-      "*.env.*": "deny",
-      "*.env.example": "allow"
-    },
+    "*": "allow",
+    "read": "allow",
     "edit": "allow",
     "bash": "allow",
     "external_directory": "allow",
-    "edsys_*": "allow",
-    "webfetch": "deny",
-    "websearch": "deny",
     "task": "allow",
-    "browser_*": "ask",
-    "desktop_*": "ask",
-    "desktop_desktop_screenshot": "allow"
+    "webfetch": "allow",
+    "websearch": "allow",
+    "doom_loop": "allow",
+    "browser_*": "allow",
+    "desktop_*": "allow",
+    "edsys_*": "allow"
   },
   "compaction": {
     "auto": true,
-    "prune": true
+    "prune": false
   },
   "agent": {
-    "build": {
-      "steps": 40
-    },
-    "plan": {
-      "steps": 20
-    },
+    "build": {},
+    "plan": {},
     "general": {
-      "steps": 20,
       "model": "edsys-local/edsys-qwen36-coder:latest",
       "permission": {
         "edsys_save_checkpoint": "deny"
@@ -92,7 +83,6 @@
       "prompt": "You are a delegated local EdSys agent. The reviewed hook supplies this worktree guidance and checkpoint automatically on every model turn. Use edsys_session_context if an explicit refresh is needed; report missing automatic context before proceeding. Follow the shared EdSys startup briefing and AGENT_RULES. You are not alone: preserve other work. Cite only exact source paths returned by tools or actually provided in your instructions; never construct an unverified citation path. Do not save shared project checkpoints; return concise results, evidence and limitations to the parent. Work only on the bounded task assigned by the parent."
     },
     "explore": {
-      "steps": 20,
       "model": "edsys-local/edsys-qwen36-coder:latest",
       "permission": {
         "edsys_save_checkpoint": "deny",
@@ -132,6 +122,35 @@
       "command": [
         "/srv/edsys/edsys-infrastructure/services/local-coder/desktop-mcp.sh"
       ],
+      "enabled": true,
+      "timeout": 30000
+    },
+    "code_intelligence": {
+      "type": "remote",
+      "url": "http://127.0.0.1:6071/mcp",
+      "oauth": false,
+      "enabled": true,
+      "timeout": 30000
+    },
+    "github": {
+      "type": "local",
+      "command": [
+        "/srv/edsys/edsys-infrastructure/services/local-coder/github-mcp"
+      ],
+      "enabled": true,
+      "timeout": 30000
+    },
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "oauth": false,
+      "enabled": true,
+      "timeout": 30000
+    },
+    "microsoft_learn": {
+      "type": "remote",
+      "url": "https://learn.microsoft.com/api/mcp",
+      "oauth": false,
       "enabled": true,
       "timeout": 30000
     }

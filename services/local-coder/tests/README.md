@@ -68,3 +68,26 @@ explicit outer exit propagation. No production file is edited by these checks.
 Verify the web worker can use existing sudo with `sudo -n id -u`; this read-only
 check does not grant new OS permissions. Unknown/offline endpoints are explicit
 gaps, not grounds to weaken host verification or change credentials.
+
+## Expanded context and retention qualification
+
+Run `test_history.py` with the normal unit suite for retained edited/deleted
+versions, project scope and restored SQLite search. Run the existing hook and
+proxy tests after changing those components. After installing the expansion,
+verify all seven connections through the running web `/mcp` endpoint; do not
+start another client against its database during startup.
+
+`python3 tests/qualify_context_window.py` is an opt-in long-context check. Run it
+only when the model is idle: it allocates 128K then 262K serially and recalls three
+markers from synthetic prompts larger than the previous context threshold.
+It records actual input token counts, allocated window, recall and elapsed time
+under the private evidence root. Oversized prompts can trigger Ollama context
+shifting, so window allocation alone is insufficient. This is bounded recall,
+not a full-window coding benchmark or a reason to raise concurrency.
+
+After applying the accepted profile, use a disposable web session to search/read
+its private history, search local code and retrieve official documentation through
+the new connections. Inspect completed tool calls, not just the final answer.
+Stage a consistent backup, restore the same encrypted snapshot both locally and
+directly from the offsite repository, verify manifest hashes and SQLite integrity,
+and search the restored history. Keep raw results and recovery state outside Git.
