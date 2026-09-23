@@ -69,9 +69,24 @@ $config.allow_mutations = [bool]$AllowMutations
 
 $executable = Join-Path $InstallRoot 'edsys-fleet-agent.exe'
 # Create the identity once, before the long-running task can race its creation.
-$enrollment = & $executable --config $configPath --print-enrollment
-if ($LASTEXITCODE -ne 0) { throw 'Agent identity initialization failed.' }
-$null = ($enrollment | Out-String) | ConvertFrom-Json
+$identityInfo = New-Object Diagnostics.ProcessStartInfo
+$identityInfo.FileName = $executable
+$identityInfo.Arguments = '--config "' + $configPath + '" --print-enrollment'
+$identityInfo.UseShellExecute = $false
+$identityInfo.CreateNoWindow = $true
+$identityInfo.RedirectStandardOutput = $true
+$identityInfo.RedirectStandardError = $true
+$identityProcess = [Diagnostics.Process]::Start($identityInfo)
+try {
+    if (-not $identityProcess.WaitForExit(30000)) {
+        $identityProcess.Kill()
+        throw 'Agent identity initialization timed out.'
+    }
+    if ($identityProcess.ExitCode -ne 0) { throw 'Agent identity initialization failed.' }
+    $enrollment = $identityProcess.StandardOutput.ReadToEnd()
+    $null = $enrollment | ConvertFrom-Json
+}
+finally { $identityProcess.Dispose() }
 $arguments = "--config `"$configPath`""
 $action = New-ScheduledTaskAction -Execute $executable -Argument $arguments
 $trigger = New-ScheduledTaskTrigger -AtLogOn
