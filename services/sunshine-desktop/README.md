@@ -188,6 +188,10 @@ returns a result and the owner opens a stream. One stream at a time remains requ
 
 ## Work laptop as a Sunshine host — prepared 2026-09-23
 
+**Deployment update:** the Sentinel-managed installation below supersedes this
+native Windows Firewall preparation for the actual work laptop. Keep this
+original installer for its explicitly different firewall prerequisites.
+
 `install-work-laptop-host.ps1` is a separate local, elevated installer for
 streaming **the work laptop's desktop to Nimo**. It refuses another computer,
 existing Sunshine, previous setup rules, a missing Tailnet interface, disabled
@@ -227,3 +231,55 @@ Tailnet validation and exact-peer exclusion calculations passed. Local host
 installation, effective corporate firewall policy, encoder/display readiness,
 account creation, Nimo pairing, picture/audio/input, reconnect and reboot
 acceptance remain **to be confirmed**. No laptop installation is claimed.
+
+## Work laptop host — Sentinel deployment accepted 2026-09-23
+
+The owner authorized completion and broader private access. The installed
+provider is Sentinel Firewall; its documented Windows Security Center health
+check passed. `install-work-laptop-sentinel-host.ps1` is the separate fresh-host
+installer for this configuration. It preserves Sentinel policy and Windows
+profile settings. Supply the exact host Tailnet IPv4 privately; `-Plan` is
+read-only. Do not run either fresh-host installer over an existing installation.
+
+The pinned, signature-verified release remains `2026.914.233613`. Before MSI
+custom actions can start Sunshine, the installer creates a loopback-only config.
+The reviewed release migration preserves that file; the installer also refuses
+an MSI containing `sunshine.conf` and verifies the file hash after installation.
+It creates and verifies a random admin credential locally before changing every
+Sunshine listener to the exact Tailnet address. Configuration and recovery
+material are protected for Administrators/SYSTEM. The MSI's own broad Windows
+application allow rules are disabled; no Sentinel rules are added or changed.
+
+Management HTTPS on port 47990 requires authentication and is reachable through
+Tailscale. `origin_web_ui_allowed=wan` accommodates Sunshine's classification of
+Tailnet addresses; it does not create a public or LAN listener. TCP streaming
+uses 47984, 47989 and 48010, with UDP media ports 47998, 47999, 48000, 48002 and
+48010 as needed. Network admission remains governed by Sentinel/Tailscale,
+**not an exact-Nimo firewall allowlist**. Nimo is the paired client, UPnP is off,
+and both LAN/WAN streaming encryption modes are required. Display reconfiguration
+and controller emulation are disabled. The automatic service depends on
+Tailscale and has restart recovery.
+
+Accepted on the real devices: elevated SSH from the hub, exact Tailnet TCP
+listeners, authenticated management and unauthenticated HTTP 401, Nimo pairing,
+preservation of its four previous hosts, a visible 1920x1080/60 desktop stream
+using Intel Quick Sync H.264, active audio capture, and normal disconnect plus
+shortcut reconnect. Nimo's **Work Laptop - Site Office** desktop shortcut opens
+a windowed 15 Mbps stream and exits the client when the stream closes.
+Human confirmation of audible sound/input, natural reboot recovery, lid/sleep
+behavior, and extended-session stability remain **to be confirmed**. No power,
+display-driver, employer-policy or unrelated application changes were made.
+
+The initial post-account API check exposed PowerShell's conversion of `$null`
+to an empty C# string. The HTTP helper now distinguishes empty bodies from POST
+payloads; a real local HTTP-server regression test covers both methods. The
+deployed installation was resumed from its verified loopback state and existing
+credential, without repeating MSI installation. Windows PowerShell parsing,
+live API acceptance and the regression test passed.
+
+Private install/recovery reports live under
+`C:\ProgramData\EdSys\Sunshine-Setup-<run>`. Nimo retains a protected pre-pairing
+registry backup under its local EdSys setup directory. Keep these, credentials,
+paired certificates and screenshots out of Git/RAG. For rollback, stop/disable
+`SunshineService`, uninstall Sunshine normally, and remove only the new Nimo
+shortcut/host entry if desired. Preserve recovery material until accepted.

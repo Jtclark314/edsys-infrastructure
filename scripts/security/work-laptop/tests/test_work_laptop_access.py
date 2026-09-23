@@ -111,6 +111,69 @@ Invoke-AccessWithReceipt -Operation { throw 'different failure' } -ResultPath '_
                 p = self.write_manifest(case)
                 self.assertNotEqual(self.ps(f"Read-AccessManifest '{p}'", check=False).returncode, 0)
 
+    def test_firewall_mode_requires_explicit_supported_manifest(self):
+        p = self.write_manifest()
+        self.assertEqual(self.ps(f"Get-FirewallMode (Read-AccessManifest '{p}')").stdout.strip(), 'WindowsFirewall')
+        p = self.write_manifest(dict(firewallMode='SentinelManaged'))
+        self.assertEqual(self.ps(f"Get-FirewallMode (Read-AccessManifest '{p}')").stdout.strip(), 'SentinelManaged')
+        p = self.write_manifest(dict(firewallMode='SkipAllChecks'))
+        self.assertNotEqual(self.ps(f"Read-AccessManifest '{p}'", check=False).returncode, 0)
+
+    def test_managed_admission_requires_provider_and_live_security_center_health(self):
+        self.ps(r'''
+$script:provider='Sentinel Firewall'; $script:health=0; $script:status=0
+function Get-CimInstance { [pscustomobject]@{displayName=$script:provider} }
+function Get-WindowsFirewallHealth { [pscustomobject]@{status=$script:status;health=$script:health} }
+function Get-NetFirewallProfile { throw 'Managed mode must not use inactive Windows profiles as admission proof' }
+Assert-FirewallAdmission SentinelManaged
+foreach ($badHealth in @(1,2,3)) {
+    $script:health=$badHealth
+    $rejected=$false;try { Assert-FirewallAdmission SentinelManaged } catch { $rejected=$true }
+    if (-not $rejected) { throw 'Unhealthy managed firewall accepted' }
+}
+$script:health=0; $script:status=1
+$rejected=$false;try { Assert-FirewallAdmission SentinelManaged } catch { $rejected=$true }
+if (-not $rejected) { throw 'Unavailable Security Center accepted' }
+$script:status=0; $script:provider='Unknown Firewall'
+$rejected=$false;try { Assert-FirewallAdmission SentinelManaged } catch { $rejected=$true }
+if (-not $rejected) { throw 'Unknown provider accepted' }
+''')
+
+    def test_windows_admission_still_rejects_disabled_profiles(self):
+        self.ps(r'''
+function Get-NetFirewallProfile { [pscustomobject]@{Enabled='False';DefaultInboundAction='Block';AllowLocalFirewallRules='True'} }
+$rejected=$false;try { Assert-FirewallAdmission WindowsFirewall } catch { $rejected=$true }
+if (-not $rejected) { throw 'Disabled native firewall accepted' }
+''')
+
+    def test_managed_failed_stop_revokes_key_first(self):
+        result = self.ps(r'''
+$script:trace=[Collections.Generic.List[string]]::new()
+$script:receipt=@{firewallMode='SentinelManaged'}; $script:keyPath='owned-key'
+function Test-Path { $true }
+function Write-PrivateText { $script:trace.Add('revoke-key') }
+function Get-Service { [pscustomobject]@{Status='Running'} }
+function Set-Service { $script:trace.Add('disable') }
+function Stop-Service { $script:trace.Add('stop'); throw 'simulated stop failure' }
+try { Close-ManagedAccess; throw 'Expected failed stop' } catch {
+    if ($_.Exception.Message -ne 'simulated stop failure') { throw }
+}
+$script:trace | ConvertTo-Json -Compress
+''')
+        self.assertEqual(json.loads(result.stdout), ['revoke-key', 'disable', 'stop'])
+
+    def test_managed_prestage_precedes_capability_and_final_authorization(self):
+        source = SCRIPT.read_text()
+        empty_keys = source.index("Write-PrivateText $keyPath '# Setup in progress: no authorized keys.'")
+        capability = source.index('$result = Add-WindowsCapability')
+        stop = source.index('Stop-Service sshd -ErrorAction Stop', capability)
+        authorize = source.index("Write-PrivateText $keyPath ('from=", stop)
+        start = source.index('Start-Service sshd', authorize)
+        self.assertLess(empty_keys, capability)
+        self.assertLess(capability, stop)
+        self.assertLess(stop, authorize)
+        self.assertLess(authorize, start)
+
     def test_firewall_complement_excludes_only_hub(self):
         for address, expected in [
             ('100.100.10.1', ['0.0.0.0-100.100.10.0', '100.100.10.2-255.255.255.255']),

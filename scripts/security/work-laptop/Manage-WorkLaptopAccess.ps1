@@ -52,7 +52,58 @@ function Read-AccessManifest {
         [BitConverter]::ToString($blob[15..18]) -ne '00-00-00-20') {
         throw 'Malformed Ed25519 key.'
     }
+    if ($m.PSObject.Properties.Name -contains 'firewallMode' -and
+        $m.firewallMode -cnotin @('WindowsFirewall', 'SentinelManaged')) {
+        throw 'Unsupported firewall admission mode.'
+    }
     return $m
+}
+
+function Get-FirewallMode {
+    param($Manifest)
+    if ($Manifest -is [Collections.IDictionary] -and $Manifest.Contains('firewallMode')) { return [string]$Manifest.firewallMode }
+    if ($Manifest.PSObject.Properties.Name -contains 'firewallMode') { return [string]$Manifest.firewallMode }
+    return 'WindowsFirewall'
+}
+
+function Get-WindowsFirewallHealth {
+    # Read the documented Security Center API; do not infer health by decoding
+    # the undocumented FirewallProduct.productState bit layout.
+    if (-not ('EdSys.SecurityCenter' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+namespace EdSys {
+    public static class SecurityCenter {
+        [DllImport("wscapi.dll", ExactSpelling = true)]
+        public static extern int WscGetSecurityProviderHealth(uint providers, out int health);
+    }
+}
+'@
+    }
+    [int]$health = -1
+    $status = [EdSys.SecurityCenter]::WscGetSecurityProviderHealth(1, [ref]$health)
+    return [pscustomobject]@{ status = $status; health = $health }
+}
+
+function Assert-FirewallAdmission {
+    param([ValidateSet('WindowsFirewall', 'SentinelManaged')][string]$Mode)
+    if ($Mode -eq 'SentinelManaged') {
+        $providers = @(Get-CimInstance -Namespace root/SecurityCenter2 -ClassName FirewallProduct)
+        if ($providers.Count -ne 1 -or $providers[0].displayName -cne 'Sentinel Firewall') {
+            throw 'The explicitly selected Sentinel Firewall provider is not the sole registered firewall.'
+        }
+        $health = Get-WindowsFirewallHealth
+        if ($health.status -ne 0 -or $health.health -ne 0) {
+            throw 'Windows Security Center does not report healthy firewall protection; managed admission is not accepted.'
+        }
+        return
+    }
+    foreach ($profile in @(Get-NetFirewallProfile -PolicyStore ActiveStore)) {
+        if ($profile.Enabled -ne 'True' -or $profile.DefaultInboundAction -ne 'Block' -or
+            $profile.AllowLocalFirewallRules -eq 'False') {
+            throw 'Effective Windows Firewall policy does not meet the selected admission mode.'
+        }
+    }
 }
 
 function Get-OtherIPv4Ranges {
@@ -177,6 +228,12 @@ function Assert-ManagedFilesUnchanged {
 function Close-ManagedAccess {
     # Called only after this installer owns the fresh SSH service. Preserve a
     # blocking rule if stopping the service fails; never restore an open rule.
+    if ((Get-Variable -Name receipt -Scope Script -ErrorAction SilentlyContinue) -and
+        (Get-FirewallMode $script:receipt) -eq 'SentinelManaged' -and (Test-Path -LiteralPath $script:keyPath)) {
+        # With third-party admission, revoke new authentication even if service
+        # stop later fails. Do not assume an unenforced Windows rule contains it.
+        Write-PrivateText $script:keyPath '# Access revoked by EdSys.'
+    }
     $svc = Get-Service sshd -ErrorAction SilentlyContinue
     if ($svc) {
         Set-Service sshd -StartupType Disabled
@@ -193,10 +250,8 @@ function Close-ManagedAccess {
 
 function Test-ManagedAccess {
     param($Manifest)
-    foreach ($profile in @(Get-NetFirewallProfile -PolicyStore ActiveStore)) {
-        if ($profile.Enabled -ne 'True' -or $profile.DefaultInboundAction -ne 'Block' -or
-            $profile.AllowLocalFirewallRules -eq 'False') { throw 'Effective firewall policy no longer matches the installation requirements.' }
-    }
+    $mode = Get-FirewallMode $Manifest
+    Assert-FirewallAdmission $mode
     foreach ($path in @($script:stateRoot, $script:sshRoot, $script:configPath, $script:keyPath,
             $script:hostKey, $script:receiptPath)) { Assert-AdminOnlyAcl $path }
     Assert-ManagedFilesUnchanged
@@ -214,26 +269,29 @@ function Test-ManagedAccess {
     $listeners = @(Get-NetTCPConnection -State Listen -LocalPort 22 -ErrorAction Stop)
     if ($listeners.Count -ne 1 -or $listeners[0].LocalAddress -ne $Manifest.laptopAddress -or
         $listeners[0].OwningProcess -ne $svc.ProcessId) { throw 'Unexpected SSH listener or owner.' }
-    $rule = Get-NetFirewallRule -PolicyStore ActiveStore -Name $script:allowRule
-    $addresses = $rule | Get-NetFirewallAddressFilter
-    $ports = $rule | Get-NetFirewallPortFilter
-    if ($rule.Enabled -ne 'True' -or $rule.Action -ne 'Allow' -or $rule.Direction -ne 'Inbound' -or
-        @($addresses.RemoteAddress).Count -ne 1 -or $addresses.RemoteAddress -ne $Manifest.hubAddress -or
-        @($addresses.LocalAddress).Count -ne 1 -or $addresses.LocalAddress -ne $Manifest.laptopAddress -or
-        $ports.LocalPort -ne '22' -or $ports.Protocol -ne 'TCP') { throw 'Effective allow rule is not exact.' }
-    $deny = Get-NetFirewallRule -PolicyStore ActiveStore -Name $script:denyRule
-    $denyAddresses = $deny | Get-NetFirewallAddressFilter
-    $denyPorts = $deny | Get-NetFirewallPortFilter
-    $expectedRanges = @(Get-OtherIPv4Ranges $Manifest.hubAddress)
-    if ($deny.Enabled -ne 'True' -or $deny.Action -ne 'Block' -or $deny.Direction -ne 'Inbound' -or
-        $denyAddresses.LocalAddress -ne $Manifest.laptopAddress -or
-        @(Compare-Object @($denyAddresses.RemoteAddress) $expectedRanges).Count -ne 0 -or
-        $denyPorts.LocalPort -ne '22' -or $denyPorts.Protocol -ne 'TCP') { throw 'Effective exclusion rule is not exact.' }
+    if ($mode -eq 'WindowsFirewall') {
+        $rule = Get-NetFirewallRule -PolicyStore ActiveStore -Name $script:allowRule
+        $addresses = $rule | Get-NetFirewallAddressFilter
+        $ports = $rule | Get-NetFirewallPortFilter
+        if ($rule.Enabled -ne 'True' -or $rule.Action -ne 'Allow' -or $rule.Direction -ne 'Inbound' -or
+            @($addresses.RemoteAddress).Count -ne 1 -or $addresses.RemoteAddress -ne $Manifest.hubAddress -or
+            @($addresses.LocalAddress).Count -ne 1 -or $addresses.LocalAddress -ne $Manifest.laptopAddress -or
+            $ports.LocalPort -ne '22' -or $ports.Protocol -ne 'TCP') { throw 'Effective allow rule is not exact.' }
+        $deny = Get-NetFirewallRule -PolicyStore ActiveStore -Name $script:denyRule
+        $denyAddresses = $deny | Get-NetFirewallAddressFilter
+        $denyPorts = $deny | Get-NetFirewallPortFilter
+        $expectedRanges = @(Get-OtherIPv4Ranges $Manifest.hubAddress)
+        if ($deny.Enabled -ne 'True' -or $deny.Action -ne 'Block' -or $deny.Direction -ne 'Inbound' -or
+            $denyAddresses.LocalAddress -ne $Manifest.laptopAddress -or
+            @(Compare-Object @($denyAddresses.RemoteAddress) $expectedRanges).Count -ne 0 -or
+            $denyPorts.LocalPort -ne '22' -or $denyPorts.Protocol -ne 'TCP') { throw 'Effective exclusion rule is not exact.' }
+    }
     $serviceConfig = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\sshd'
     if ($serviceConfig.DependOnService -notcontains 'Tailscale' -or
         $serviceConfig.DelayedAutoStart -ne 1 -or -not $serviceConfig.FailureActions -or
         $serviceConfig.FailureActionsOnNonCrashFailures -ne 1) { throw 'Boot/recovery settings are incomplete.' }
-    Write-Host 'PASS: local configuration, ACLs, effective firewall, service, and listener.'
+    Write-Host ('PASS: local configuration, ACLs, '+$mode+' admission, service, and listener.')
+    if ($mode -eq 'SentinelManaged') { Write-Host 'Network admission remains with Sentinel/Tailscale policy; hub-only authentication is enforced by the dedicated key and its source restriction.' }
     Write-Host 'Hub login, file transfer, negative access checks, and reboot persistence still require acceptance.'
     Write-Host ('Host key: ' + ((Invoke-Native $script:keygen @('-lf', "$script:hostKey.pub")) -join ' '))
 }
@@ -299,12 +357,8 @@ $hub = @($tail.Peer.PSObject.Properties.Value | Where-Object {
 if ($hub.Count -ne 1) { throw 'The expected 9950x peer is not online in this Tailnet.' }
 $tailService = Get-CimInstance Win32_Service -Filter "Name='Tailscale'"
 if ($tailService.State -ne 'Running' -or $tailService.StartMode -ne 'Auto') { throw 'Tailscale must already run automatically.' }
-foreach ($profile in @(Get-NetFirewallProfile -PolicyStore ActiveStore)) {
-    if ($profile.Enabled -ne 'True' -or $profile.DefaultInboundAction -ne 'Block' -or
-        $profile.AllowLocalFirewallRules -eq 'False') {
-        throw 'Existing firewall policy does not permit this restricted local installation; refer to employer IT.'
-    }
-}
+$firewallMode = Get-FirewallMode $manifest
+Assert-FirewallAdmission $firewallMode
 $capability = Get-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0'
 if ($capability.State -ne 'NotPresent' -or (Get-Service sshd -ErrorAction SilentlyContinue) -or
     (Test-Path -LiteralPath $stateRoot) -or
@@ -326,26 +380,40 @@ $plan = [ordered]@{
     persistence = 'Automatic delayed service; Tailscale dependency; restart recovery'
     recovery = 'Revoke closes access; installed Windows capability and protected recovery files retained'
     graphicalDesktop = $false; employerPolicyChanges = $false
+    firewallMode = $firewallMode
+    networkAdmission = $(if ($firewallMode -eq 'SentinelManaged') { 'Existing Sentinel/Tailscale policy; other peers may reach TCP 22 but cannot authenticate' } else { 'Exact-source Windows Firewall allow and exclusion rules' })
 }
 $plan | ConvertTo-Json
 if ($Action -eq 'Plan') { return }
 if (-not $EmployerApproved) { throw 'Install requires -EmployerApproved to attest employer/IT approval for persistent inbound administration.' }
 
-# Nothing above this line mutates the laptop. A temporary block covers the
-# Windows capability installer, which may create a broad default firewall rule.
+# Nothing above this line mutates the laptop. Windows mode uses a temporary
+# block. Managed mode pre-stages the exact bind/auth configuration with an
+# empty authorization file before capability installation, without changing
+# the employer's firewall. Only verified configuration receives the hub key.
 $ownsInstallation = $false
 try {
-    New-NetFirewallRule -Name $containRule -DisplayName 'EdSys SSH installation containment' `
-        -Direction Inbound -Action Block -Protocol TCP -LocalPort 22 -Profile Any | Out-Null
+    if ($firewallMode -eq 'WindowsFirewall') {
+        New-NetFirewallRule -Name $containRule -DisplayName 'EdSys SSH installation containment' `
+            -Direction Inbound -Action Block -Protocol TCP -LocalPort 22 -Profile Any | Out-Null
+    }
     New-Item -ItemType Directory -Path $stateRoot | Out-Null
     Set-AdminOnlyAcl $stateRoot -Directory
     $receipt = [ordered]@{ schemaVersion = 1; owner = 'EdSys-WorkLaptopAccess-v1'; computer = $manifest.computer;
-        status = 'installing'; updatedAt = ''; configHash = ''; keyHash = '' }
+        status = 'installing'; updatedAt = ''; configHash = ''; keyHash = ''; firewallMode = $firewallMode }
     Save-Receipt 'installing'
     Copy-Item -LiteralPath $installerPath -Destination (Join-Path $stateRoot 'Manage-WorkLaptopAccess.ps1')
     Set-AdminOnlyAcl (Join-Path $stateRoot 'Manage-WorkLaptopAccess.ps1')
     Write-PrivateText (Join-Path $stateRoot 'access.json') ($manifest | ConvertTo-Json)
     $ownsInstallation = $true
+    if ($firewallMode -eq 'SentinelManaged') {
+        New-Item -ItemType Directory -Path $sshRoot -Force | Out-Null
+        Set-AdminOnlyAcl $sshRoot -Directory
+        Write-PrivateText $configPath (Get-ServerConfig $manifest $sshRoot)
+        Write-PrivateText $keyPath '# Setup in progress: no authorized keys.'
+        Assert-AdminOnlyAcl $configPath
+        Assert-AdminOnlyAcl $keyPath
+    }
     $result = Add-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0'
     Set-Service sshd -StartupType Disabled
     Stop-Service sshd -ErrorAction Stop
@@ -367,12 +435,14 @@ try {
     $receipt.configHash = (Get-FileHash $configPath -Algorithm SHA256).Hash
     $receipt.keyHash = (Get-FileHash $keyPath -Algorithm SHA256).Hash
     Save-Receipt 'configured'
-    New-NetFirewallRule -Name $allowRule -DisplayName 'EdSys work laptop SSH from 9950x' `
-        -Direction Inbound -Action Allow -Protocol TCP -LocalPort 22 -Profile Any `
-        -LocalAddress $manifest.laptopAddress -RemoteAddress $manifest.hubAddress | Out-Null
-    New-NetFirewallRule -Name $denyRule -DisplayName 'EdSys work laptop SSH exclude other peers' `
-        -Direction Inbound -Action Block -Protocol TCP -LocalPort 22 -Profile Any `
-        -LocalAddress $manifest.laptopAddress -RemoteAddress (Get-OtherIPv4Ranges $manifest.hubAddress) | Out-Null
+    if ($firewallMode -eq 'WindowsFirewall') {
+        New-NetFirewallRule -Name $allowRule -DisplayName 'EdSys work laptop SSH from 9950x' `
+            -Direction Inbound -Action Allow -Protocol TCP -LocalPort 22 -Profile Any `
+            -LocalAddress $manifest.laptopAddress -RemoteAddress $manifest.hubAddress | Out-Null
+        New-NetFirewallRule -Name $denyRule -DisplayName 'EdSys work laptop SSH exclude other peers' `
+            -Direction Inbound -Action Block -Protocol TCP -LocalPort 22 -Profile Any `
+            -LocalAddress $manifest.laptopAddress -RemoteAddress (Get-OtherIPv4Ranges $manifest.hubAddress) | Out-Null
+    }
     $sc = Join-Path $env:SystemRoot 'System32\sc.exe'
     $dependencies = @((Get-Service sshd).ServicesDependedOn | ForEach-Object { $_.Name }) + @('Tailscale')
     Invoke-Native $sc @('config', 'sshd', 'depend=', (($dependencies | Select-Object -Unique) -join '/'), 'start=', 'delayed-auto') | Out-Null
@@ -381,7 +451,7 @@ try {
     Start-Service sshd
     (Get-Service sshd).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
     Test-ManagedAccess $manifest
-    Remove-NetFirewallRule -Name $containRule
+    if ($firewallMode -eq 'WindowsFirewall') { Remove-NetFirewallRule -Name $containRule }
     Save-Receipt 'local-verified'
     # Export only the public host key for pinning through the existing outbound SSH path.
     [IO.File]::WriteAllText((Join-Path $scriptDirectory 'host-key.pub'),
