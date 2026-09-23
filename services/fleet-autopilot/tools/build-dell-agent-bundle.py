@@ -61,6 +61,7 @@ def source_identity(source_root: Path) -> str:
 def copy_payload(source_root: Path, destination: Path) -> list[Path]:
     agent = source_root / "windows" / "dell-agent"
     mappings = {
+        agent / "observe-user-readiness.ps1": destination / "observe-user-readiness.ps1",
         agent / "config.example.json": destination / "config.example.json",
         agent / "install-agent.ps1": destination / "install-agent.ps1",
         source_root / "windows" / "node-toolchain-adapter.ps1": (

@@ -14,7 +14,7 @@ container_images:
 canaries:
   private_url: https://9950x.taile832fe.ts.net/api/health
   public_url: https://example.com
-  proxmox: {node: pve-edcore, vmid: 390, type: lxc, name: fleet-canary}
+  proxmox: {enabled: false, node: pve-node3, vmid: 390, type: lxc, name: fleet-canary}
 suites:
   deterministic:
     model_call: false

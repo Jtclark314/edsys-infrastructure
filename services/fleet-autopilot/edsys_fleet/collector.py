@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import socket
 import time
 from datetime import datetime, timezone
@@ -14,6 +15,7 @@ from .io import read_json, utc_now, write_json_atomic
 from .proxmox import ProxmoxClient, ProxmoxError
 from .runner import CommandResult, CommandRunner
 from .store import FleetStore
+from .readiness import evaluate_readiness
 
 
 LINUX_SCRIPT = r"""
@@ -251,19 +253,26 @@ class FleetCollector:
         except (TypeError, ValueError):
             heartbeat_age = 999999
         dormant = heartbeat_age > 180
+        readiness = evaluate_readiness(raw) if host.get("readiness_required") else None
+        actionable = any(item.get("severity") in {"warning", "critical"} for item in drift)
+        if readiness and readiness["status"] != "ok":
+            actionable = True
         return {
             **host,
-            "status": "dormant" if dormant else ("warning" if drift else "ok"),
+            "status": "dormant" if dormant else ("critical" if readiness and readiness["status"] == "critical" else ("warning" if actionable else "ok")),
+            "agent_id": enrollment["agent_id"],
+            "agent_version": raw.get("agent_version"),
+            "readiness": readiness,
             "reachable": not dormant,
             "checked_at": heartbeat["received_at"],
             "latency_ms": latency,
+            **normalized,
             "detail": (
                 f"Portable host dormant; last signed heartbeat {heartbeat_age} seconds ago."
                 if dormant
                 else "Signed outbound Fleet agent heartbeat accepted."
             ),
             "heartbeat_age_seconds": heartbeat_age,
-            **normalized,
             "drift": drift,
         }
 
@@ -433,7 +442,8 @@ if($item){Get-Content $item.FullName -Raw}else{'{}'}
                 "firefox",
                 "ollama",
                 "playwright_mcp",
-                "playwright",
+                "playwright", "codex_desktop", "sunshine", "tailscale",
+                "powertoys", "office", "bluebeam", "syncthing",
             )
         }
         versions = {key: value for key, value in versions.items() if value}
@@ -494,6 +504,7 @@ if($item){Get-Content $item.FullName -Raw}else{'{}'}
     def _drift(self, host_id: str, versions: dict[str, str]) -> list[dict[str, Any]]:
         output: list[dict[str, Any]] = []
         seen: set[str] = set()
+        baseline = next((h.get("baseline", {}) for h in self.config.hosts if h["id"] == host_id), {})
         for policy_name, policy in self.config.components.items():
             if host_id not in list(policy.get("hosts") or []):
                 continue
@@ -506,7 +517,7 @@ if($item){Get-Content $item.FullName -Raw}else{'{}'}
                 if key in seen:
                     continue
                 seen.add(key)
-                approved = str(desired_map.get(key) if desired_map else desired)
+                approved = str(baseline.get(key, desired_map.get(key) if desired_map else desired))
                 current = versions.get(key)
                 if not current:
                     absence = str(policy.get("absence") or "missing")
@@ -524,7 +535,7 @@ if($item){Get-Content $item.FullName -Raw}else{'{}'}
                             }
                         )
                     continue
-                if approved in {"stable", "approved-stable", "unknown", "None"}:
+                if approved in {"stable", "approved-stable", "employer-managed", "unknown", "None"}:
                     continue
                 if current != approved:
                     ahead = self._version_key(current) > self._version_key(approved)
@@ -552,7 +563,10 @@ if($item){Get-Content $item.FullName -Raw}else{'{}'}
     @staticmethod
     def _clean_version(value: Any) -> str:
         text = str(value or "").strip()
-        return "" if text.lower() in {"", "unavailable", "unknown", "none", "null"} else text.removeprefix("v")
+        if text.lower() in {"", "unavailable", "unknown", "none", "null"}:
+            return ""
+        match = re.search(r"(?<!\d)v?(\d+\.\d+(?:\.\d+)*(?:[-+][\w.]+)?)", text)
+        return match.group(1) if match else text
 
     @staticmethod
     def _int(value: Any) -> int:

@@ -436,9 +436,11 @@ class CapabilityBenchmark:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def _infrastructure_locked(self, _: Path) -> tuple[bool, dict[str, Any], str]:
+        canary = self.contract["canaries"]["proxmox"]
+        if canary.get("enabled") is False:
+            return False, {"reason": "Canary retired; replacement not commissioned", "canary_present": False}, "not_applicable"
         cluster = self.proxmox.cluster_status()
         resources = self.proxmox.resources("vm")
-        canary = self.contract["canaries"]["proxmox"]
         guest = next((item for item in resources if int(item.get("vmid") or 0) == int(canary["vmid"])), None)
         nodes = [item for item in cluster if item.get("type") == "node"]
         cluster_row = next((item for item in cluster if item.get("type") == "cluster"), {})

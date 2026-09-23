@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-const version = "0.2.2"
+const version = "0.3.0"
 
 type config struct {
 	HubURL              string `json:"hub_url"`
@@ -261,6 +261,19 @@ func (a *agent) inventory(ctx context.Context) map[string]any {
 			result[key] = value
 		}
 	}
+	// The observer runs with a limited token, so drive visibility is the Explorer view.
+	userText, _ := run(ctx, 10*time.Second, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", `Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'EdSys\FleetReadiness\status.json') -Raw -ErrorAction Stop`)
+	user := map[string]any{}
+	if json.Unmarshal([]byte(userText), &user) == nil {
+		result["user_readiness"] = user
+		if versions, ok := user["versions"].(map[string]any); ok {
+			for key, value := range versions {
+				result["versions"].(map[string]any)[key] = value
+			}
+		}
+	}
+	streamText := commandOutput(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", `$ErrorActionPreference='Stop';$ip=Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.IPAddress -like '100.*' -and $_.InterfaceAlias -like '*Tailscale*'} | Select-Object -First 1 -ExpandProperty IPAddress;if(-not $ip){'False';exit};$ok=$true;foreach($port in @(47989,48010)){$c=New-Object Net.Sockets.TcpClient;try{$t=$c.ConnectAsync($ip,$port);if(-not $t.Wait(1500) -or -not $c.Connected){$ok=$false}}catch{$ok=$false}finally{$c.Dispose()}};$ok`)
+	result["stream_endpoints"] = strings.EqualFold(strings.TrimSpace(streamText), "true")
 	return result
 
 }

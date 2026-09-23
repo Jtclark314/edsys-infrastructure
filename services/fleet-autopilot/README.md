@@ -266,3 +266,41 @@ The agent is built as a background Windows application, hides probe consoles,
 and emits the existing Fleet CPU/memory/disk/OS/uptime fields. Health JSON is
 parsed before any display truncation; detailed service state remains in the
 signed heartbeat record. Enrollment alone is not a healthy-runtime claim.
+
+### Controller readiness and lifecycle (2026-09-23)
+
+The active endpoint set is 9950x, Nimo, Basecamp, and the work laptop. EdCore Ops
+(VM 321) was retired on August 29 and is retained only as a historical policy
+record. Its hardware is now pve-node3. The original disposable Proxmox canary was
+also retired: its benchmark is explicitly unavailable until a replacement is
+commissioned; this is not a passing infrastructure qualification.
+
+The work laptop has a separate `baseline` in the synchronized policy files.
+Its Node 24 LTS baseline is 24.21.0 with bundled npm 11.19.0, verified against the
+official Node release index. Codex CLI and Desktop are separate inventory entries.
+Office and Bluebeam remain employer-managed; developer-only Playwright packages
+are not required. Component descriptions expose host-specific candidates so a
+controller upgrade plan cannot silently select an older global baseline.
+
+Windows agent 0.3.0 includes a signed, limited-token `EdSys-Fleet-User-Readiness`
+task. At logon and every five minutes it checks the eight expected drive mappings
+against Explorer visibility and bounded read-only root probes, then checks the
+local Syncthing API. Its private atomic report contains versions and aggregate
+health only, never API keys or synchronized filenames. A ten-minute expiry,
+noninteractive session, elevated token, or missing check produces unknown status.
+No configured Syncthing folders means not applicable, not a synchronization pass.
+The protected agent directory and existing enrollment identity are preserved.
+
+The signed heartbeat adds service health, Sunshine control/RTSP listener checks
+on the Tailscale address, and system disk capacity. Listener checks do not verify
+video resolution or end-to-end streaming. Disk warnings occur below 10% or 20 GiB
+free, and critical warnings below 5% or 10 GiB. Informational version differences
+remain visible but do not cause an amber host or reduce the operational score.
+Real readiness failures and missing observations remain visible. No firewall
+change, reboot, automatic cleanup, or employer application update is performed.
+
+Deploy with the existing signed agent bundle and watched Fleet self-update
+transaction. Retain the previous agent directory and enrollment identity, stop
+only the exact managed agent process before replacing files, then verify signed
+heartbeats and the limited readiness task. Rollback restores the retained agent
+and stops/removes the readiness task if returning to an agent without this feature.

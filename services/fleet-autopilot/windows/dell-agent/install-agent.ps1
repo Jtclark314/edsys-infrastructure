@@ -99,5 +99,13 @@ else {
     $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Highest
 }
 Register-ScheduledTask -TaskName 'EdSys-Fleet-Outbound-Agent' -Action $action -Trigger @($trigger,$triggerBoot) -Settings $settings -Principal $principal -Force | Out-Null
+if (-not $RunAsSystem) {
+    $observerAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy RemoteSigned -File "' + (Join-Path $InstallRoot 'observe-user-readiness.ps1') + '"')
+    $observerPrincipal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
+    $observerRepeat = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Minutes 5)
+    $observerSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 2) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+    Register-ScheduledTask -TaskName 'EdSys-Fleet-User-Readiness' -Action $observerAction -Trigger @($trigger,$observerRepeat) -Settings $observerSettings -Principal $observerPrincipal -Force | Out-Null
+    Start-ScheduledTask -TaskName 'EdSys-Fleet-User-Readiness'
+}
 Start-ScheduledTask -TaskName 'EdSys-Fleet-Outbound-Agent'
 $enrollment

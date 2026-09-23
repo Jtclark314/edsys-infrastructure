@@ -160,6 +160,12 @@ class AdapterRegistry:
                 phase: bool(declared_support.get(phase, name != "inventory-only" or phase in {"discover", "verify"}))
                 for phase in PHASES
             }
+            keys = [policy["inventory_key"]] if policy.get("inventory_key") else policy.get("inventory_keys", [])
+            desired_by_host = {}
+            for host in self.config.hosts:
+                baseline = host.get("baseline") or {}
+                if host["id"] in policy.get("hosts", []) and keys and all(key in baseline for key in keys):
+                    desired_by_host[host["id"]] = {key: baseline[key] for key in keys} if len(keys) > 1 else baseline[keys[0]]
             output.append(
                 {
                     "id": component,
@@ -167,6 +173,9 @@ class AdapterRegistry:
                     "implemented": name in self._adapters,
                     "hosts": list(policy.get("hosts") or []),
                     "desired": policy.get("desired"),
+                    "desired_by_host": desired_by_host,
+                    "inventory_key": policy.get("inventory_key"),
+                    "inventory_keys": policy.get("inventory_keys", []),
                     "risk_class": policy.get("risk_class"),
                     "absence": policy.get("absence"),
                     "supports": supports,
