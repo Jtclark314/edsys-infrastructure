@@ -185,3 +185,45 @@ and authenticated loopback administration. Work-laptop installed-client inventor
 local script execution, pairing, GPU decoding, video/audio, normal disconnect,
 display restoration, and reconnect remain **to be confirmed** until local setup
 returns a result and the owner opens a stream. One stream at a time remains required.
+
+## Work laptop as a Sunshine host — prepared 2026-09-23
+
+`install-work-laptop-host.ps1` is a separate local, elevated installer for
+streaming **the work laptop's desktop to Nimo**. It refuses another computer,
+existing Sunshine, previous setup rules, a missing Tailnet interface, disabled
+firewall profiles, and invalid/equal Tailnet peer addresses. Supply the verified
+host/client addresses privately; they are not hardcoded in source.
+
+Place official `Sunshine-Windows-AMD64-installer.msi` from release
+`v2026.914.233613` beside the script (or pass `-BundleDirectory`). The installer
+requires SHA-256 `1d7fed8beecd5889dc7ff14cf9f42d6d38f37c3066c13c6c2a5f4e91847e0ccf`
+and valid Authenticode from the release publisher David Lane. The enclosed
+executable is unsigned; the package signature and pinned digest establish its
+provenance. `-Plan` runs preflight without installation.
+
+Setup applies a temporary program-wide inbound block before MSI execution,
+disables MSI-added broad allow rules, denies all other peer addresses and
+remote administration, and admits only the supplied Nimo address on the
+Tailscale interface and streaming ports. Only after service/listener/Desktop
+checks does it remove the temporary block. Errors retain the guard and attempt
+to stop/disable Sunshine; if MSI times out, inspect the continuing installer
+before retrying. No policy, driver, display, sleep, lid, or SSH changes are made.
+The service starts automatically; UPnP is off and encrypted streaming required.
+
+Local administration is `https://localhost:47990`; the owner must create its
+account locally and enter Moonlight's pairing PIN there. Reports and the prior
+fresh-install configuration stay in an administrator/SYSTEM-only ProgramData
+setup directory. Runtime credentials, pairing state, logs, MSI and reports must
+remain outside Git/RAG. Keep the laptop powered, awake, and its display present.
+
+Rollback: stop/disable `SunshineService`, uninstall Sunshine using Windows
+Installed Apps, then remove only firewall rules in `EdSys Work Laptop Sunshine`.
+Retain private configuration if recovery/re-pairing is desired. A partial setup
+is intentionally refused on rerun and needs inspection, not blind overwrite.
+
+Observed: work laptop online but SSH/WinRM and Sunshine ports refused; Nimo
+offline. Official MSI checksum/signature and real Windows PowerShell 5.1 parsing,
+Tailnet validation and exact-peer exclusion calculations passed. Local host
+installation, effective corporate firewall policy, encoder/display readiness,
+account creation, Nimo pairing, picture/audio/input, reconnect and reboot
+acceptance remain **to be confirmed**. No laptop installation is claimed.
