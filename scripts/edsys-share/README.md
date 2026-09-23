@@ -284,3 +284,33 @@ This bounded path must not change Nimo/Basecamp credentials or mappings.
    credential.
 7. Preserve `/mnt/ai-store/edsys-share` and both Drive trees unless their
    deletion is separately authorized.
+
+## Work-laptop acceptance and dedicated Basecamp identity (2026-09-23)
+
+Reconnect commands now close standard input so an invalid saved credential fails
+instead of waiting invisibly for a username/password. The full installer checks
+the expected saved account as well as the target. Its optional
+`-BasecampUserName 'BASECAMP\EdSysWorkShares'` selects the separately revocable
+work-laptop identity; existing Nimo installations retain `FoothillsShares`.
+
+`windows/Install-WorkLaptopBasecampIdentity.ps1` runs only on Basecamp. It creates
+a non-admin identity with Change/Modify access to exactly the five named shares,
+denies interactive/RDP logon, and seals its credential to a work-laptop-owned
+CMS recipient certificate. The password never appears in scripts or command
+arguments. Administrator/SYSTEM-only machine-DPAPI recovery and pre-change ACL
+metadata remain under `C:\ProgramData\EdSys\WorkLaptopShares`. Failed setup
+disables the account; `-ResumeIncomplete` is accepted only for this named,
+disabled, correctly described account. Credential Manager installation runs in
+the work laptop's normal user session. Never rotate the Nimo share identity to
+repair this laptop.
+
+To revoke this identity, disable `EdSysWorkShares` first, remove only its share
+access entries and NTFS ACEs from the five recorded roots, then remove the local
+account and its two deny-logon rights. Do not replace whole ACLs from an old
+backup after unrelated permissions have changed. Remove only the work laptop's
+`basecamp` Credential Manager entry and five corresponding mapped drives.
+
+The hub AppArmor preexec profile must include all three share check binaries,
+the project root metadata path, and DAC traversal capabilities inside that
+confined profile. Source now retains the previously installed correction; reload
+the named profile after installation. Do not disable AppArmor or share encryption.

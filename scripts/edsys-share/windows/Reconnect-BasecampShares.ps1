@@ -80,7 +80,7 @@ $results = foreach ($m in $maps) {
             }
 
             & "$env:SystemRoot\System32\net.exe" use $m.Letter /delete /y 2>&1 | Out-Null
-            $netOutput = & "$env:SystemRoot\System32\net.exe" use $m.Letter $remote /persistent:yes 2>&1
+            $netOutput = & "$env:SystemRoot\System32\cmd.exe" /d /c "net use $($m.Letter) $remote /persistent:yes <nul 2>&1"
             $exitCode = $LASTEXITCODE
 
             if ($exitCode -eq 0 -and (Test-Path -LiteralPath ($m.Letter + '\'))) {

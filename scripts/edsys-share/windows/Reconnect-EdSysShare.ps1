@@ -110,7 +110,7 @@ try {
 
     $lastError = $null
     do {
-        $netOutput = & "$env:SystemRoot\System32\cmd.exe" /d /c "net use $LocalPath $RemotePath /persistent:yes 2>&1"
+        $netOutput = & "$env:SystemRoot\System32\cmd.exe" /d /c "net use $LocalPath $RemotePath /persistent:yes <nul 2>&1"
         $netExit = $LASTEXITCODE
         $profile = Get-PersistentProfile
         $mapping = Get-SmbMapping -LocalPath $LocalPath -ErrorAction SilentlyContinue

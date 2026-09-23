@@ -250,7 +250,7 @@ observable evidence.
 
 ### Windows installer compatibility (2026-09-23)
 
-Agent 0.2.1 writes BOM-free configuration for Go under Windows PowerShell 5.1,
+Agent 0.2.2 writes BOM-free configuration for Go under Windows PowerShell 5.1,
 initializes its DPAPI identity before task startup, and verifies signed manifest
 bytes with bounded native file redirection. Invalid signatures fail closed; a
 timed-out verifier and its child process are terminated. Chrome inventory reads
@@ -261,3 +261,8 @@ and pending reboot state. Mutations remain disabled unless explicitly enabled.
 Native work-laptop validation covered an accepted signed fixture, a rejected
 tampered fixture, BOM-free configuration, and stable repeated public enrollment.
 The Windows AMD64 binary also cross-compiles on the hub.
+
+The agent is built as a background Windows application, hides probe consoles,
+and emits the existing Fleet CPU/memory/disk/OS/uptime fields. Health JSON is
+parsed before any display truncation; detailed service state remains in the
+signed heartbeat record. Enrollment alone is not a healthy-runtime claim.

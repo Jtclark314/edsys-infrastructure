@@ -20,7 +20,7 @@ try{
  }
  & "$env:SystemRoot\System32\cmd.exe" /d /c "net use $LocalPath /delete /y >nul 2>&1" | Out-Null
  Write-State 'running' 'Creating the dedicated Ask Foothills intake mapping.' $false
- & "$env:SystemRoot\System32\cmd.exe" /d /c "net use $LocalPath $RemotePath /persistent:yes >nul 2>&1"
+ & "$env:SystemRoot\System32\cmd.exe" /d /c "net use $LocalPath $RemotePath /persistent:yes <nul >nul 2>&1"
  $netExit=$LASTEXITCODE
  if($netExit-ne0){throw "net use returned exit $netExit."}
  if(-not(Test-Path -LiteralPath ($LocalPath+'\'))){throw 'Mapping exists but is not accessible.'}

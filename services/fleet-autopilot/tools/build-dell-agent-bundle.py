@@ -82,7 +82,7 @@ def build_agent(source_root: Path, destination: Path) -> Path:
     env = dict(os.environ)
     env.update({"GOOS": "windows", "GOARCH": "amd64", "CGO_ENABLED": "0"})
     run(
-        ["go", "build", "-trimpath", "-ldflags=-s -w", "-o", str(output), "."],
+        ["go", "build", "-trimpath", "-ldflags=-s -w -H=windowsgui", "-o", str(output), "."],
         cwd=source_root / "windows" / "dell-agent",
         env=env,
     )

@@ -21,10 +21,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
-const version = "0.2.1"
+const version = "0.2.2"
 
 type config struct {
 	HubURL              string `json:"hub_url"`
@@ -230,12 +231,12 @@ func (a *agent) inventory(ctx context.Context) map[string]any {
 	// Read Chrome's file metadata: invoking chrome.exe --version on Windows
 	// can launch a browser window during every heartbeat.
 	chrome := commandOutput(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", `(Get-Item 'C:\Program Files\Google\Chrome\Application\chrome.exe' -ErrorAction Stop).VersionInfo.ProductVersion`)
-	healthText := commandOutput(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", `$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';$d=Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'";$os=Get-CimInstance Win32_OperatingSystem;$svc=@(Get-Service Tailscale,sshd,SunshineService,SentinelAgent -ErrorAction SilentlyContinue|ForEach-Object {@{name=$_.Name;status=$_.Status.ToString();start_type=$_.StartType.ToString()}});@{disk_c_free_bytes=[long]$d.FreeSpace;disk_c_size_bytes=[long]$d.Size;last_boot=$os.LastBootUpTime.ToUniversalTime().ToString('o');services=$svc;syncthing_running=(@(Get-Process syncthing -ErrorAction SilentlyContinue).Count -gt 0);reboot_pending=((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'))}|ConvertTo-Json -Depth 5 -Compress`)
+	healthText, _ := run(ctx, 30*time.Second, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", `$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';$d=Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'";$os=Get-CimInstance Win32_OperatingSystem;$cpu=Get-CimInstance Win32_Processor|Select-Object -First 1;$svc=@(Get-Service Tailscale,sshd,SunshineService,SentinelAgent -ErrorAction SilentlyContinue|ForEach-Object {@{name=$_.Name;status=$_.Status.ToString();start_type=$_.StartType.ToString()}});@{os=$os.Caption;cpu_model=$cpu.Name;cpu_cores=[int]$cpu.NumberOfLogicalProcessors;load=[double]$cpu.LoadPercentage;memory_total=[long]$os.TotalVisibleMemorySize*1024;memory_available=[long]$os.FreePhysicalMemory*1024;disk_total=[long]$d.Size;disk_available=[long]$d.FreeSpace;uptime=[long]((Get-Date)-$os.LastBootUpTime).TotalSeconds;disk_c_free_bytes=[long]$d.FreeSpace;disk_c_size_bytes=[long]$d.Size;last_boot=$os.LastBootUpTime.ToUniversalTime().ToString('o');services=$svc;syncthing_running=(@(Get-Process syncthing -ErrorAction SilentlyContinue).Count -gt 0);reboot_pending=((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'))}|ConvertTo-Json -Depth 5 -Compress`)
 	health := map[string]any{}
 	if err := json.Unmarshal([]byte(healthText), &health); err != nil {
 		health = map[string]any{"status": "unavailable"}
 	}
-	return map[string]any{
+	result := map[string]any{
 		"agent_version":     version,
 		"host_id":           a.config.HostID,
 		"hostname":          hostname(),
@@ -255,6 +256,13 @@ func (a *agent) inventory(ctx context.Context) map[string]any {
 		"health":      health,
 		"observed_at": time.Now().UTC().Format(time.RFC3339Nano),
 	}
+	for _, key := range []string{"os", "cpu_model", "cpu_cores", "load", "memory_total", "memory_available", "disk_total", "disk_available", "uptime"} {
+		if value, ok := health[key]; ok {
+			result[key] = value
+		}
+	}
+	return result
+
 }
 
 func (a *agent) execute(ctx context.Context, item command) (map[string]any, error) {
@@ -573,6 +581,7 @@ func (a *agent) verifyBundle(ctx context.Context) error {
 	verifyCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	verify := exec.CommandContext(verifyCtx, "ssh-keygen.exe", "-Y", "verify", "-f", allowed, "-I", "edsys-fleet-release", "-n", "file", "-s", signature)
+	verify.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	verify.Stdin = bytes.NewReader(manifestBytes)
 	if output, err := verify.CombinedOutput(); err != nil {
 		return fmt.Errorf("bundle signature verification failed: %s", truncate(string(output), 500))
@@ -635,6 +644,7 @@ func run(parent context.Context, timeout time.Duration, name string, args ...str
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	command := exec.CommandContext(ctx, name, args...)
+	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	output, err := command.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
 		return string(output), errors.New("command timeout")

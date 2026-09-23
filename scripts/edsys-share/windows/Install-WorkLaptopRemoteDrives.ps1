@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
     [switch]$SkipCredentialPrompts,
+    [ValidateSet('BASECAMP\FoothillsShares','BASECAMP\EdSysWorkShares')]
+    [string]$BasecampUserName = 'BASECAMP\FoothillsShares',
     [ValidateRange(30, 900)]
     [int]$VerificationTimeoutSeconds = 180
 )
@@ -45,10 +47,10 @@ foreach ($map in $maps) {
 }
 
 function Test-SavedCredential {
-    param([Parameter(Mandatory = $true)][string]$Target)
+    param([Parameter(Mandatory = $true)][string]$Target, [string]$UserName)
 
     $output = & "$env:SystemRoot\System32\cmdkey.exe" "/list:$Target" 2>&1
-    return ($LASTEXITCODE -eq 0 -and (($output | Out-String) -match [regex]::Escape($Target)))
+    return ($LASTEXITCODE -eq 0 -and (($output | Out-String) -match [regex]::Escape($Target)) -and (-not $UserName -or (($output | Out-String) -match [regex]::Escape($UserName))))
 }
 
 function Ensure-SavedCredential {
@@ -58,7 +60,7 @@ function Ensure-SavedCredential {
         [Parameter(Mandatory = $true)][string]$Purpose
     )
 
-    if (Test-SavedCredential -Target $Target) {
+    if (Test-SavedCredential -Target $Target -UserName $UserName) {
         Write-Host "Credential Manager already contains the $Purpose credential for $Target."
         return
     }
@@ -69,7 +71,7 @@ function Ensure-SavedCredential {
     Write-Host "Windows will now request the $Purpose password for $UserName."
     Write-Host 'The password is entered through cmdkey and is not stored in this script or its status report.'
     & "$env:SystemRoot\System32\cmdkey.exe" "/add:$Target" "/user:$UserName" /pass
-    if ($LASTEXITCODE -ne 0 -or -not (Test-SavedCredential -Target $Target)) {
+    if ($LASTEXITCODE -ne 0 -or -not (Test-SavedCredential -Target $Target -UserName $UserName)) {
         throw "Credential Manager did not save the required $Purpose credential for $Target."
     }
 }
@@ -77,7 +79,7 @@ function Ensure-SavedCredential {
 Ensure-SavedCredential -Target '9950x.taile832fe.ts.net' `
     -UserName '9950x\edsys-share-dell' -Purpose '9950x file-share'
 Ensure-SavedCredential -Target 'basecamp' `
-    -UserName 'BASECAMP\FoothillsShares' -Purpose 'Basecamp file-share'
+    -UserName $BasecampUserName -Purpose 'Basecamp file-share'
 
 $installers = @(
     'Install-AskFoothillsIntakeReconnect.ps1',
