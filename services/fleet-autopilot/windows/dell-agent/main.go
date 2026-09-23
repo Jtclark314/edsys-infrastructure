@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-const version = "0.2.0"
+const version = "0.2.1"
 
 type config struct {
 	HubURL              string `json:"hub_url"`
@@ -227,6 +227,14 @@ func (a *agent) request(ctx context.Context, method, path string, body []byte, o
 
 func (a *agent) inventory(ctx context.Context) map[string]any {
 	admin := commandOutput(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)")
+	// Read Chrome's file metadata: invoking chrome.exe --version on Windows
+	// can launch a browser window during every heartbeat.
+	chrome := commandOutput(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", `(Get-Item 'C:\Program Files\Google\Chrome\Application\chrome.exe' -ErrorAction Stop).VersionInfo.ProductVersion`)
+	healthText := commandOutput(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", `$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';$d=Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'";$os=Get-CimInstance Win32_OperatingSystem;$svc=@(Get-Service Tailscale,sshd,SunshineService,SentinelAgent -ErrorAction SilentlyContinue|ForEach-Object {@{name=$_.Name;status=$_.Status.ToString();start_type=$_.StartType.ToString()}});@{disk_c_free_bytes=[long]$d.FreeSpace;disk_c_size_bytes=[long]$d.Size;last_boot=$os.LastBootUpTime.ToUniversalTime().ToString('o');services=$svc;syncthing_running=(@(Get-Process syncthing -ErrorAction SilentlyContinue).Count -gt 0);reboot_pending=((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'))}|ConvertTo-Json -Depth 5 -Compress`)
+	health := map[string]any{}
+	if err := json.Unmarshal([]byte(healthText), &health); err != nil {
+		health = map[string]any{"status": "unavailable"}
+	}
 	return map[string]any{
 		"agent_version":     version,
 		"host_id":           a.config.HostID,
@@ -236,14 +244,15 @@ func (a *agent) inventory(ctx context.Context) map[string]any {
 		"mutations_allowed": a.config.AllowMutations,
 		"versions": map[string]any{
 			"windows":   commandOutput(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "[Environment]::OSVersion.Version.ToString()"),
-			"codex":     commandOutput(ctx, "codex.exe", "--version"),
+			"codex":     commandOutput(ctx, "cmd.exe", "/d", "/c", "codex", "--version"),
 			"node":      commandOutput(ctx, "node.exe", "--version"),
-			"npm":       commandOutput(ctx, "npm.cmd", "--version"),
-			"chrome":    commandOutput(ctx, `C:\Program Files\Google\Chrome\Application\chrome.exe`, "--version"),
+			"npm":       commandOutput(ctx, "cmd.exe", "/d", "/c", "npm", "--version"),
+			"chrome":    chrome,
 			"tailscale": commandOutput(ctx, "tailscale.exe", "version"),
 			"docker":    commandOutput(ctx, "docker.exe", "version", "--format", "{{.Client.Version}}"),
 		},
 		"local_admin": strings.EqualFold(strings.TrimSpace(admin), "true"),
+		"health":      health,
 		"observed_at": time.Now().UTC().Format(time.RFC3339Nano),
 	}
 }

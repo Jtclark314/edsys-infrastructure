@@ -15,8 +15,28 @@ $signaturePath = Join-Path $BundleRoot 'bundle-manifest.json.sig'
 if (-not (Test-Path -LiteralPath $allowedSigners -PathType Leaf) -or -not (Test-Path -LiteralPath $signaturePath -PathType Leaf)) { throw 'Bundle signature material is missing.' }
 $actualSignerHash = (Get-FileHash -LiteralPath $allowedSigners -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actualSignerHash -cne $TrustedSignerSha256.ToLowerInvariant()) { throw 'Bundle signer trust pin does not match.' }
-Get-Content -LiteralPath $manifestPath -Raw | & ssh-keygen.exe -Y verify -f $allowedSigners -I edsys-fleet-release -n file -s $signaturePath | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'Bundle Ed25519 signature verification failed.' }
+# cmd.exe redirects the manifest file byte-for-byte. PowerShell 5.1's text
+# pipeline changes signed bytes; Windows OpenSSH can also hang on a managed pipe.
+$sshKeygen = (Get-Command ssh-keygen.exe -ErrorAction Stop).Source
+foreach ($value in @($sshKeygen, $allowedSigners, $signaturePath, $manifestPath)) {
+    if ($value -match '["%&|<>^!\r\n]') { throw 'Bundle paths contain unsupported shell characters.' }
+}
+$startInfo = New-Object Diagnostics.ProcessStartInfo
+$startInfo.FileName = Join-Path $env:SystemRoot 'System32\cmd.exe'
+$startInfo.Arguments = '/d /s /c ""' + $sshKeygen + '" -Y verify -f "' + $allowedSigners + '" -I edsys-fleet-release -n file -s "' + $signaturePath + '" < "' + $manifestPath + '""'
+$startInfo.UseShellExecute = $false
+$startInfo.CreateNoWindow = $true
+$startInfo.RedirectStandardOutput = $true
+$startInfo.RedirectStandardError = $true
+$verifier = [Diagnostics.Process]::Start($startInfo)
+try {
+    if (-not $verifier.WaitForExit(30000)) {
+        & (Join-Path $env:SystemRoot 'System32\taskkill.exe') /PID $verifier.Id /T /F 2>&1 | Out-Null
+        throw 'Bundle signature verification timed out.'
+    }
+    if ($verifier.ExitCode -ne 0) { throw 'Bundle Ed25519 signature verification failed.' }
+}
+finally { $verifier.Dispose() }
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 foreach ($file in @($manifest.files)) {
     $path = Join-Path $BundleRoot ([string]$file.path)
@@ -44,9 +64,14 @@ $config.state_root = $InstallRoot
 $config.bundle_root = $InstallRoot
 $config.trusted_signer_sha256 = $TrustedSignerSha256.ToLowerInvariant()
 $config.allow_mutations = [bool]$AllowMutations
-$config | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $configPath -Encoding UTF8
+# Windows PowerShell 5.1 Set-Content UTF8 adds a BOM that Go's JSON parser rejects.
+[IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
 
 $executable = Join-Path $InstallRoot 'edsys-fleet-agent.exe'
+# Create the identity once, before the long-running task can race its creation.
+$enrollment = & $executable --config $configPath --print-enrollment
+if ($LASTEXITCODE -ne 0) { throw 'Agent identity initialization failed.' }
+$null = ($enrollment | Out-String) | ConvertFrom-Json
 $arguments = "--config `"$configPath`""
 $action = New-ScheduledTaskAction -Execute $executable -Argument $arguments
 $trigger = New-ScheduledTaskTrigger -AtLogOn
@@ -60,4 +85,4 @@ else {
 }
 Register-ScheduledTask -TaskName 'EdSys-Fleet-Outbound-Agent' -Action $action -Trigger @($trigger,$triggerBoot) -Settings $settings -Principal $principal -Force | Out-Null
 Start-ScheduledTask -TaskName 'EdSys-Fleet-Outbound-Agent'
-& $executable --config $configPath --print-enrollment
+$enrollment

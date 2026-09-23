@@ -5,9 +5,13 @@ include <tunables/global>
 profile edsys-share-smb-preexec flags=(attach_disconnected) {
   include <abstractions/base>
 
+  capability dac_override,
+  capability dac_read_search,
+
   /usr/bin/dash mr,
   /usr/local/libexec/edsys-share/edsys-share-mount-check-smb rix,
   /usr/local/libexec/edsys-share/foothills-inbox-mount-check-smb rix,
+  /usr/local/libexec/edsys-share/foothills-project-mount-check-smb rix,
   /apparmor/.null rw,
   /proc/@{pid}/mountinfo r,
   /var/log/samba/log.* a,
@@ -17,4 +21,5 @@ profile edsys-share-smb-preexec flags=(attach_disconnected) {
   /mnt/ai-store/foothills-project/00-inbox/ r,
   /EdSys-Share/ r,
   /Foothills-Inbox/ r,
+  /home/jeremy/projects/foothills/ r,
 }
