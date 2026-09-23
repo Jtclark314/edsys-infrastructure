@@ -371,16 +371,23 @@ class CapabilityBenchmark:
         linux = "set -e; p=\"$HOME/.local/state/edsys-fleet-remote-$$\"; printf ok >\"$p\"; test \"$(cat \"$p\")\" = ok; rm -f \"$p\"; curl -fsS --max-time 10 https://example.com >/dev/null; sudo -n true; printf EDSYS_REMOTE_OK"
         windows = "$ErrorActionPreference='Stop';$p=Join-Path $env:LOCALAPPDATA ('EdSys-Private\\fleet-remote-'+$PID);[IO.File]::WriteAllText($p,'ok');if((Get-Content $p -Raw)-ne 'ok'){throw 'marker'};Remove-Item $p -Force;Invoke-WebRequest https://example.com -UseBasicParsing -TimeoutSec 10|Out-Null;'EDSYS_REMOTE_OK'"
         import base64
-        for host, command in (
-            ("edcore-ops", linux),
-            ("basecamp", f"powershell.exe -NoProfile -NonInteractive -EncodedCommand {base64.b64encode(windows.encode('utf-16le')).decode()}"),
-            ("nimo-laptop", f"powershell.exe -NoProfile -NonInteractive -EncodedCommand {base64.b64encode(windows.encode('utf-16le')).decode()}"),
-        ):
+        for policy_host in self.config.hosts:
+            if policy_host.get("transport") != "ssh":
+                continue
+            host = str(policy_host["ssh_alias"])
+            command = linux if policy_host.get("platform") == "linux" else f"powershell.exe -NoProfile -NonInteractive -EncodedCommand {base64.b64encode(windows.encode('utf-16le')).decode()}"
             result = self.runner.ssh(host, command, timeout=90)
             ok = result.ok and "EDSYS_REMOTE_OK" in result.stdout
             evidence[host] = {"passed": ok, "elapsed_ms": result.elapsed_ms}
             passed = passed and ok
-        evidence["work-laptop"] = {"status": "dormant", "critical": False}
+        # Portable agents are observed through signed heartbeats, never assumed dormant.
+        from .collector import FleetCollector
+        collector = FleetCollector(self.config, self.runner)
+        for policy_host in self.config.hosts:
+            if policy_host.get("transport") != "signed-outbound-agent":
+                continue
+            observed = collector.collect_host(policy_host)
+            evidence[policy_host["id"]] = {"status": observed["status"], "transport": "signed-heartbeat", "readiness": (observed.get("readiness") or {}).get("status"), "critical": False}
         return passed, evidence, "passed"
 
     def _documents(self, artifact_dir: Path) -> tuple[bool, dict[str, Any], str]:

@@ -122,3 +122,30 @@ def test_ultra_requires_complete_model_evidence_and_cleanup(tmp_path, monkeypatc
     assert evidence["controls_passed"] is True
     assert evidence["artifact_canary"]["status"] == "passed"
     assert evidence["cleanup_passed"] is True
+
+
+def test_remote_benchmark_uses_active_inventory_and_observes_portable_agent(monkeypatch):
+    from types import SimpleNamespace
+    from edsys_fleet.config import load_config
+    from edsys_fleet.collector import FleetCollector
+    benchmark = object.__new__(CapabilityBenchmark)
+    benchmark.config = load_config(Path(__file__).resolve().parents[1]/'config/fleet-policy.yml')
+    calls = []
+    def ssh(host, command, timeout):
+        calls.append(host)
+        return SimpleNamespace(ok=True, stdout='EDSYS_REMOTE_OK', elapsed_ms=1)
+    benchmark.runner = SimpleNamespace(ssh=ssh)
+    monkeypatch.setattr(FleetCollector, 'collect_host', lambda self, host: {'status':'warning','readiness':{'status':'warning'}})
+    passed, evidence, _ = benchmark._remote_hosts(Path('/unused'))
+    assert passed
+    assert set(calls) == {'nimo-laptop','basecamp'}
+    assert evidence['work-laptop']['status'] == 'warning'
+
+
+def test_retired_canary_is_unavailable_without_contacting_proxmox():
+    benchmark = object.__new__(CapabilityBenchmark)
+    benchmark.contract = {'canaries': {'proxmox': {'enabled':False}}}
+    passed, evidence, status = benchmark._infrastructure_locked(Path('/unused'))
+    assert not passed
+    assert status == 'not_applicable'
+    assert evidence['canary_present'] is False
