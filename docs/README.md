@@ -46,3 +46,6 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 ## Rule
 
 Use this repo for deployable definitions and repeatable commands. Do not store runtime data or secrets here.
+
+- `../services/work-laptop-control/README.md` - signed Windows UI Automation,
+  interactive desktop worker, and hub MCP/CLI over existing SSH.
