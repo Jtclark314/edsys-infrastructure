@@ -1,0 +1,48 @@
+services:
+  wyze-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: edsys/wyze-bridge-idisposable:4.5.0-firewall1
+    container_name: wyze-bridge-idisposable
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:15080:5080"
+      - "127.0.0.1:19840:1984"
+      - "127.0.0.1:18555:8554"
+    networks:
+      service_net: {}
+      wyze_lan:
+        ipv4_address: ${WYZE_LAN_IP}
+    volumes:
+      - ${RUNTIME_ROOT}/config:/config
+      - ${RUNTIME_ROOT}/media:/media
+      - ${RUNTIME_ROOT}/secrets:/run/secrets:ro
+    environment:
+      BRIDGE_PORT: "5080"
+      BRIDGE_IP: "192.168.50.50"
+      FILTER_NAMES: "Back Patio Cam"
+      FILTER_BLOCKS: "false"
+      QUALITY: "hd"
+      AUDIO: "false"
+      TUTK_FALLBACK_THRESHOLD: "5"
+      LOG_LEVEL: "info"
+      WYZE_LAN_IP: ${WYZE_LAN_IP}
+      WYZE_CAMERA_IP: ${WYZE_CAMERA_IP}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5080/api/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+networks:
+  service_net:
+    external: true
+    name: wyze-idisposable-bridge
+  wyze_lan:
+    external: true
+    name: wyze-idisposable-lan

@@ -38,6 +38,9 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `../services/music-assistant/README.md` - read-only NFS source that lets the
   official HAOS Music Assistant app index the `9950x` music tree independently
   of Plex.
+- `../services/wyze-bridge-idisposable/README.md` - digest-pinned Back Patio
+  native-2K bridge with a fail-closed macvlan ingress guard and loopback-only
+  Frigate/management ports.
 
 - `../services/3d-printing/README.md` - 9950x mount-guarded portable CAD/modeling/slicer stack, isolated dependency locks, offline qualification and selective rollback.
 - `../services/local-coder/README.md` - pinned CPU-only Qwen3.6 coding agent,
