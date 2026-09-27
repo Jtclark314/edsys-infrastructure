@@ -283,3 +283,39 @@ registry backup under its local EdSys setup directory. Keep these, credentials,
 paired certificates and screenshots out of Git/RAG. For rollback, stop/disable
 `SunshineService`, uninstall Sunshine normally, and remove only the new Nimo
 shortcut/host entry if desired. Preserve recovery material until accepted.
+
+## Nimo as a Sunshine host — accepted 2026-09-27
+
+`install-nimo-host.ps1` is the separate Nimo-only elevated installer for viewing
+and controlling **Nimo from 9950x**. Its `-Plan` mode checks the official signed
+`v2026.914.233613` MSI and SHA-256, exact host/client Tailscale IPv4 addresses,
+Nimo's active Tailscale interface, and enabled Windows Firewall profiles with
+default inbound block. It refuses an existing Sunshine install. The guarded
+`-ResumeRun` path accepts only an inspected stopped, loopback-only incomplete
+run in a protected `C:\ProgramData\EdSys\Sunshine-Setup-<run>` directory; it
+does not reinstall the MSI. Keep the MSI and recovery credential there, outside
+Git/RAG. Do not run the installer again over the accepted service.
+
+The installed host binds to Nimo's exact Tailnet IPv4. Windows Firewall allows
+the exact 9950x Tailnet peer on the Tailscale interface for Sunshine's TCP
+47984, 47989, 47990 and 48010 and UDP 47998, 47999, 48000, 48002 and 48010.
+All profiles retain default inbound block; the MSI's broad application allow
+rules are disabled. HTTPS management requires authentication. UPnP is disabled,
+stream encryption is required, controller emulation is disabled, and the
+automatic service depends on Tailscale with restart recovery. This host's
+Windows Firewall policy differs from the Sentinel-managed work-laptop host.
+
+The sole current paired client is the pinned Moonlight 6.1.0 AppImage on 9950x.
+Sunshine's current pairing API uses an authenticated pending pairing ID with
+the PIN; do not reuse `pair-local.py` without adding that ID. The AppImage client
+retains its certificate across GUI exit, so `edsys-nimo-view` can reconnect.
+Four abandoned test pairings were removed after matching the active client
+certificate. A visible Nimo desktop, Windows Start input through the stream,
+normal disconnect and reconnect passed. Audio audibility, extended sessions,
+sleep/lid and natural reboot recovery remain to be confirmed. The precise
+viewer, UI bridge and rollback commands are in `../nimo-desktop-control/README.md`.
+
+Rollback: stop/disable `SunshineService`, uninstall Sunshine normally, and
+remove only the `EdSys Nimo Sunshine` exact-peer firewall rules. Revoke the
+current 9950x client pairing and remove its dedicated viewer launcher only if
+ending this link. Retain protected recovery material until review.

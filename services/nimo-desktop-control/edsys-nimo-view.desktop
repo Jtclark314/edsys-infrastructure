@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Nimo Desktop
+Comment=Open Nimo in Moonlight from the 9950x
+Exec=/home/jeremy/.local/bin/edsys-nimo-view
+Icon=computer
+Terminal=false
+Categories=Network;RemoteAccess;

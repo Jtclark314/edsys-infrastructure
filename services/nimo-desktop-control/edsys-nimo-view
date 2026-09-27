@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Open Nimo's paired Sunshine desktop from the 9950x GUI session."""
+
+import ipaddress
+import json
+import os
+from pathlib import Path
+
+
+def main() -> None:
+    home = Path.home()
+    state = home / ".local/share/edsys-nimo-desktop-control"
+    config = json.loads((state / "stream.json").read_text())
+    address = ipaddress.IPv4Address(config["host_address"])
+    if address not in ipaddress.IPv4Network("100.64.0.0/10"):
+        raise SystemExit("Nimo streaming host must be a Tailscale IPv4 address")
+    moonlight = home / ".local/opt/edsys-moonlight/Moonlight-6.1.0-x86_64.AppImage"
+    if not moonlight.is_file():
+        raise SystemExit("Pinned Moonlight AppImage is missing")
+    env = os.environ.copy()
+    env.setdefault("DISPLAY", ":0")
+    env.setdefault("XAUTHORITY", str(home / ".Xauthority"))
+    env.setdefault("QT_QPA_PLATFORM", "xcb")
+    os.execve(
+        str(moonlight),
+        [
+            str(moonlight),
+            "stream",
+            "--1080",
+            "--fps", "60",
+            "--bitrate", "15000",
+            "--display-mode", "windowed",
+            "--absolute-mouse",
+            "--video-codec", "H.264",
+            "--no-hdr",
+            "--quit-after",
+            str(address),
+            "Desktop",
+        ],
+        env,
+    )
+
+
+if __name__ == "__main__":
+    main()

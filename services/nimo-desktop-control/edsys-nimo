@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source_dir="$(dirname "$(readlink -f "$0")")"
+exec python3 "$source_dir/controller.py" "$@"

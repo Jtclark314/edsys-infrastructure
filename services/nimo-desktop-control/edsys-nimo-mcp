@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source_dir="$(dirname "$(readlink -f "$0")")"
+runtime_root="${XDG_DATA_HOME:-$HOME/.local/share}/edsys-nimo-desktop-control"
+exec "$runtime_root/venv/bin/python" "$source_dir/mcp_server.py"
