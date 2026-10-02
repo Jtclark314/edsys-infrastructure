@@ -1,0 +1,25 @@
+name: homeowner-companion
+description: Non-AI homeowner project pilot with private LAN and Tailnet access
+host: 9950x
+runtime: systemd-user
+ports:
+  - "127.0.0.1:8126 HTTP backend"
+  - "192.168.50.50:8126 trusted-LAN HTTP"
+  - "8447 private Tailnet HTTPS through Tailscale Serve"
+volumes:
+  - "~/.local/share/homeowner-companion: private SQLite and evidence"
+environment:
+  template: server.env.example
+  private_file: "~/.config/homeowner-companion/server.env"
+secrets_required:
+  - Existing owner credential hash; never stored in source
+backup:
+  tool: app-owned scripts/backup.py
+  destination: Private directory outside Git and RAG
+  verification: Isolated restore and evidence checksums before deployment
+monitoring:
+  health: /api/health
+  acceptance: Authenticated fixture save/readback plus real network routes
+restore_notes: Revert only app service and port 8447; preserve all other Serve routes and live data
+owner: Jeremy
+last_verified: "2026-10-02"

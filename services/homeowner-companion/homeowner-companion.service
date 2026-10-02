@@ -1,0 +1,25 @@
+[Unit]
+Description=Homeowner Companion private LAN and Tailnet pilot
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/code/homeowner-construction-companion
+EnvironmentFile=%h/.config/homeowner-companion/server.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=%h/code/homeowner-construction-companion/.venv/bin/python -m app.serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/homeowner-companion
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=default.target
