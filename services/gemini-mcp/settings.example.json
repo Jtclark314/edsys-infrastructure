@@ -1,0 +1,12 @@
+{
+  "useG1Credits": false,
+  "enableTelemetry": false,
+  "toolPermission": "request-review",
+  "allowNonWorkspaceAccess": false,
+  "enableTerminalSandbox": true,
+  "permissions": {
+    "deny": ["read_file(*)", "write_file(*)", "read_url(*)", "execute_url(*)", "command(*)", "unsandboxed(*)", "mcp(*)"],
+    "allow": [],
+    "ask": []
+  }
+}
