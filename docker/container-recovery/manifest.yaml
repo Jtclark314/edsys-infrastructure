@@ -185,12 +185,6 @@ tiers:
         healthchecks:
           - url: http://127.0.0.1:3020/api/health
             codes: [200]
-      - name: mailbrain
-        files: [/srv/edsys/edsys-infrastructure/docker/mailbrain/compose.yaml]
-        services: [mailbrain]
-        healthchecks:
-          - url: http://127.0.0.1:3035/api/health
-            codes: [200]
       - name: edsys-ai-gateway
         files: [/home/jeremy/code/foothills-project-portal/edsys-ai-gateway/docker-compose.yml]
         services: [edsys-ai-gateway]

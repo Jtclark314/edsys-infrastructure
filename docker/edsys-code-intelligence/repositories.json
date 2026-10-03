@@ -32,12 +32,6 @@
       "enabled": true
     },
     {
-      "name": "edsys-mailbrain",
-      "source": "/home/jeremy/code/edsys-mailbrain",
-      "branch": "HEAD",
-      "enabled": true
-    },
-    {
       "name": "edsys-radio",
       "source": "/home/jeremy/code/edsys-radio",
       "branch": "HEAD",
