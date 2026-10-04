@@ -21,6 +21,7 @@ This repo should describe how services are deployed, but it must not contain liv
 - [EdCore SDR historical deployment](scripts/sdr/README.md)
 - [Fleet Autopilot host agent and Proxmox MCP](services/fleet-autopilot/README.md)
 - [Music Assistant local-library source](services/music-assistant/README.md)
+- [EdSys Finance integration](services/finance/README.md)
 
 ## Folder Map
 
