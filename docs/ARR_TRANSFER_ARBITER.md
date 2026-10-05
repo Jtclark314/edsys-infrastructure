@@ -1,7 +1,83 @@
 # ARR Transfer Arbiter
 
-Status: concurrent downloaders active on `arr-server` as of 2026-09-18;
-the retained mutual-exclusion controller is disabled.
+Status: both concurrent downloaders use Gluetun on `arr-server` as of
+2026-10-04 (America/New_York); the retained mutual-exclusion controller is disabled.
+
+## Shared VPN routing
+
+SABnzbd and qBittorrent share the existing Gluetun network namespace. Their
+application state, download binds, images, concurrent operation, and torrent
+completion policy remain unchanged.
+
+- `/opt/arr-vpn/docker-compose.yml` owns Gluetun and qBittorrent. Gluetun
+  publishes `8085:8085` for SAB in addition to its existing ports.
+- `/srv/docker/sabnzbd/docker-compose.yml` retains SAB's separate Compose
+  project, digest-pinned image, `/config` and `/downloads` binds, and
+  `restart: unless-stopped`. It uses `network_mode: container:gluetun` and
+  has no `ports` entry.
+- The private SAB configuration at
+  `/srv/ssd1/docker/appdata/sabnzbd/sabnzbd.ini` listens on port `8085`.
+  qBittorrent continues to listen on `8080`; sharing port `8080` would collide.
+- SAB's existing LAN endpoint remains `http://192.168.50.201:8085`, so ARR
+  download-client addresses and categories need no changes. Keep Usenet TLS enabled.
+
+For a Gluetun **recreation**, stop both downloaders first. Recreate Gluetun
+using its existing pinned image, wait for its actual healthy state, and then
+recreate both dependent containers to bind them to the new network namespace:
+
+```bash
+cd /opt/arr-vpn
+docker stop --timeout 60 sabnzbd qbittorrent
+docker compose -f docker-compose.yml -f docker-compose.lazylibrarian.yml up -d --no-deps --pull never gluetun
+# Confirm docker inspect reports Gluetun healthy before proceeding.
+docker compose -f docker-compose.yml -f docker-compose.lazylibrarian.yml up -d --no-deps --pull never --force-recreate qbittorrent
+cd /srv/docker/sabnzbd
+docker compose up -d --no-deps --pull never --force-recreate sabnzbd
+```
+
+The cutover preserved all three image digests and bind mounts. Both downloaders
+were verified to share Gluetun's network namespace and public exit, distinct
+from the host's direct exit. The pre-existing SAB job completed repair/unpack;
+all six Sonarr/Radarr/Lidarr client tests passed. The two existing completed
+torrents and stop-at-completion settings were retained.
+
+The official 1 GB SAB test subsequently completed 1,039,613,074 downloaded
+bytes in 69 seconds, reporting 14.3 MB/s average, with Quick Check OK and
+successful unpacking. Three-second samples peaked near 22 MiB/s. The earlier
+direct production download was approximately 2–3 MiB/s; these are different
+jobs, not a controlled same-article throughput comparison. The synthetic
+payload was removed after acceptance; its completed SAB history was retained.
+Gluetun's outbound firewall had default policy DROP and a tunnel egress rule;
+this configuration check does not substitute for a forced-outage test.
+
+At restart, two selected VPN endpoints timed out before Gluetun automatically
+connected to a third. Gate startup on observed VPN health rather than a fixed
+short delay. A full-host reboot and deliberate tunnel-outage test were not
+performed. Existing Gluetun startup notices about deprecated DNS variable
+names, its DNS leak-check response parser, and version metadata are separate
+from verified routing and transfers; no image or DNS-setting upgrade was made.
+
+### Backup and rollback
+
+Root-private `/var/backups/edsys/sab-gluetun-*` directories on `arr-server`
+contain original/planned Compose files, container metadata, stopped SAB and
+qBittorrent configuration archives, and verification evidence. Download/media
+payloads are not configuration backups. A stopped pre-cutover SAB container
+is retained with restart policy `no`; never start it alongside the active SAB
+container because both reference the same configuration and downloads.
+
+To return to direct SAB routing, stop both downloaders, restore the prior
+Compose files, and change only SAB's listener back to `8080` while it is
+stopped. Recreate Gluetun without the SAB port mapping, wait for health, and
+recreate qBittorrent against its current namespace. Then replace active SAB
+with the retained original container/name and restore its `unless-stopped`
+policy, or recreate it from the saved standalone Compose file. Preserve the
+latest queue/database; do not restore an older configuration archive over
+new download progress unless recovering actual corruption.
+
+Verify public exits, preserved LAN ports, six ARR client tests, queue/history,
+download mount identity, and Gluetun health after either change. API material,
+VPN account data, and private runtime evidence stay out of Git and RAG.
 
 ## Current operating policy
 
@@ -18,7 +94,7 @@ would restore the superseded mutual-exclusion policy.
   longer controls qBittorrent. Both its queue and post-processor were resumed.
 - Both downloaders remain enabled in Sonarr, Radarr, and Lidarr. All six
   application download-client tests passed after restart.
-- qBittorrent still shares Gluetun's network namespace. When restarting the
+- Both downloaders now share Gluetun's network namespace. When restarting the
   whole stack, stop dependents, restart Gluetun, wait for VPN health, then
   start the downloaders and applications. Preserve existing containers and
   images unless a separate change calls for recreation or upgrades.
