@@ -6,6 +6,7 @@ Status: helper scripts for local EdSys operations. Prefer report-only behavior u
 
 - `edsys-container-recovery.py` - manifest-driven, health-gated Docker recovery and audit.
 - `edcore-control.py` - current 9950x client for the Proxmox-based EdCore v3 host. It reports node/HA/lab status, opens a loopback Proxmox web tunnel, runs reviewed root commands, controls VMIDs 300/330/331, verifies lab isolation, and reaches Kali through the `pve-node3` jump host.
+- `edcore-ha-api.py` and `edcore-ha-remote.py` - bounded HA state/service/registry reads and explicit actions through `edcore-control ha api`, existing SSH/guest execution and Supervisor's protected Core socket. See [Home Assistant control](../../docs/HOME_ASSISTANT_CONTROL.md); writes require scoped owner authorization and `--execute`.
 - `install-edcore-control-plane.sh` and `edcore-session` - retained Omarchy-only bootstrap/session helpers for dated history. Their hostname guard refuses the current `pve-node3`; do not use them for EdCore v3.
 - `arr-transfer-arbiter.py` - fail-closed, SAB-priority mutual exclusion for SABnzbd and qBittorrent. It verifies every pause handoff, persists operator modes and latched faults, and never logs job names or API material.
 - `deploy-netdata-compute.sh` - rollback-safe installer for the six-node `edsys-compute` Netdata Parent/Child topology. It aligns the four Proxmox hosts plus the NetBox guest with the 9950x Parent while keeping the runtime stream key and Cloud material outside Git.

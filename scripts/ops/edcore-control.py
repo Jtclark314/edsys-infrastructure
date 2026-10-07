@@ -301,6 +301,11 @@ def command_passthrough(args: argparse.Namespace) -> None:
     run_remote(args.host, [], command)
 
 
+def command_ha_api(args: argparse.Namespace) -> None:
+    helper = pathlib.Path(__file__).resolve().with_name("edcore-ha-api.py")
+    os.execv(sys.executable, [sys.executable, str(helper), "--host", args.host, *args.command])
+
+
 def add_common_vm_commands(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
     command_attribute: str,
@@ -346,6 +351,9 @@ def build_parser() -> argparse.ArgumentParser:
     ha_subparsers.add_parser("snapshots").set_defaults(
         func=lambda args: command_snapshots(args, HA_VMID)
     )
+    ha_api = ha_subparsers.add_parser("api", help="Inspect Core and run explicitly authorized HA actions")
+    ha_api.add_argument("command", nargs=argparse.REMAINDER)
+    ha_api.set_defaults(func=command_ha_api)
 
     lab = subparsers.add_parser("lab", help="Control isolated Kali VM 330")
     lab_subparsers = lab.add_subparsers(dest="lab_command", required=True)

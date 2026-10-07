@@ -33,6 +33,8 @@ edcore-control root -- pveversion
 
 edcore-control ha status
 edcore-control ha snapshots
+edcore-control ha api inspect
+edcore-control ha api state sun.sun
 
 edcore-control lab status
 edcore-control lab start
@@ -55,6 +57,12 @@ edcore-control target restore-clean
 new listener. Kali SSH uses the dedicated private guest key through the
 `pve-node3` jump host. The target has no general-purpose SSH helper because it
 is deliberately vulnerable.
+
+The `ha api` subcommand provides live HA state/service/registry reads and
+explicitly authorized actions through the existing privileged Supervisor/Core
+Unix socket. It adds no credential or listener. The bounded functional repair,
+action guard, disposable-helper acceptance, privacy and rollback details are
+in [Home Assistant control](HOME_ASSISTANT_CONTROL.md).
 
 ## Isolation contract
 

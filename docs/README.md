@@ -30,6 +30,7 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `CONTAINER_RECOVERY.md` - ordered 9950x Docker recovery architecture and operations.
 - `REBOOT_ACCEPTANCE.md` - one-shot full-host reboot recovery and acceptance gate.
 - `EDCORE_CONTROL_PLANE.md` - current 9950x-to-pve-node3 Proxmox, HAOS, and isolated-lab control plane.
+- `HOME_ASSISTANT_CONTROL.md` - Phil's existing privileged HA API route, bounded reads, explicit actions, disposable-helper verification, privacy and rollback.
 - `ARR_TRANSFER_ARBITER.md` - current concurrent SABnzbd/qBittorrent operation and retained, disabled mutual-exclusion controller.
 - `NETDATA_COMPUTE.md` - authoritative nine-node Netdata Parent/Child deployment and recovery procedure.
 - `../docker/netbox/README.md` - production NetBox platform, access, backup, restore, and upgrade boundary.
