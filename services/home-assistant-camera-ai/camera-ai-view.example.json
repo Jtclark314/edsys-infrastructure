@@ -1,0 +1,44 @@
+{
+  "title": "Camera AI",
+  "path": "camera-ai",
+  "icon": "mdi:camera-enhance",
+  "type": "sections",
+  "max_columns": 2,
+  "sections": [
+    {
+      "type": "grid",
+      "cards": [
+        {
+          "type": "custom:edsys-camera-ai-card",
+          "provider": "EXISTING_LLM_VISION_PROVIDER_ENTRY_ID",
+          "cameras": [
+            "camera.driveway",
+            "camera.frontyard",
+            "camera.backyard",
+            "camera.front_porch_wyze",
+            "camera.back_patio_wyze",
+            "camera.driveway_tracking",
+            "camera.backyard_tracking",
+            "camera.security_camera"
+          ],
+          "default_camera": "camera.driveway",
+          "timeline_entity": "calendar.llm_vision_timeline"
+        }
+      ]
+    },
+    {
+      "type": "grid",
+      "cards": [
+        {
+          "type": "custom:edsys-camera-ai-history",
+          "header": "Recent analyses",
+          "number_of_days": 7,
+          "number_of_events": 20,
+          "language": "en",
+          "time_format": "12h",
+          "filter_false_positives": false
+        }
+      ]
+    }
+  ]
+}

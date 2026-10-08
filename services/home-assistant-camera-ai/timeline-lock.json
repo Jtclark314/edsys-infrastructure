@@ -1,0 +1,10 @@
+{
+  "version": "v1.7.2",
+  "repository": "https://github.com/valentinfrlch/llmvision-card",
+  "files": {
+    "llmvision-card.js": "4f48abc5c1bafb1d575e1cf2d8fa8573feb07719b8ef2787a56a71d9482ae9e9",
+    "llmvision-preview-card.js": "446a0aa9afdf2ed743cb4d2df7bfbd23c4245c2c8e7b25e91e5f53330fb1113f",
+    "llmvision-horizontal-card.js": "8ed8b0e36df909e5ccd3241d8da84df0b0c705bc5d88350c2d77d3a554085ab6",
+    "assets/lit-B0LBCVuH.js": "727fd0227c3220235d9503faa57b9f9429ce0f319b2d7de6b9268e7aa9f33144"
+  }
+}
