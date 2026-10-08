@@ -21,7 +21,7 @@ StateDirectory=edsys-rag-eval
 StateDirectoryMode=0700
 EnvironmentFile=/etc/edsys-secrets/edsys-rag-eval.env
 Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStart=/usr/bin/python3 /srv/edsys/EdSys-Master/tools/rag-eval/edsys-rag-golden-eval.py run --queries /srv/edsys/EdSys-Master/data/rag-golden-queries.yml --portal-repo /home/jeremy/code/edsys-ai-portal --portal-url http://192.168.50.50:3020 --judge heuristic --model edsys-grounded-local --results-dir /mnt/ai-store/rag/evals --state-dir /var/lib/edsys-rag-eval
+ExecStart=/usr/bin/python3 /srv/edsys/EdSys-Master/tools/rag-eval/edsys-rag-golden-eval.py run --queries /srv/edsys/EdSys-Master/data/rag-golden-queries.yml --portal-repo /home/jeremy/code/edsys-ai-portal --portal-url https://9950x.taile832fe.ts.net --judge heuristic --model edsys-grounded-local --results-dir /mnt/ai-store/rag/evals --state-dir /var/lib/edsys-rag-eval
 TimeoutStartSec=45min
 Nice=10
 IOSchedulingClass=best-effort
