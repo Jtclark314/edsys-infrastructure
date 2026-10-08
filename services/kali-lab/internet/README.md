@@ -24,7 +24,10 @@ The guest firewall otherwise blocks private, loopback, link-local, shared-addres
 documentation, multicast, and reserved IPv4 destinations on kali-wan, plus
 all IPv6 there. This includes the QEMU host service endpoint 10.0.2.2.
 Using it as an IP gateway does not require opening IP connections to that
-address. DNS goes directly to public resolvers 1.1.1.1 and 9.9.9.9.
+address. DNS uses the owner-selected EdSys Pi-hole resolvers 192.168.50.5
+and 192.168.50.6 through the existing approved home-LAN exception. The static
+`/etc/resolv.conf` is the persistent resolver configuration; systemd-resolved
+and NetworkManager do not manage it.
 Unsolicited inbound traffic and all forwarding through the new adapter are
 blocked. The existing guest forward chain also has default-drop policy.
 These guest controls assume the trusted Kali administrator does not disable
@@ -79,6 +82,21 @@ and atomically replace just `inet edsys_kali_internet`. The private
 retain the prior Internet-only policy. No network adapter changes are needed.
 
 ## Verification and limits
+
+On 2026-10-07 the owner selected both EdSys Pi-holes for Kali DNS. Each
+resolver answered public and internal queries over UDP and public queries
+over TCP. System resolution used the primary Pi-hole, resolved the internal
+Proxmox hostname, and supported successful HTTPS retrieval. The prior static
+resolver file is retained privately under
+`/var/lib/edsys-kali-dns-before-20261007/`. Network and firewall files remained
+unchanged, and Sunshine stayed active. No guest reboot or forced primary-DNS
+failure was performed.
+
+Source closeout on 2026-10-08 independently matched the live resolver file
+to this repository, repeated public UDP/TCP and internal-name queries against
+both Pi-holes, and retrieved the Proxmox HTTPS page by its internal hostname.
+Guest IPv4/IPv6 forwarding both remained disabled. No DNS, firewall, network,
+or guest restart was needed for this closeout.
 
 Live acceptance on 2026-09-16 covered DNS, successful HTTPS document retrieval,
 Firefox rendering, rejected private destinations, unchanged host and guest
