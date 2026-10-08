@@ -23,6 +23,27 @@
           ],
           "default_camera": "camera.driveway",
           "timeline_entity": "calendar.llm_vision_timeline"
+        },
+        {
+          "type": "entities",
+          "title": "Frontyard descriptions",
+          "show_header_toggle": false,
+          "entities": [
+            {
+              "type": "section",
+              "label": "Whole view, including street \u00b7 2 min per type"
+            },
+            {
+              "entity": "automation.frontyard_ai_people",
+              "name": "People",
+              "icon": "mdi:walk"
+            },
+            {
+              "entity": "automation.frontyard_ai_vehicles",
+              "name": "Vehicles",
+              "icon": "mdi:car"
+            }
+          ]
         }
       ]
     },
