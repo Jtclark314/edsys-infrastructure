@@ -114,3 +114,19 @@ Recurring broker smoke testing is installed on 9950x as `edsys-litellm-broker-sm
 ## Reachability
 
 Operator-facing workhorse UI ports bind to `WORKHORSE_LAN_BIND_IP` and `WORKHORSE_TAILSCALE_BIND_IP`, currently `192.168.50.50` and `100.87.137.47`. Healthchecks also binds its same configured host port on `127.0.0.1` so host-local heartbeat/status tooling can use a stable loopback endpoint without depending on LAN or Tailnet routing. This fixes browser links from other machines while avoiding public internet exposure. Keep database/collector-only ports loopback or Docker-internal unless separately reviewed.
+
+### Model Lab routes
+
+The AI Portal's `#/lab` workspace uses eight explicit `edsys-lab-*` local Ollama
+routes. These have 32K context, a 600-second timeout, and no fallback mappings so
+manual model selection stays fixed. They cover the installed GPT-OSS, Qwen 3.6,
+Qwen 3.6 coder profile, Qwen 3.5, Foothills model profile, Qwen 2.5 Coder, and both
+Llama models. The Foothills model profile in the Lab still uses EdSys knowledge;
+Ask Foothills retains its separate project retrieval path and key.
+
+Keep route/context definitions aligned with the Portal's `config/lab-models.yaml`
+and grant only these additional names to its existing service-scoped key. Before
+changing grants, retain the prior key metadata privately. Refresh in the Lab
+checks both model installation and service-key access; it does not download or
+register models. Existing use-case routes and other client keys stay independent.
+Revert the config and prior key model list together if rolling this addition back.
