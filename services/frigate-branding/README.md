@@ -1,7 +1,8 @@
 # Frigate browser icon
 
-Jeremy selected the smooth metallic blue badge with an orange plasma core and
-thin blue perimeter. `assets/selected-master.png` is the approved high-resolution
+Jeremy selected an orange plasma circle that fills nearly the entire icon on
+2026-10-09, replacing the earlier metallic blue badge to improve visibility at
+small sidebar sizes. `assets/selected-master.png` is the approved high-resolution
 design; PNG sizes and a multi-resolution ICO are derived from that file.
 
 ## Deployment
@@ -26,6 +27,13 @@ startup. The branding must never prevent camera recording. Recheck icon links
 after upstream upgrades; compatibility with an unknown future layout is not
 guaranteed.
 
+For a later artwork-only revision, back up `/opt/frigate-branding`, replace its
+assets with the newly derived set, and run the mounted helper without `--start`
+inside the existing container. Validate NGINX configuration and gracefully
+reload NGINX so its cached index descriptor is refreshed. This updates the
+current frontend without restarting camera processing; the existing startup
+hook applies the same assets on future starts.
+
 ## Backup and rollback
 
 Before the first deployment, retain the previous Compose file and upstream icon
@@ -34,6 +42,11 @@ Keep private Compose contents and recovery files outside Git and RAG. The custom
 source assets and helper are tracked here; runtime copies are under
 `/opt/frigate-branding`. Include that runtime folder with stack configuration
 backups.
+
+To restore a previous custom design, copy the asset set from the corresponding
+private `runtime-before/assets` backup into `/opt/frigate-branding/assets`, run
+the helper without `--start`, and validate/reload NGINX. The prior tracked source
+revision also retains that artwork. Match the served icon bytes after rollback.
 
 To restore the upstream icon, restore the pre-change Compose file (or remove
 only the custom entrypoint and icon mount) and recreate Frigate from its existing
@@ -56,5 +69,6 @@ camera processing.
   their appearance must be checked on the relevant device. Reload the entry
   first, and re-add it only if necessary. Do not clear the entire browser profile.
 
-First acceptance on 2026-10-08 used Frigate `0.17.2-3d4dd3a`. The selected design
-was checked at 16, 24, 32, 48 and 64 pixels against a dark background.
+First acceptance on 2026-10-08 used Frigate `0.17.2-3d4dd3a`. The revised plasma
+circle was checked at 16, 24, 32, 48 and 64 pixels against a dark background on
+2026-10-09.
