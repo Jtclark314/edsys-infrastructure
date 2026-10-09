@@ -222,6 +222,8 @@ The API is stateless. Back up:
 
 The shared grounding database is an externally managed, reproducible read-only
 input; it is not a Control API runtime database.
+Compose mounts its containing directory read-only so the API sees an atomic
+index replacement without retaining the old file inode.
 
 ## Known Limitations
 

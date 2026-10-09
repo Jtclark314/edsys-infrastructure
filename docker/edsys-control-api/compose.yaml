@@ -26,6 +26,6 @@ services:
         target: /data
         read_only: true
       - type: bind
-        source: /mnt/ai-store/rag/grounding/edsys-grounding.sqlite
-        target: /rag/edsys-grounding.sqlite
+        source: /mnt/ai-store/rag/grounding
+        target: /rag
         read_only: true
