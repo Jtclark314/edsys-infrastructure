@@ -42,6 +42,8 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `../services/wyze-bridge-idisposable/README.md` - digest-pinned Back Patio
   native-2K bridge with a fail-closed macvlan ingress guard and loopback-only
   Frigate/management ports.
+- `../services/frigate-branding/README.md` - selected custom browser icon,
+  startup persistence, asset verification and upstream-icon rollback.
 
 - `../services/3d-printing/README.md` - 9950x mount-guarded portable CAD/modeling/slicer stack, isolated dependency locks, offline qualification and selective rollback.
 - `../services/local-coder/README.md` - pinned CPU-only Qwen3.6 coding agent,

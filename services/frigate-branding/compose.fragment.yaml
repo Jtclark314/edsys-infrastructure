@@ -1,0 +1,6 @@
+# Merge these fields into the existing frigate service; retain its other settings.
+services:
+  frigate:
+    entrypoint: ["python3", "/opt/edsys-frigate-icons/apply-icons.py", "--start"]
+    volumes:
+      - /opt/frigate-branding:/opt/edsys-frigate-icons:ro
