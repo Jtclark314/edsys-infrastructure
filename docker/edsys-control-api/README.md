@@ -152,6 +152,13 @@ Build a replacement image only from reviewed source in a separate maintenance
 window, then prove API, dashboard, source-data, and client acceptance before
 promotion.
 
+The container mounts the host's public CA bundle read-only so HTTPS probes can
+verify the same private NetBox certificate as the host. Do not disable TLS
+verification to make an inventory check pass. Keep a rollback tag of the prior
+image before rebuilding this service. `constraints.txt` retains the accepted
+runtime dependency versions during a source-only repair; update those versions
+in a separate reviewed upgrade.
+
 ## API Endpoints
 
 - `GET /`
@@ -181,10 +188,18 @@ promotion.
 Live checks are safe and read-only:
 
 - HTTP/HTTPS URLs use unauthenticated `HEAD` or `GET`.
+- A catalog `health_probe` can override the display URL with an explicit HTTP
+  URL and method, a TCP host/port, or `type: unverified` for a path this
+  container cannot reach. TCP confirms only a socket, not TLS or login health.
+- `monitoring_enabled: false` keeps intentionally retired or stopped catalog
+  entries visible while excluding them from active health checks.
 - `200-399` means reachable.
 - `401` and `403` mean reachable but login is required.
 - TCP services use a short socket connection attempt.
 - Services without URL or port are skipped.
+- `unverified_count` is separate from checked, down, and skipped counts. A
+  private or invalid probe is never reported as healthy merely to clear an
+  alert.
 - Results are cached for `EDSYS_CACHE_SECONDS`.
 - The API never performs SSH logins or unknown-port scans.
 
@@ -211,6 +226,8 @@ input; it is not a Control API runtime database.
 ## Known Limitations
 
 - Health checks are shallow reachability checks, not deep application checks.
+- Host-loopback-only and exact-peer services require their existing host-side
+  monitors or a separately approved probe path; the API labels them unverified.
 - Most catalog endpoints do not yet require authentication; the grounding
   endpoint is authenticated.
 - No write/control actions yet.

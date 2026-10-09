@@ -126,9 +126,9 @@ function renderHealth(live) {
   document.querySelector("#downServices").textContent = live.down_count;
   document.querySelector("#apiStatus").outerHTML = live.down_count > 0
     ? `<span id="apiStatus" class="badge warn">Some checks down</span>`
-    : `<span id="apiStatus" class="badge good">Checks clean</span>`;
+    : `<span id="apiStatus" class="badge good">No reported outages</span>`;
   document.querySelector("#healthSubtext").textContent =
-    `${live.checked_count} checked, ${live.up_count} reachable, ${live.down_count} down, ${live.skipped_count} skipped.`;
+    `${live.checked_count} checked, ${live.up_count} reachable, ${live.down_count} down, ${live.unverified_count ?? 0} unverified, ${live.skipped_count} skipped.`;
 
   const criticalDown = live.results.filter((item) => item.status === "down" && ["critical", "high"].includes(String(item.criticality || "").toLowerCase()));
   const box = document.querySelector("#criticalDown");

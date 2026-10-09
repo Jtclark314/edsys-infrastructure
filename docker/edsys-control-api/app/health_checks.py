@@ -58,6 +58,23 @@ class HealthChecker:
         return time.monotonic() < expires_at
 
     def _target_for_service(self, service: ServiceEntry) -> tuple[str | None, str | None, str | None, int | None]:
+        probe = service.extra.get("health_probe")
+        if probe is not None:
+            if not isinstance(probe, dict):
+                return "unverified", None, None, None
+            kind = str(probe.get("type") or "").lower()
+            if kind == "unverified":
+                return "unverified", None, None, None
+            if kind == "http":
+                url = str(probe.get("url") or "").strip()
+                if url.startswith(("http://", "https://")):
+                    return "http", url, None, None
+            if kind == "tcp":
+                host = _valid_single_ip(probe.get("host"))
+                port = _as_int_port(probe.get("port"))
+                if host and port:
+                    return "tcp", f"{host}:{port}", host, port
+            return "unverified", None, None, None
         url = str(service.url or "").strip()
         if url.startswith(("http://", "https://")):
             return "http", url, None, None
@@ -75,15 +92,20 @@ class HealthChecker:
     async def _check_http(self, service: ServiceEntry, url: str) -> HealthCheckResult:
         started = time.perf_counter()
         checked_at = _now_iso()
+        probe = service.extra.get("health_probe")
+        method = str(probe.get("method") or "HEAD").upper() if isinstance(probe, dict) else "HEAD"
         try:
             async with httpx.AsyncClient(
                 timeout=self.settings.health_timeout_seconds,
                 follow_redirects=False,
                 headers={"User-Agent": "EdSys-Control-API/0.1"},
             ) as client:
-                response = await client.head(url)
-                if response.status_code in {405, 501}:
+                if method == "GET":
                     response = await client.get(url)
+                else:
+                    response = await client.head(url)
+                    if response.status_code in {405, 501}:
+                        response = await client.get(url)
             elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
             if 200 <= response.status_code <= 399:
                 status = "up"
@@ -182,7 +204,21 @@ class HealthChecker:
             return cached[1]
 
         checked_at = _now_iso()
-        if not self.settings.enable_live_checks:
+        if service.extra.get("monitoring_enabled") is False:
+            result = HealthCheckResult(
+                name=service.name,
+                slug=service.slug,
+                status="skipped",
+                checked_at=checked_at,
+                reason="monitoring_disabled",
+                scope=_scope_for_service(service),
+                criticality=service.criticality,
+                host=service.host,
+                ip=service.ip,
+                port=service.port,
+                url=service.url,
+            )
+        elif not self.settings.enable_live_checks:
             result = HealthCheckResult(
                 name=service.name,
                 slug=service.slug,
@@ -202,6 +238,26 @@ class HealthChecker:
                 result = await self._check_http(service, target)
             elif check_type == "tcp" and target and host and port:
                 result = await self._check_tcp(service, target, host, port)
+            elif check_type == "unverified":
+                probe = service.extra.get("health_probe")
+                reason = (
+                    str(probe.get("reason") or "monitor_vantage_unavailable")
+                    if isinstance(probe, dict) and probe.get("type") == "unverified"
+                    else "invalid_probe_config"
+                )
+                result = HealthCheckResult(
+                    name=service.name,
+                    slug=service.slug,
+                    status="unverified",
+                    checked_at=checked_at,
+                    reason=reason,
+                    scope=_scope_for_service(service),
+                    criticality=service.criticality,
+                    host=service.host,
+                    ip=service.ip,
+                    port=service.port,
+                    url=service.url,
+                )
             else:
                 result = HealthCheckResult(
                     name=service.name,
@@ -228,10 +284,11 @@ class HealthChecker:
         services = self.catalog.services()
         results = await asyncio.gather(*(self.check_service(service, force=force) for service in services))
         payload = {
-            "checked_count": len([item for item in results if item.status not in {"skipped"}]),
+            "checked_count": len([item for item in results if item.status not in {"skipped", "unverified"}]),
             "up_count": len([item for item in results if item.status in {"up", "reachable_auth_required"}]),
             "down_count": len([item for item in results if item.status == "down"]),
             "skipped_count": len([item for item in results if item.status == "skipped"]),
+            "unverified_count": len([item for item in results if item.status == "unverified"]),
             "checked_at": _now_iso(),
             "cache_seconds": self.settings.cache_seconds,
             "results": [item.model_dump() for item in results],

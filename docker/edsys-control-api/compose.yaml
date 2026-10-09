@@ -14,7 +14,13 @@ services:
         required: false
       - path: /etc/edsys-secrets/control-api/voice-grounding.env
         required: true
+    environment:
+      SSL_CERT_FILE: /etc/ssl/certs/host-ca-certificates.crt
     volumes:
+      - type: bind
+        source: /etc/ssl/certs/ca-certificates.crt
+        target: /etc/ssl/certs/host-ca-certificates.crt
+        read_only: true
       - type: bind
         source: ${EDSYS_MASTER_DATA_PATH}
         target: /data
