@@ -103,6 +103,14 @@ fi
 if [[ "${DRY_RUN}" != "true" ]]; then
   [[ -x "${CODEX_STATE_STAGE_SCRIPT}" ]] || fail "Codex state staging helper is missing or not executable"
   "${CODEX_STATE_STAGE_SCRIPT}" stage 2>&1 | tee -a "${LOG_FILE}" || fail "Codex state staging failed"
+  # Reuse the verified online SQLite snapshot helper for Model Lab's separate
+  # private history. This extends the existing backup run; no timer is added.
+  model_lab_dir="${MODEL_LAB_HISTORY_DIR:-/opt/edsys-workhorse/edsys-ai-portal/data/model-lab}"
+  if [[ -f "${model_lab_dir}/history.sqlite" ]]; then
+    "${CODEX_STATE_STAGE_SCRIPT}" --codex-home "${model_lab_dir}" \
+      --stage-root "${STAGING_DIR}/model-lab" --lock-file /run/edsys-model-lab-stage.lock stage \
+      2>&1 | tee -a "${LOG_FILE}" || fail "Model Lab history staging failed"
+  fi
 fi
 
 : > "${EXISTING_INCLUDE_FILE}"

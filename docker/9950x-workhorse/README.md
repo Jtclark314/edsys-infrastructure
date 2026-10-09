@@ -118,7 +118,7 @@ Operator-facing workhorse UI ports bind to `WORKHORSE_LAN_BIND_IP` and `WORKHORS
 ### Model Lab routes
 
 The AI Portal's `#/lab` workspace uses eight explicit `edsys-lab-*` local Ollama
-routes. These have 32K context, a 600-second timeout, and no fallback mappings so
+routes. These default to 32K context, a 600-second timeout, and no fallback mappings so
 manual model selection stays fixed. They cover the installed GPT-OSS, Qwen 3.6,
 Qwen 3.6 coder profile, Qwen 3.5, Foothills model profile, Qwen 2.5 Coder, and both
 Llama models. The Foothills model profile in the Lab still uses EdSys knowledge;
@@ -130,3 +130,12 @@ changing grants, retain the prior key metadata privately. Refresh in the Lab
 checks both model installation and service-key access; it does not download or
 register models. Existing use-case routes and other client keys stay independent.
 Revert the config and prior key model list together if rolling this addition back.
+
+The memory-capable Model Lab backend supplies a bounded per-request `num_ctx`,
+expanding from 8K to each qualified model ceiling: 128K GPT-OSS/Llama, 256K
+Qwen 3.5/3.6 profiles, 32K Qwen 2.5 Coder. Broker defaults remain 32K for other
+callers and old-image rollback. All eight exact routes passed a short completion
+and actual Ollama context readback on 2026-10-09. This verifies allocation and
+routing, not model answer quality or full-window throughput. Shared Lab history
+lives in the Portal's private persistent data volume; the existing critical
+backup run stages a consistent SQLite snapshot before Restic.

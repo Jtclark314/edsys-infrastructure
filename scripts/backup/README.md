@@ -35,6 +35,26 @@ The separate weekly direct-offsite restore uses the Google Drive Restic
 backend rather than the local repository, so remote readability is proved
 instead of inferred from upload parity.
 
+## Model Lab history
+
+The existing backup run also stages Model Lab's private SQLite history using the
+online-backup helper with a separate source, lock and stage. Defaults are
+`/opt/edsys-workhorse/edsys-ai-portal/data/model-lab` and
+`/srv/edsys-backup/staging/model-lab/{current,previous}`. Override
+`MODEL_LAB_HISTORY_DIR` when the Portal state volume moves. No timer is added.
+The stage contains a verified hash/integrity manifest and a consistent database;
+Restic includes the existing staging tree. It contains private chat content and
+must never enter Git or RAG. A missing history file before first Lab use is
+normal; snapshot failures for an existing file fail the backup.
+
+For isolated verification, use the same helper with `--stage-root` pointing to
+the Model Lab stage and the `verify` subcommand. Restore its
+`current/databases/history.sqlite` with the Portal stopped; preserve displaced
+DB/WAL/SHM files for rollback, set the app owner's 0600 permissions, and verify
+owner-authenticated history after startup. Restoring over a running database is
+not supported. Portal deployment checkpoints independently retain a consistent
+history snapshot, while image rollback keeps the current history volume.
+
 ## Files
 
 - `install-9950x.sh` creates directories, installs templates, and installs systemd units without enabling the timer.
