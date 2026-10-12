@@ -107,6 +107,16 @@ still rendered and playback progress updated; this is not a clean-console or
 physical-command acceptance. No Home Assistant restart, integration upgrade,
 account reset, or notification was used to mask an unavailable device.
 
+The subsequent 2026-10-11 media-card repair resolved that initialization warning
+with one versioned local frontend resource. It leaves native cards, layouts and
+installed frontend packages intact; see the
+[initialization guard runbook](../services/home-assistant-frontend/README.md).
+Fresh signed-in media views and desktop/375-pixel framing were verified with
+no media-card console errors. State updates, artwork where present, and native
+progress display remained functional. No playback/volume/power command was
+sent. Only resource metadata and the new local asset changed; dashboard and
+protected configuration/native frontend fingerprints remained unchanged.
+
 Follow-up runtime snapshots and journals are owner-private under
 `~/.local/state/ha-device-recovery-20261011-*/`. Do not rerun earlier dashboard
 apply scripts: their expected after-version predates this follow-up. For an
