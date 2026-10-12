@@ -8,8 +8,8 @@ dashboards, 92 devices, 1,079 registered entities, 792 live entities, twelve
 areas, and 37 integration entries. These are dated observations, not ongoing
 health guarantees.
 
-Nine stored dashboards now have twenty curated views. The integration-generated
-iCloud3 dashboard remains unchanged. Existing dashboard/view URLs, sidebar
+The redesign produced twenty curated views across nine stored dashboards. The
+integration-generated iCloud3 dashboard remains unchanged. Existing dashboard/view URLs, sidebar
 metadata, and the Systems dashboard's admin-only restriction are preserved.
 The system default was changed through the native Dashboards UI to `edsys-home`;
 opening the base URL was verified to land on `/edsys-home/home`. Explicit
@@ -65,6 +65,56 @@ not repaired, enabled, deleted, or hidden as healthy.
 No household actuator, scene, Roku command, vacuum operation, notification,
 integration reload, service restart, or upgrade was triggered by the redesign.
 Physical-control acceptance is therefore not renewed by these UI/data checks.
+
+## Bedroom media and device recovery: 2026-10-11
+
+A subsequent owner-authorized recovery added the existing master-bedroom LG
+and its Plex client to Home, Spaces, and Media before diagnosing unavailable
+devices. Media now includes `/edsys-media/master-bedroom`, a responsive native
+view with LG applications/inputs, volume/mute, and separate Plex playback.
+The nine curated dashboards now have twenty-one views; prior URLs remain valid.
+
+The LG integration's configured address was stale. The active Plex session
+identified the TV's current LAN address; both LG control ports were reachable
+there. Native LG reconfiguration validated the existing device identity and
+pairing, updated only that connection, and recovered live on/app/volume data.
+Plex became available when the owner opened its app. Read-only LG inspection
+confirmed `external_arc` audio output. The dashboard's LG volume/mute controls
+are the intended HDMI ARC path to the connected Polk soundbar, but audible
+control and soundbar power synchronization remain physically untested. No
+volume, playback, input, or power command was sent during acceptance.
+
+The owner confirmed the remaining hardware dependencies: the driveway
+floodlight is broken and needs replacement; the unavailable Apple Watch needs
+charging; the old Living Room Vizio Cast TV is no longer used. Only that Cast
+entity was disabled through the native entity registry, its restored stale
+state removed, and its references removed from Home and Systems. Its device,
+registry record, and history remain; the other Cast TVs and Roku endpoints were
+not changed. A single native iCloud account refresh succeeded without recovering
+the uncharged watch. Both iCloud3 phone trackers continued to report normally.
+Inactive Plex client entries and the intentionally unavailable vehicle
+notification automation were not deleted, enabled, or represented as healthy.
+Optional unavailable iPhone pace/cadence sensors were left unchanged; their
+availability was not evidence of a whole-phone or iCloud3 outage.
+
+Saved configurations and links were checked against current entities. Device
+registry, automations, scenes, iCloud3 configuration, dashboard metadata, and
+frontend resources retained their prior fingerprints/readbacks. The expected
+changes are the LG config entry and one disabled entity-registry record. The
+bedroom native controls rendered on desktop and a 375-pixel phone viewport.
+The browser also logged a native media-control initialization error while cards
+still rendered and playback progress updated; this is not a clean-console or
+physical-command acceptance. No Home Assistant restart, integration upgrade,
+account reset, or notification was used to mask an unavailable device.
+
+Follow-up runtime snapshots and journals are owner-private under
+`~/.local/state/ha-device-recovery-20261011-*/`. Do not rerun earlier dashboard
+apply scripts: their expected after-version predates this follow-up. For an
+authorized narrow rollback, compare live JSON with the follow-up after-version
+before restoring its before-version. Reenable the retired Cast entity through
+the native registry only if that device returns to service. Restore an LG host
+only after identifying the actual TV and validating its current address through
+native reconfiguration; do not write pairing keys or storage files directly.
 
 ## Private recovery and further edits
 
