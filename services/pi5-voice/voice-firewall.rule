@@ -1,0 +1,2 @@
+# Insert in the existing edsys_filter input chain; SSH rules remain unchanged.
+iifname "eth0" ip saddr 192.168.50.75 tcp dport 6053 ct state new accept comment "Home Assistant voice satellite"

@@ -1,0 +1,29 @@
+[Unit]
+Description=EdSys room voice satellite (microphone commissioning required)
+Wants=pipewire.service pipewire-pulse.service wireplumber.service
+After=pipewire.service pipewire-pulse.service wireplumber.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+Environment=PULSE_SERVER=unix:%t/pulse/native
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecCondition=/opt/edsys-voice/linux-voice-assistant/.venv/bin/python /usr/local/lib/edsys-voice/run.py --check
+ExecStart=/opt/edsys-voice/linux-voice-assistant/.venv/bin/python /usr/local/lib/edsys-voice/run.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/edsys-voice
+RestrictSUIDSGID=yes
+LockPersonality=yes
+UMask=0077
+MemoryMax=1G
+LimitNOFILE=4096
+
+[Install]
+WantedBy=default.target
