@@ -1,0 +1,4 @@
+{
+  "home_assistant_url": "https://YOUR-EXISTING-SECURE-HA-ADDRESS",
+  "pipeline_name": "EdSys Living Room Voice"
+}
