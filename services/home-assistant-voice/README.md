@@ -13,8 +13,10 @@ record for the final deployment/acceptance checkpoint.
 ## Behavior and authority
 
 Nimo's existing Alt+V and the prepared Pi's voice endpoint use the named
-`EdSys Living Room Voice` pipeline. Existing HA Cloud STT/TTS and AmberNeural
-are retained. Native HA intents run first; general conversation uses native
+`EdSys Living Room Voice` pipeline. Existing HA Cloud STT/TTS are retained.
+Jeremy selected en-US AndrewNeural on 2026-10-13 and confirmed it should stay
+selected, superseding initial AmberNeural qualification. Native HA intents run
+first; general conversation uses native
 OpenAI Conversation with `gpt-6.1-sol`, low reasoning, low verbosity, Standard
 service, no Pro mode and a 2048-token response ceiling. Replies usually use
 one or two sentences and at most 60 words. Web search is enabled for changing

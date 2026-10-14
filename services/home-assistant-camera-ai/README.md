@@ -1,6 +1,56 @@
 # Home Assistant Camera AI
 
-Camera AI is a question-and-answer tab in the existing Cameras dashboard.
+Status, **2026-10-13**: **mothballed at Jeremy's request**. The existing LLM
+Vision OpenAI provider is disabled, both Frontyard AI automations are off, and
+the Camera AI view shows a paused notice instead of question/analysis controls.
+Provider configuration, frontend assets, automation definitions and the history
+view are retained. The separate OpenAI conversational voice integration remains
+active. Existing seven-day history retention still applies.
+
+## Mothballing and resumption
+
+The change uses native HA configuration/state APIs. Turn off only
+`automation.frontyard_ai_people` and `automation.frontyard_ai_vehicles` with
+running actions stopped, then disable the existing **LLM Vision OpenAI** entry.
+Retain the LLM Vision Settings/calendar entry. Preserve the Camera AI view's
+history section and every other Cameras view; replace only this feature's
+question card and automation switches with a native Markdown status notice.
+Keep an exact private copy of the original controls for later restoration.
+
+LLM Vision **v1.7.2** stores provider data in `hass.data`. Its unload function
+does not clear that data; Request.call looks up the cached provider, rather
+than its disabled registry state. A normal **HA Core restart is required after
+disabling this provider** to clear the old in-memory connection. Do not remove
+the entry or patch the integration. Validate Core configuration first and
+verify the native disabled state survives restart. Snapshot
+`pre-camera-ai-mothball-20261013` completed before the change.
+
+The durable private checkpoint is
+`~/.local/share/edsys-camera-ai/mothball-20261013/` on 9950x. It contains exact
+dashboard/configuration metadata and preflight/readback evidence, with private
+permissions; it does not export provider credentials. Raw state stays outside
+Git/RAG. The broader VM snapshot also preserves the existing native provider
+state. Avoid whole-VM rollback for ordinary resumption.
+
+When Jeremy requests resumption: enable the **existing** LLM Vision OpenAI entry,
+verify it loaded, restore only the two saved control cards into the latest
+Camera AI view, and restore the two automations' saved enabled states. Compare
+the current view to the saved mothballed view first; preserve intervening owner
+edits, the history section and other dashboards. Keep the voice integration,
+its key and the household preferred pipeline unchanged.
+
+Mothball acceptance on Core **2026.10.1**: provider disabled/unloaded and the two
+automations off after restart; a synthetic local-image action rejected the
+missing provider before provider dispatch; voice general-chat and native-time
+reply audio returned; eight camera states remained available. Dashboard/resource
+and history checks are recorded in the owning
+[Camera AI record](https://github.com/Jtclark314/EdSys-Master/blob/main/docs/HOME_ASSISTANT_CAMERA_AI.md).
+No household camera frame was sent for the refusal test. The temporary fixture
+is removed after verification.
+
+## Retained behavior when enabled
+
+Camera AI was installed as a question-and-answer tab in the Cameras dashboard.
 Choose a camera, inspect its preview, type a question, and press **Analyze now**.
 The answer shows its camera and time. Recent analyses opens the saved question,
 answer, and snapshot through the official LLM Vision Timeline Card.
@@ -8,7 +58,8 @@ answer, and snapshot through the official LLM Vision Timeline Card.
 ## Ownership and current deployment
 
 - Source: this directory in `edsys-infrastructure`.
-- Host: Home Assistant OS VM300 on pve-node3; Core 2026.10.0.
+- Host: Home Assistant OS VM300 on pve-node3; installed qualification on Core
+  2026.10.0, mothball qualification on 2026.10.1.
 - Live path: `http://192.168.50.75/edsys-cameras/camera-ai`.
 - Custom control/history wrapper: version 1.0.1, served from
   `/config/www/edsys-camera-ai/v1.0.1/`.
