@@ -6,8 +6,9 @@ This acceptance used Ethernet. Wi-Fi handover, sleep and Windows logon recovery
 remain to be confirmed; the client uses the same HTTPS hostname on either NIC.
 The reviewed camera pilot displays HA's native camera dialog in this window;
 the correct Front Porch feed and advancing video passed an authenticated typed
-request. Spoken camera acceptance and the final microphone-release check are
-pending an unlocked Nimo session.
+request. Microphone capture was released when the camera opened. Spoken camera
+acceptance remains pending; an unattended microphone/typed-camera test showed
+HA's native audio playback alert, which needs a real spoken acceptance check.
 
 ## Use and speech path
 
@@ -49,8 +50,10 @@ not resubmitted after reconnect, so a Wi-Fi/Ethernet handover or Core restart
 cannot automatically replay a household command. Other HA subscriptions retain
 their normal behavior. Close the Nimo Voice window to end native capture and
 camera viewing. Camera presentation also releases the retained native Assist
-recorder without interrupting reply audio; the final Windows microphone check
-is pending. The bridge is qualified against Core/frontend 2026.10.1 and needs
+recorder while retaining the native reply-audio lifecycle; Windows' recording
+indication cleared during live camera viewing. This does not establish human
+audibility. The unattended test's native audio alert remains a spoken acceptance
+item. The bridge is qualified against Core/frontend 2026.10.1 and needs
 requalification after frontend changes.
 
 ## Deployment and private state
