@@ -3,7 +3,7 @@ description: Native Kodi and butler presentation pilot; live HA transport pendin
 host: edsys-edge-livingroom
 runtime: native-systemd-kodi-gbm-arm64
 ports:
-  inbound: none-added
+  inbound: TCP 8080 authenticated Kodi HTTP; exact HA IPv4 on eth0 only
   local_control: /run/edsys-bedroom-display/control.sock (0600 Unix socket)
 volumes:
   - /var/lib/edsys-voice/.kodi (private profile and Plex account state)
@@ -15,6 +15,7 @@ environment:
   XDG_RUNTIME_DIR: existing-edsys-voice-runtime
 secrets_required:
   - Native Plex account linking held only in the private Kodi profile
+  - Generated endpoint-only Kodi HTTP credential in private Pi/HA configuration
 backup:
   location: /var/backups/edsys-bedroom-display
   includes: private profile, package delta, original manifest and CEC configuration

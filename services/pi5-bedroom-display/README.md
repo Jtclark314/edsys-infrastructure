@@ -47,6 +47,14 @@ in-process and never automatically replayed after uncertainty.
 
 ## Host, ports and state
 
+The owner-requested **Media → Bedroom Pi Plex** dashboard now uses HA's native
+Kodi integration for this player. Standard Kodi HTTP on 8080 is authenticated
+with a generated endpoint-only credential and admitted only from HA on eth0.
+WebSocket/TCP 9090 and discovery remain disabled; state uses HTTP polling.
+This connection controls playback/navigation and is separate from the pending
+presentation-event transport. See `../home-assistant-pi-plex/README.md` for the
+page, setup, privacy, verification and narrow rollback.
+
 - Host: existing `edsys-edge-livingroom`, physically in Master Bedroom; hostname
   retained. Runtime: Debian 13 ARM64, native systemd Kodi/GBM, no container.
 - User: existing unprivileged `edsys-voice`, also owning the retained PipeWire
@@ -57,8 +65,9 @@ in-process and never automatically replayed after uncertainty.
 - Bridge/captures: `/run/edsys-bedroom-display`, deleted at service stop.
 - Add-on: `/usr/share/kodi/addons/service.edsys.bedroom-display` and one optional
   system add-on manifest entry. No direct Kodi database writes.
-- No new firewall opening or HA credential. Kodi HTTP/event/UPnP/AirPlay/zeroconf
-  and WS-Discovery are disabled in the seed profile. Recheck listeners after
+- The base installer disables Kodi HTTP/event/UPnP/AirPlay/zeroconf and
+  WS-Discovery. The separate `pi/enable-ha-control.py` opts into the HA-only
+  authenticated HTTP connection above. No HA credential is installed. Recheck listeners after
   add-on changes; future PM4K versions need separate qualification.
 - CEC devices are blocked and native CEC defaults disabled. No TV wake/off or
   LG-remote-to-Kodi navigation is qualified.

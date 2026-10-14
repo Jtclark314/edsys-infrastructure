@@ -68,3 +68,5 @@ Use this repo for deployable definitions and repeatable commands. Do not store r
   keypad and Nimo focused keyboard window; bounded targets and narrow recovery.
 - `../services/pi5-bedroom-display/README.md` - native Kodi/PM4K and butler
   presentation pilot; physically verified video/audio/overlay, live HA transport pending.
+- `../services/home-assistant-pi-plex/README.md` - native Pi Plex dashboard,
+  HA-only authenticated Kodi connection and narrow recovery.

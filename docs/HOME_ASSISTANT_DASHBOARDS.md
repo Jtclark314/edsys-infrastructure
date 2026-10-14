@@ -196,3 +196,22 @@ physical soundbar-power acceptance. Private full dashboard and Nimo binary/
 script baselines support narrow recovery without discarding later edits.
 
 Owning source: `services/home-assistant-lg-remote/` and `services/nimo-voice/`.
+
+## Master Bedroom Pi Plex page: 2026-10-14
+
+The owner's requested Media → Bedroom Pi Plex page (`/edsys-media/bedroom-pi`)
+adds a native Kodi media/transport/navigation view for the actual Pi, with LG
+HDMI 1 and soundbar volume controls alongside. Media overview and Master Bedroom
+link to it. Existing view/card contents are preserved; exact save/readback and
+three preservation/target/firewall checks plus five LG regressions passed.
+Actual signed-in Nimo browser clicks changed Pi play/pause and seek state and
+showed/dismissed Info via Info/Back. Position/playback were restored, desktop/
+narrow layouts inspected, and the owner independently confirmed playback control.
+
+The existing Plex-reported PM4K session lacked transport features, so HA's native
+Kodi integration is used. New endpoint-only HTTP credentials remain private;
+8080 is admitted only from HA on the Pi firewall. WebSocket 9090/discovery stay
+disabled; native HTTP polling applies. No frontend dependency or HA restart.
+The Pi presentation-event/voice integration remains a separate work package.
+See `../services/home-assistant-pi-plex/README.md` for setup and narrow recovery;
+never restore an old complete dashboard or private profile over later changes.
