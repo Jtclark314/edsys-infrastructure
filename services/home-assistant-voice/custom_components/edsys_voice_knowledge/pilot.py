@@ -258,7 +258,8 @@ class ControlPilot(llm.Tool):
             data = await runtime(hass).control(request, **tool_input.tool_args)
             return llm.ToolResult(data=data, error=not data.get("verified"))
         except PilotRefusal as error:
-            return llm.ToolResult(data={"message": str(error), "verified": False}, error=True)
+            request.outcome = {"message": str(error), "verified": False}
+            return llm.ToolResult(data=request.outcome, error=True)
 
 
 class ShowPilotCamera(llm.Tool):
@@ -275,7 +276,8 @@ class ShowPilotCamera(llm.Tool):
         try:
             return llm.ToolResult(data=await runtime(hass).camera(request, tool_input.tool_args["camera"]))
         except PilotRefusal as error:
-            return llm.ToolResult(data={"message": str(error)}, error=True)
+            request.outcome = {"message": str(error), "verified": False}
+            return llm.ToolResult(data=request.outcome, error=True)
 
 
 class PilotIntent(intent.IntentHandler):

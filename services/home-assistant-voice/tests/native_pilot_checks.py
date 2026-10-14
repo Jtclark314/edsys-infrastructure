@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from homeassistant.core import Context, State
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.components.media_player import MediaPlayerEntityFeature as F
-from custom_components.edsys_voice_knowledge.pilot import Pilot, Request
+from custom_components.edsys_voice_knowledge.pilot import Pilot, Request, ControlPilot, ShowPilotCamera
 from custom_components.edsys_voice_knowledge.pilot_policy import PilotRefusal
 from custom_components.edsys_voice_knowledge.conversation import EdSysVoice
 from homeassistant.components import conversation
@@ -188,6 +188,28 @@ class NativePilotChecks(unittest.IsolatedAsyncioTestCase):
         self.assertIn('uncertain',result.response.speech['plain']['speech'])
         self.assertNotIn('light is on',result.response.speech['plain']['speech'])
         self.assertEqual(self.hass.services.async_call.await_count,1)
+
+    async def test_model_cannot_claim_success_after_a_tool_refusal(self):
+        self.hass.data={'edsys_voice_knowledge':{'pilot':self.pilot}}
+        self.hass.config=SimpleNamespace(language='en')
+        self.states['conversation.backend']=State('conversation.backend','ready')
+        native=SimpleNamespace(async_debug_recognize=AsyncMock(return_value={'match':False}))
+        entity=EdSysVoice(SimpleNamespace(entry_id='fixture'),'conversation.backend');entity.hass=self.hass
+        cases=[('Turn off the bedroom TV','nimo_fixture',ControlPilot(),{'target':'master_bedroom_tv','operation':'off','value':None}),
+               ('Show the front porch camera','pi_fixture',ShowPilotCamera(),{'camera':'front_porch'})]
+        for text,device,tool,args in cases:
+            user_input=conversation.ConversationInput(text=text,context=self.context,conversation_id=None,
+                device_id=device,satellite_id=None,language='en',agent_id='conversation.fixture')
+            async def backend(**kwargs):
+                result=await tool.async_call(self.hass,SimpleNamespace(tool_args=args),SimpleNamespace(context=self.context))
+                self.assertTrue(result.error)
+                response=intent.IntentResponse(language='en');response.async_set_speech('Done.')
+                return conversation.ConversationResult(response=response,conversation_id=None)
+            with self.subTest(text=text),patch('homeassistant.components.conversation.async_get_agent',return_value=native),patch('homeassistant.components.conversation.async_converse',side_effect=backend):
+                result=await entity.async_process(user_input)
+                self.assertIn('Which',result.response.speech['plain']['speech'])
+                self.assertNotIn('Done',result.response.speech['plain']['speech'])
+        self.assertEqual(self.calls,[])
 
 
 if __name__=='__main__':unittest.main()

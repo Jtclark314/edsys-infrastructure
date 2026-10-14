@@ -174,7 +174,7 @@ changes. Nimo keeps a private previous binary/scripts and its original sign-in
 profile. Private identifiers, runtime catalogs, records and screenshots never
 belong in Git/RAG.
 
-Verification so far: 14 local catalog/phrase checks, 18 isolated tests against
+Verification so far: 14 local catalog/phrase checks, 19 isolated tests against
 installed Core libraries, native imports, syntax and configuration validation.
 Actual named-profile light on/off returned verified replies and audio; desk
 state/change timestamp were unchanged. Native time remained local. Real Ethernet
