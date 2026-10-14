@@ -1,0 +1,16 @@
+{
+  "name": "EdSys Voice Chat",
+  "chat_model": "gpt-6.1-sol",
+  "max_tokens": 2048,
+  "reasoning_effort": "low",
+  "reasoning_summary": "off",
+  "verbosity": "low",
+  "service_tier": "default",
+  "store_responses": false,
+  "pro_mode": false,
+  "code_interpreter": false,
+  "web_search": true,
+  "search_context_size": "medium",
+  "user_location": false,
+  "inline_citations": false
+}

@@ -53,6 +53,10 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `../services/homeowner-companion/README.md` - independent non-AI homeowner
   app user service, exact LAN bind and private Tailscale HTTPS route.
 
+- `../services/home-assistant-voice/README.md` - shared native-priority
+  conversational voice, OpenAI chat/web search and bounded read-only EdSys
+  knowledge; private native credentials, candidate acceptance and recovery.
+
 ## Rule
 
 Use this repo for deployable definitions and repeatable commands. Do not store runtime data or secrets here.

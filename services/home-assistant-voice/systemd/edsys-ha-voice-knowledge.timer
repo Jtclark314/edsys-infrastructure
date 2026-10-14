@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep EdSys voice documentation current
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=10
+Persistent=true
+
+[Install]
+WantedBy=timers.target
