@@ -1,6 +1,6 @@
 # Nimo Home Assistant voice
 
-Status, 2026-10-14: deployed native Windows client **0.2.0**. The owner pressed **Alt+V**,
+Status, 2026-10-14: deployed native Windows client **0.3.0**. The owner pressed **Alt+V**,
 asked “What time is it?” and confirmed hearing Home Assistant's spoken reply.
 This acceptance used Ethernet. Wi-Fi handover, sleep and Windows logon recovery
 remain to be confirmed; the client uses the same HTTPS hostname on either NIC.
@@ -55,6 +55,34 @@ indication cleared during live camera viewing. This does not establish human
 audibility. The unattended test's native audio alert remains a spoken acceptance
 item. The bridge is qualified against Core/frontend 2026.10.1 and needs
 requalification after frontend changes.
+
+## Master Bedroom remote window
+
+The **Master Bedroom TV Remote** desktop shortcut runs this executable with
+`--remote`, using a separate mutex/window and generic `remote-status.json`.
+It opens the existing HA Master Bedroom media page and shares the private HA
+sign-in in place. It registers no global hotkey and denies microphone access;
+ordinary Nimo Voice retains Alt+V and its existing Startup shortcut. Closing the
+remote exits only that window. Launching it again restores the existing window.
+
+Click the top **Keyboard remote** button to focus it. Arrows, Enter, Escape,
+Home and digits then control the bound TV. Clicking the page releases input;
+modified shortcuts remain with their normal controls. Held/concurrent keys are
+not queued. The helper validates the exact route, native modal state, live
+socket, TV availability, and private entity/device/config-entry/room binding.
+Blur, changed route and expired preflight cannot dispatch a delayed command.
+Service failures/timeouts are uncertain and not retried. Async JavaScript
+results return over the existing same-origin message channel; WebView's script
+execution method alone does not await JavaScript Promises.
+
+The approved binding lives in private `lg-remote.json`; it contains no credential
+and must remain outside Git/RAG. Deployment, layout and rollback are in
+[LG remote](../home-assistant-lg-remote/README.md). Native C# compilation, script/
+installer checks, fourteen offline keyboard guards and live no-actuation
+keyboard/preflight probes passed. Production script/source digests matched
+following probe removal. Desktop and phone-width layouts rendered correctly.
+The owner confirmed Home/arrows/OK/Back navigation on the actual TV. This does
+not renew the earlier voice/audio or network acceptance items.
 
 ## Deployment and private state
 

@@ -19,7 +19,7 @@ foreach($name in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.Win
  $signature=Get-AuthenticodeSignature (Join-Path $root $name)
  if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation'){throw 'WebView2 publisher verification failed'}
 }
-foreach($name in @('NimoVoice.cs','start-assist.js','stop-assist.js','camera-view.js')){Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $root $name) -Force}
+foreach($name in @('NimoVoice.cs','start-assist.js','stop-assist.js','camera-view.js','lg-key.js')){Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $root $name) -Force}
 $config=Join-Path $root 'settings.json'
 if(-not (Test-Path $config)){
  $uri=[Uri]$HomeAssistantUrl
@@ -38,4 +38,10 @@ foreach($directory in @([Environment]::GetFolderPath('Desktop'),[Environment]::G
  $shortcut.Save()
 }
 Start-Process (Join-Path $root 'NimoVoice.exe')
+if(Test-Path (Join-Path $root 'lg-remote.json')){
+ $remote=$shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'Master Bedroom TV Remote.lnk'))
+ if($remote.TargetPath -and $remote.TargetPath -ne (Join-Path $root 'NimoVoice.exe')){throw 'Existing unrelated TV remote shortcut preserved'}
+ $remote.TargetPath=Join-Path $root 'NimoVoice.exe'; $remote.Arguments='--remote'; $remote.WorkingDirectory=$root
+ $remote.Description='Master Bedroom LG remote with focused keyboard controls'; $remote.Save()
+}
 'Nimo Voice installed for the current user; sign in once in its window.'

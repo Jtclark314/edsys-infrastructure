@@ -163,3 +163,36 @@ Native references:
 - [Tile](https://www.home-assistant.io/dashboards/tile/)
 - [Shortcut](https://www.home-assistant.io/dashboards/shortcut/)
 - [Roku commands](https://www.home-assistant.io/integrations/roku/)
+
+## Master Bedroom LG remote: 2026-10-14
+
+The owner authorized a fuller native remote in the existing Master Bedroom
+view. Its URL and original LG media card, app/input selector, volume slider and
+paired Plex card are retained. Two added native sections provide D-pad/OK,
+Home/Back/Exit/Settings, wake/off, volume/mute, playback, app/input shortcuts,
+numbers, channel functions and colored keys. Navigation controls hide when the
+TV is off/unknown/unavailable; the existing Ethernet wake remains accessible.
+No other view or dashboard is changed, and no HA restart, new HACS dependency,
+frontend resource or voice tool is added.
+
+Nimo Voice 0.3.0 adds a separate Master Bedroom TV Remote desktop shortcut/window
+using its existing local sign-in. Focused keyboard controls route arrows,
+Enter/Escape/Home/digits only to the reviewed LG binding. It denies microphone
+access and registers no global shortcut; ordinary voice retains Alt+V. The
+helper rechecks connection, identity, area, availability, route and dialogs,
+drops held/concurrent keys and does not replay failures or expired preflights.
+
+Three layout/scope and fourteen keyboard regressions passed, as did native C#
+compilation, PowerShell parsing and pinned SDK publisher checks. Saved config
+readback was exact; original cards and the other views matched baseline.
+Desktop and phone-width layouts rendered. Live keyboard/registry preflight was
+qualified with dispatch suppressed, then all probes were removed and production
+script/source digests matched. A real webOS volume-down command changed the LG
+state; its original volume was restored and Plex remained playing in the same
+app. The owner confirmed Home, arrows, OK and Back respond correctly on the TV.
+Individual app-specific playback, tuner and colored-key behavior remains to be
+confirmed when used. This does not renew the separate voice/audio, Wi-Fi or
+physical soundbar-power acceptance. Private full dashboard and Nimo binary/
+script baselines support narrow recovery without discarding later edits.
+
+Owning source: `services/home-assistant-lg-remote/` and `services/nimo-voice/`.

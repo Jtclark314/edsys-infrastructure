@@ -63,3 +63,6 @@ Use this repo for deployable definitions and repeatable commands. Do not store r
 
 - `../services/work-laptop-control/README.md` - signed Windows UI Automation,
   interactive desktop worker, and hub MCP/CLI over existing SSH.
+
+- `../services/home-assistant-lg-remote/README.md` - native Master Bedroom LG
+  keypad and Nimo focused keyboard window; bounded targets and narrow recovery.
