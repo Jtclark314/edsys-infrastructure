@@ -19,7 +19,7 @@ foreach($name in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.Win
  $signature=Get-AuthenticodeSignature (Join-Path $root $name)
  if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation'){throw 'WebView2 publisher verification failed'}
 }
-foreach($name in @('NimoVoice.cs','start-assist.js','stop-assist.js')){Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $root $name) -Force}
+foreach($name in @('NimoVoice.cs','start-assist.js','stop-assist.js','camera-view.js')){Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $root $name) -Force}
 $config=Join-Path $root 'settings.json'
 if(-not (Test-Path $config)){
  $uri=[Uri]$HomeAssistantUrl

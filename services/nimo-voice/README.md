@@ -1,9 +1,13 @@
 # Nimo Home Assistant voice
 
-Status, 2026-10-13: deployed native Windows client. The owner pressed **Alt+V**,
+Status, 2026-10-14: deployed native Windows client **0.2.0**. The owner pressed **Alt+V**,
 asked “What time is it?” and confirmed hearing Home Assistant's spoken reply.
 This acceptance used Ethernet. Wi-Fi handover, sleep and Windows logon recovery
 remain to be confirmed; the client uses the same HTTPS hostname on either NIC.
+The reviewed camera pilot displays HA's native camera dialog in this window;
+the correct Front Porch feed and advancing video passed an authenticated typed
+request. Spoken camera acceptance and the final microphone-release check are
+pending an unlocked Nimo session.
 
 ## Use and speech path
 
@@ -23,11 +27,31 @@ The existing `EdSys Home` route must contain a native button/tile/shortcut card.
 Frontend changes can require adjustment of this bridge.
 
 HA on pve-node3 remains the conversation and device-control authority. Existing
-Home Assistant Cloud handles STT/TTS; the native HA agent and en-US AmberNeural
-voice are shared with the prepared Pi endpoint. Internet, existing Nabu Casa
+Home Assistant Cloud handles STT/TTS; the native HA agent and owner-selected
+en-US AndrewNeural voice are shared with the prepared Pi endpoint. Internet, existing Nabu Casa
 remote access, HA and its Cloud subscription are dependencies. The preferred
 household profile is retained. The 9950x, Docker Desktop and WSL are not added
-to the speech path. No infrastructure commands or general AI agent are enabled.
+to the speech path. The existing HA conversational backend handles general chat,
+web search and reviewed tools; it has no infrastructure-command authority.
+
+## Native camera presentation
+
+Ask to show a uniquely located camera, such as “Bring up the Front Porch camera
+on the screen.” The shared profile sends only a typed response card for a
+reviewed camera. `camera-view.js` attaches Nimo's registered client identity to
+that profile's native pipeline subscription, validates the current turn/card,
+and opens HA's authenticated native more-info dialog. The app distinguishes
+advancing video, a visible image and an unverified failure. Camera frames are
+not sent to the voice OpenAI backend; camera analysis remains disabled.
+
+Superseded turns and duplicate cards are ignored. Pipeline subscriptions are
+not resubmitted after reconnect, so a Wi-Fi/Ethernet handover or Core restart
+cannot automatically replay a household command. Other HA subscriptions retain
+their normal behavior. Close the Nimo Voice window to end native capture and
+camera viewing. Camera presentation also releases the retained native Assist
+recorder without interrupting reply audio; the final Windows microphone check
+is pending. The bridge is qualified against Core/frontend 2026.10.1 and needs
+requalification after frontend changes.
 
 ## Deployment and private state
 
@@ -83,6 +107,9 @@ For rollback, exit only Nimo Voice, remove its two shortcuts and preserve or
 remove its private application directory as explicitly intended. No HA account,
 integration, dashboard, Windows audio defaults or other application's shortcut
 needs deletion. Disable the shared HA speech profile only after checking Pi use.
+The pilot deployment retained a private previous binary/scripts under
+`recovery\pilot-20261013`; restore those in place after exiting only this client
+to withdraw the new camera bridge while retaining its existing sign-in profile.
 
 Architecture: EdSys-Master `docs/NIMO_HA_VOICE.md` and `docs/PI5_EDGE_LIVINGROOM.md`.
 Native Assist action: https://www.home-assistant.io/voice_control/start_assist_from_dashboard/

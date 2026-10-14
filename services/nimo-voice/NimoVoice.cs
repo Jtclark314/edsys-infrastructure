@@ -88,9 +88,14 @@ public class VoiceWindow : Form {
             browser.CoreWebView2.WebMessageReceived += (s,e) => {
                 if (!SameOrigin(e.Source)) return;
                 string value=e.TryGetWebMessageAsString();
+                if (value=="camera-opening") Size=new Size(1100,850);
                 status.Text=value=="requested" ? "Speak after the microphone opens. Alt+V starts another turn."
                     : value=="pipeline-missing" ? "The configured voice assistant is unavailable. Check Home Assistant."
                     : value=="assist-unavailable" ? "Home Assistant is unavailable. Check your connection, then press Alt+V."
+                    : value=="camera-opening" ? "Opening the selected Home Assistant camera…"
+                    : value=="camera-playing" ? "Live camera video is playing. Close the window to stop viewing."
+                    : value=="camera-image-visible" ? "Camera image is visible; live video has not been confirmed."
+                    : value=="camera-failed" ? "Camera video could not be verified. Check the Home Assistant camera view."
                     : "Sign in to Home Assistant and open Home, then press Alt+V.";
                 WriteState();
             };
@@ -121,6 +126,7 @@ public class VoiceWindow : Form {
         if (!ready) { browser.CoreWebView2.Reload(); return; }
         busy=true; requested=DateTime.UtcNow;
         try {
+            await browser.CoreWebView2.ExecuteScriptAsync(File.ReadAllText(Path.Combine(root,"camera-view.js")));
             var name=new JavaScriptSerializer().Serialize(settings.pipeline_name);
             string js=File.ReadAllText(Path.Combine(root,"start-assist.js")).Replace("__PIPELINE_NAME__",name);
             status.Text="Opening the microphone…";
@@ -130,7 +136,7 @@ public class VoiceWindow : Form {
         finally { busy=false; }
     }
     void WriteState() {
-        var data=new { hotkey_registered=hotkey, browser_ready=ready, status=status.Text, version="0.1.0" };
+        var data=new { hotkey_registered=hotkey, browser_ready=ready, status=status.Text, version="0.2.0" };
         File.WriteAllText(Path.Combine(root,"status.json"),new JavaScriptSerializer().Serialize(data));
     }
 }

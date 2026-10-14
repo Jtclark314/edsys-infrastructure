@@ -4,6 +4,8 @@
   const pipelines = await app.hass.callWS({ type: 'assist_pipeline/pipeline/list' });
   const pipeline = pipelines.pipelines.find(p => p.name === __PIPELINE_NAME__);
   if (!pipeline) return 'pipeline-missing';
+  // The ordinary native assistant stays usable if the optional pilot is absent.
+  try { await window.edsysSetupNimo?.(pipeline.id); } catch { }
   // Use HA's native documented Assist button action and its own authenticated
   // frontend. No token is read/exported and no direct device action is sent.
   const roots = [document];
