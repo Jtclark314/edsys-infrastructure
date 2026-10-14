@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon id="service.edsys.bedroom-display" name="Bedroom Display Qualification" version="0.1.0" provider-name="EdSys">
+  <requires><import addon="xbmc.python" version="3.0.0"/></requires>
+  <extension point="xbmc.service" library="service.py"/>
+  <extension point="xbmc.python.script" library="default.py"><provides>executable</provides></extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Synthetic bedroom overlay qualification demo</summary>
+    <description lang="en_GB">Private local qualification bridge, synthetic overlays and an owned test clip. No HA, microphone or camera subscription.</description>
+    <platform>all</platform><license>MIT</license>
+  </extension>
+</addon>

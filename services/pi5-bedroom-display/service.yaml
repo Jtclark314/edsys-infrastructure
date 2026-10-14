@@ -1,0 +1,27 @@
+name: pi5-bedroom-display
+description: Native Kodi and butler presentation pilot; live HA transport pending
+host: edsys-edge-livingroom
+runtime: native-systemd-kodi-gbm-arm64
+ports:
+  inbound: none-added
+  local_control: /run/edsys-bedroom-display/control.sock (0600 Unix socket)
+volumes:
+  - /var/lib/edsys-voice/.kodi (private profile and Plex account state)
+  - /var/cache/edsys-bedroom-display
+  - /run/edsys-bedroom-display (ephemeral)
+environment:
+  HOME: /var/lib/edsys-voice
+  LANG: C.UTF-8
+  XDG_RUNTIME_DIR: existing-edsys-voice-runtime
+secrets_required:
+  - Native Plex account linking held only in the private Kodi profile
+backup:
+  location: /var/backups/edsys-bedroom-display
+  includes: private profile, package delta, original manifest and CEC configuration
+monitoring:
+  - systemd unit and bounded local status
+  - listeners, HDMI mode, temperature and throttling
+  - physical advancing video plus overlay acceptance
+restore_notes: Stop/disable display; restore only owned files and preserve later changes. Voice remains separately gated.
+owner: Jeremy
+last_verified: 2026-10-14

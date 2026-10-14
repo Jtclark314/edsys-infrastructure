@@ -14,6 +14,18 @@ the TV off/unknown/unavailable; Wake TV remains available through the existing
 Ethernet wake automation. App shortcuts are limited to an explicit shortlist
 and current source availability. No button automatically launches at page load.
 
+The stable **HDMI 1 · Pi** shortcut addresses physical `HDMI_1` with native
+`webostv.command` / `tv/switchInput`, independent of a mutable source label.
+The LG currently calls that port **PC** in its native input menu. Home, Spaces
+and the Media overview have a native source selector and adjacent Pi button.
+HDMI 2/ARC is unchanged. The shortcut selects the Pi input; the LG D-pad still
+controls the LG and does not imply Kodi CEC navigation.
+
+`repair_hdmi1.py` repairs existing dashboards rather than redeploying the whole
+remote. It validates the private registry binding, saves private baselines and
+candidates, compares again before save and verifies exact readback. See its
+`--help` for private path arguments. Preserve later edits during rollback.
+
 Navigation uses the built-in `webostv.button`; rewind/fast-forward use fixed
 `media.controls/rewind` and `media.controls/fastForward` commands, avoiding the
 native next/previous action's Live TV channel behavior. The TV's current app
@@ -75,7 +87,7 @@ node services/nimo-voice/test-lg-key.cjs
 node --check services/nimo-voice/lg-key.js
 ```
 
-Three dashboard and fourteen keyboard regressions cover preserved original
+Five dashboard and fourteen keyboard regressions cover preserved original
 views/cards, bounded targets, duplicate refusal, wrong/offline route, identity/
 room drift, dialogs, blur, expiry and no replay on failure. Native C# compilation,
 PowerShell parsing and pinned SDK publisher checks apply to the Windows client.

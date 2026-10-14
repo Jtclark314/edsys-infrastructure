@@ -1,0 +1,41 @@
+[Unit]
+Description=EdSys bedroom Kodi display (Nimo-controlled pilot)
+After=systemd-user-sessions.service user@@VOICE_UID@.service
+Requires=user@@VOICE_UID@.service
+Conflicts=getty@tty7.service
+
+[Service]
+Type=simple
+User=edsys-voice
+Group=edsys-voice
+SupplementaryGroups=audio video render input tty
+PAMName=login
+Environment=HOME=/var/lib/edsys-voice
+Environment=LANG=C.UTF-8
+Environment=XDG_RUNTIME_DIR=/run/user/@VOICE_UID@
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/@VOICE_UID@/bus
+Environment=XDG_CACHE_HOME=/var/cache/edsys-bedroom-display
+CacheDirectory=edsys-bedroom-display
+RuntimeDirectory=edsys-bedroom-display
+RuntimeDirectoryMode=0700
+ExecCondition=/usr/bin/python3 -c "from pathlib import Path; import sys; sys.exit(not any(p.read_text().strip() == 'connected' for p in Path('/sys/class/drm').glob('card*-HDMI-A-*/status')))"
+ExecStart=/usr/bin/kodi --standalone --windowing=gbm
+Restart=no
+SuccessExitStatus=143
+KillMode=mixed
+TimeoutStopSec=20
+StandardInput=tty-force
+StandardOutput=journal
+StandardError=journal
+TTYPath=/dev/tty7
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+# Hold CEC qualification: boot/start/stop must not wake or power off the LG.
+InaccessiblePaths=-/dev/cec0 -/dev/cec1
+
+[Install]
+WantedBy=multi-user.target

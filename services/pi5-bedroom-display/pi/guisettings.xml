@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<settings version="2">
+  <setting id="videoscreen.screenmode">0192001080060.00000pstd</setting>
+  <setting id="videoplayer.adjustrefreshrate">0</setting>
+  <setting id="audiooutput.audiodevice">ALSA:hdmi:CARD=vc4hdmi0,DEV=0</setting>
+  <setting id="audiooutput.passthrough">false</setting>
+  <setting id="audiooutput.channels">1</setting>
+  <setting id="lookandfeel.soundskin">OFF</setting>
+  <setting id="services.webserver">false</setting>
+  <setting id="services.esenabled">false</setting>
+  <setting id="services.esallinterfaces">false</setting>
+  <setting id="services.zeroconf">false</setting>
+  <setting id="services.wsdiscovery">false</setting>
+  <setting id="services.airplay">false</setting>
+  <setting id="services.upnpserver">false</setting>
+  <setting id="services.upnpcontroller">false</setting>
+  <setting id="services.upnprenderer">false</setting>
+  <setting id="powermanagement.displaysoff">0</setting>
+  <setting id="powermanagement.shutdowntime">0</setting>
+  <setting id="screensaver.mode"></setting>
+</settings>

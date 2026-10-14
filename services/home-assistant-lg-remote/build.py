@@ -3,6 +3,18 @@ import copy
 import re
 
 
+def hdmi1_button(entity):
+    """Select physical HDMI 1 independently of LG's mutable source label."""
+    if not re.fullmatch(r"media_player\.[a-z0-9_]+", entity):
+        raise ValueError("An explicit TV entity is required")
+    return {"type": "button", "name": "HDMI 1 · Pi", "icon": "mdi:video-input-hdmi",
+            "icon_height": "24px", "show_state": False,
+            "tap_action": {"action": "perform-action", "perform_action": "webostv.command",
+                           "data": {"entity_id": entity, "command": "tv/switchInput",
+                                    "payload": {"inputId": "HDMI_1"}}},
+            "hold_action": {"action": "none"}, "double_tap_action": {"action": "none"}}
+
+
 def build_sections(entity, sources):
     if not re.fullmatch(r"media_player\.[a-z0-9_]+", entity):
         raise ValueError("An explicit TV entity is required")
@@ -36,7 +48,8 @@ def build_sections(entity, sources):
         action("Stop", "stop", "media_player.media_stop"), action("Pause", "pause", "media_player.media_pause"),
         key("Info", "information-outline", "INFO")])
     shortcuts = [action(name, "plex" if name == "Plex" else "apps", "media_player.select_source", source=name)
-                 for name in ("Plex", "Netflix", "YouTube", "Prime Video", "Live TV", "HDMI 1") if name in sources]
+                 for name in ("Plex", "Netflix", "YouTube", "Prime Video", "Live TV") if name in sources]
+    shortcuts.append(hdmi1_button(entity))
     primary = {"type": "grid", "cards": [
         {"type": "heading", "heading": "Master Bedroom remote", "icon": "mdi:remote-tv", "heading_style": "title"},
         grid([action("Wake TV", "power", "media_player.turn_on"), action("TV off", "power-standby", "media_player.turn_off")], 2),

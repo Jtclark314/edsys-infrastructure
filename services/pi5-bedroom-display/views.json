@@ -1,0 +1,15 @@
+[
+  {"key":"listening","kind":"butler","state":"listening","heading":"At your service.","body":"Listening for your request.","items":["Fixture preview · no microphone is being used"]},
+  {"key":"thinking","kind":"butler","state":"processing","heading":"One moment.","body":"Checking the requested information.","items":["No household action has been submitted"]},
+  {"key":"reply-pending","kind":"butler","state":"responding","heading":"Your reply is ready.","body":"Waiting for the endpoint to confirm audio playback.","audio_playing":false},
+  {"key":"speaking","kind":"butler","state":"responding","heading":"Here is your update.","body":"The butler speaks only while reply playback is acknowledged.","audio_playing":true,"items":["Simulated audio acknowledgement · preview is silent"]},
+  {"key":"camera","kind":"camera","state":"unavailable","heading":"Front door camera","body":"Live inset qualification is pending.","items":["No camera feed is connected in this preview","A still image would be labeled Snapshot"]},
+  {"key":"morning","kind":"briefing","heading":"Good morning.","body":"A quiet start to your day.","items":["Weather · sample 64°F, partly cloudy","Calendar · select an approved source","Reminders · select an approved source"]},
+  {"key":"bedtime","kind":"household","state":"unavailable","heading":"Before you turn in.","body":"Unknown is not the same as secure.","items":["Doors · source not selected","Lights · source not selected","Temperature · source not selected"]},
+  {"key":"answer","kind":"answer","heading":"A little more detail.","body":"Visual answers can include bounded text, comparison rows and reviewed sources.","items":["This preview contains synthetic information","Links and images require constrained adapters"]},
+  {"key":"notification","kind":"notification","heading":"A gentle reminder.","body":"An example of a short, dismissible notification.","items":["Preview only · no event subscription","Expired alerts must not replay after reconnect"],"ttl_seconds":12},
+  {"key":"media","kind":"media","heading":"An evening at home.","body":"Media companion preview.","items":["Sample movie · 1080p SDR target","Playback, subtitles and watch progress await qualification","No playback is being controlled"]},
+  {"key":"ambient","kind":"ambient","heading":"Make yourself comfortable.","body":"Quiet ambient display.","items":["Clock and approved art can appear here","No automatic television wake"]},
+  {"key":"result","kind":"result","state":"clarification","heading":"Which light did you mean?","body":"Choose a specific target before any action.","items":["Example bedside light","Example ceiling light","No device action has been sent"]},
+  {"key":"failed","kind":"result","state":"failed","heading":"I couldn’t confirm that.","body":"The action outcome is unknown. Please check the device.","items":["No success animation for an uncertain result"]}
+]
