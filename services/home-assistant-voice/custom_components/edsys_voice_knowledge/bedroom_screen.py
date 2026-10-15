@@ -25,9 +25,9 @@ from jsonrpc_base.jsonrpc import ProtocolError, TransportError
 
 from . import DOMAIN
 from .pilot_policy import PilotRefusal
-from .screen_protocol import INFO_LABEL,MAX_JPEG,MESSAGE,SENDER,seal
+from .screen_protocol import INFO_LABEL,MAX_JPEG,MESSAGE,SENDER,ART_NAMES,seal
 
-ACTIONS=('camera_popup','camera_large','clear','butler','clock','dark','media','briefing','household','connections')
+ACTIONS=('camera_popup','camera_large','clear','butler','clock','dark','media','briefing','household','connections','art','art_next')
 ERRORS=(HomeAssistantError,TimeoutError,ProtocolError,TransportError,OSError,ValueError)
 
 
@@ -204,8 +204,15 @@ class BedroomScreen:
                 await self.cancel()
                 if action=='clear':return await self.clear()
                 key=str(uuid4());duration=call.data.get('duration',30)
+                if not 10<=duration<=(7200 if action in {'art','art_next'} else 300):raise PilotRefusal('Choose a duration supported by this screen.')
                 expires=time.time()+duration
-                if action.startswith('camera_'):
+                if action in {'art','art_next'}:
+                    status=await self.read();index=0
+                    if action=='art_next':
+                        if status.get('view')!='art' or not status.get('visible'):raise PilotRefusal('Open artwork first.')
+                        index=(status.get('art_index',0)+1)%len(ART_NAMES);expires=status['expires_at']
+                    message=self.envelope(key,'show',expires,kind='art',heading='Quiet artwork',body='',rows=[],timezone=self.hass.config.time_zone,art_index=index)
+                elif action.startswith('camera_'):
                     mode='popup' if action=='camera_popup' else 'large'
                     message=await self.camera_message(key,expires,0,camera,mode,call.context)
                 else:message=self.envelope(key,'show',expires,**await self.card(action,call.context))
@@ -230,7 +237,7 @@ async def setup_screen(hass,entry):
         if not isinstance(binding,dict) or not {'entity_id','device_id','config_entry_id','name','area_id','unique_id','platform'}<=binding.keys() or not binding['entity_id'].startswith(domain+'.'):raise ValueError('Incomplete reviewed screen source')
     pilot=hass.data[DOMAIN]['pilot'];remote=hass.data[DOMAIN]['media_remote']
     controller=BedroomScreen(hass,pilot,remote,config);hass.data[DOMAIN]['bedroom_screen']=controller
-    schema=probatio.Schema({probatio.Required('action'):probatio.In(ACTIONS),probatio.Optional('camera'):probatio.In(list(pilot.config['cameras'])),probatio.Optional('duration',default=30):probatio.All(int,probatio.Range(min=10,max=300))})
+    schema=probatio.Schema({probatio.Required('action'):probatio.In(ACTIONS),probatio.Optional('camera'):probatio.In(list(pilot.config['cameras'])),probatio.Optional('duration',default=30):probatio.All(int,probatio.Range(min=10,max=7200))})
     hass.services.async_register(DOMAIN,'bedroom_screen',controller.handle,schema=schema,supports_response=SupportsResponse.OPTIONAL)
     entry.async_on_unload(lambda:hass.services.async_remove(DOMAIN,'bedroom_screen'))
     entry.async_on_unload(async_track_time_interval(hass,controller.poll,timedelta(seconds=5)))

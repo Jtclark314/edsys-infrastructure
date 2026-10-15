@@ -48,4 +48,11 @@ class ManualProtocolTests(unittest.TestCase):
         body=json.dumps({'jsonrpc':'2.0','id':1,'method':'JSONRPC.NotifyAll','params':{'sender':p.SENDER,'message':p.MESSAGE,'data':p.seal(m,key)}})
         self.assertLess(len(body.encode()),65536)
 
+    def test_long_art_lifetime_is_not_granted_to_other_views_or_arbitrary_assets(self):
+        m=self.message();m.update(kind='art',art_index=2,expires_at=8200)
+        p.validate(m,1000)
+        for change in [{'kind':'butler'},{'art_index':-1},{'art_index':True},{'art_index':4},{'expires_at':8202},{'path':'/private/photo.jpg'},{'url':'https://example.invalid'}]:
+            c={**m,**change}
+            with self.subTest(change=change),self.assertRaises(ValueError):p.validate(c,1000)
+
 if __name__=='__main__':unittest.main()

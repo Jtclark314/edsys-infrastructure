@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import xbmc
 import xbmcgui
-from manual_protocol import SENDER,MESSAGE,PROPERTY,MAX_WIRE,SequenceGuard,validate
+from manual_protocol import SENDER,MESSAGE,PROPERTY,MAX_WIRE,ART_NAMES,SequenceGuard,validate
 from model import kodi_text
 
 ROOT=Path(__file__).resolve().parent
@@ -40,8 +40,14 @@ class ScreenWindow(xbmcgui.WindowDialog):
         w,h=self.getWidth(),self.getHeight()
         def rect(x,y,a,b):return [round(x*w/1920),round(y*h/1080),round(a*w/1920),round(b*h/1080)]
         self.clock=None;self.image=None;self.footer=None;self.files=[]
+        self.art_index=None
         if self.kind=='dark':
             self.addControl(xbmcgui.ControlImage(0,0,w,h,str(ROOT/'assets/black.png')))
+        elif self.kind=='art':
+            self.art_index=message['art_index'];self.next_art=time.monotonic()+20
+            self.image=xbmcgui.ControlImage(0,0,w,h,str(ROOT/'assets'/('art-'+ART_NAMES[self.art_index]+'.png')),aspectRatio=2)
+            self.footer=xbmcgui.ControlLabel(*rect(80,995,1760,50),'Quiet artwork · Back to return · Changes every 20 seconds',font='font13',textColor='FFDDD9CB')
+            self.addControls([self.image,self.footer]);self.hide_hint=time.monotonic()+5
         elif self.kind=='camera':
             x,y,cw,ch=(1140,120,720,560) if message['mode']=='popup' else (80,55,1760,970)
             self.addControl(xbmcgui.ControlImage(*rect(x,y,cw,ch),str(ROOT/'assets/panel.png')))
@@ -71,6 +77,12 @@ class ScreenWindow(xbmcgui.WindowDialog):
         self.footer.setLabel('Updating images · Frame '+str(message['sequence']+1)+' · Back to close')
 
     def tick(self):
+        if self.art_index is not None:
+            now=time.monotonic()
+            if now>=self.hide_hint:self.footer.setVisible(False)
+            if now>=self.next_art:
+                self.art_index=(self.art_index+1)%len(ART_NAMES);self.next_art=now+20
+                self.image.setImage(str(ROOT/'assets'/('art-'+ART_NAMES[self.art_index]+'.png')),False)
         if self.clock:
             now=datetime.now(self.timezone)
             self.clock.setLabel(now.strftime('%I:%M %p'));self.date.setLabel(now.strftime('%A, %B %d'))
@@ -106,7 +118,10 @@ class ManualDisplay:
         if self.window:
             if self.window.done or now>=self.expires:self.close()
             elif self.status['view']=='camera' and now-self.last_frame>6:self.close('stale')
-            else:self.window.tick()
+            else:
+                self.window.tick()
+                if self.window.art_index is not None and self.status.get('art_index')!=self.window.art_index:
+                    self.status['art_index']=self.window.art_index;self.publish()
         try:message=self.jobs.get_nowait()
         except queue.Empty:return
         try:
@@ -119,6 +134,7 @@ class ManualDisplay:
                 if self.window:self.window.dispose()
                 self.window=ScreenWindow(message);self.window.show()
                 self.status={'version':1,'request_id':key,'view':message.get('kind','camera'),'visible':True,'frames':0}
+                if message.get('kind')=='art':self.status.update(art_index=message['art_index'],expires_at=message['expires_at'])
             self.expires=message['expires_at']
             if command=='camera_frame':
                 self.window.frame(message);self.last_frame=now

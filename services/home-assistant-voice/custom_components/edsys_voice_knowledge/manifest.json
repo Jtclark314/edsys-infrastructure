@@ -1,7 +1,7 @@
 {
   "domain": "edsys_voice_knowledge",
   "name": "EdSys Voice Knowledge",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "config_flow": true,
   "dependencies": ["conversation", "openai_conversation"],
   "documentation": "https://github.com/Jtclark314/edsys-infrastructure/tree/main/services/home-assistant-voice",

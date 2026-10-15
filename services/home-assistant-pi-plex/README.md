@@ -150,3 +150,66 @@ Media views. Unload the owned HA integration, restore only its component/screen
 config from private recovery, then reload/restart Core as required. Roll back
 only the display add-on through its owned checkpoint; do not restore an old
 whole Kodi profile, position or play state over subsequent user activity.
+
+## Night controls, sleep timer and artwork: 2026-10-14
+
+**Bedroom Pi → Night & art**, `/edsys-pi/night`, adds the sixth native tab and a
+Player link. Existing five-tab views and the earlier Media page are preserved.
+Night controls expose Kodi downmix compression on/off, native audio options
+(including the current title's centre-channel mix slider), current/full-English/
+next/off subtitles, text sizes 42/54/64 and earlier/later subtitle timing. Full
+English excludes forced-only tracks. Text sizing does not resize bitmap or
+burned-in subtitles. Downmix compression is refused for stereo input, non-stereo
+output or passthrough; it does not silently reconfigure the audio connection.
+The current HDMI stereo setting and original LG/soundbar volume remain.
+
+Sleep presets are 15/30/45/60/90/120 minutes, with visible countdown/end time and
+a cancel button. The bounded service additionally accepts one/five-minute
+durations for short use/qualification. At expiry HA rechecks original user
+permission, stable Pi identity/exposure and LG HDMI 1 before pausing only Kodi
+video. The timer includes queued episodes on that Pi. TV power/volume, sources
+and other players are untouched. No automatic resume or replay; unavailable/
+unauthorised/other-input outcomes disarm with an explicit status. Timers are
+in-memory HA jobs, cancel on integration unload/Core restart, and are not
+restored or replayed. Cancel remains available to an authorised user even if
+the Pi is offline. No Codex automation or additional HA helper is created.
+
+Four original code-native art presets rotate every 20 seconds, on request for
+30/60 minutes. Next changes artwork without extending its expiry; Return/Back
+closes it. Artwork covers the TV picture while playback/audio continue beneath.
+Pause a movie first if desired. Jeremy selected built-in artwork; personal photo
+folders remain unselected and are not scanned/imported. Long expiry (at most
+two hours) applies only to the fixed art kind, not other cards/camera messages.
+No URL/path/model content can select assets.
+
+Implementation: optional authenticated `bedroom_comfort` service plus night and
+sleep status sensors in the existing HA component. Its fixed operations reuse
+the native Kodi client; no new listener or voice/LLM tool is added. Provider/
+pipeline/speech/keys stay intact. Build art using `tools/build_art.py`, then the
+21-file Pi ZIP. Disable/update/re-enable only the owned add-on so Kodi continues.
+Back up the HA component/config, install its 13 reviewed files, check Core and
+restart once for changed Python. `deploy_comfort.py` requires the exact private
+accepted dashboard baseline before save/readback, preserving concurrent edits.
+
+Recovery: cancel the sleep timer, dismiss artwork, compare current settings and
+restore only tested subtitle/compression changes if still applicable to the same
+item. Compare current dashboard with private after-version before removing this
+new tab/links. Restore only owned component/add-on files from private recovery;
+preserve the linked profile and later playback. Private baselines/timer test
+records and personal photo paths stay outside Git/RAG.
+
+
+Verified 2026-10-14: 13 Pi protocol checks, 51 native Core checks, six Pi dashboard
+checks and five LG regressions passed. Exact six-view dashboard readback and
+new sensor identities passed. Actual dashboard English/Large subtitle buttons
+changed native Kodi state; both timing directions and compression on/off read
+back correctly. Native audio/subtitle dialogs opened with the centre-mix control
+visible. Jeremy confirmed the larger captions and artwork looked good.
+
+An explicitly authorised one-minute timer paused real Pi playback; the operator
+then resumed the same unchanged item for this test only. Countdown/cancel and
+final Off status passed. This does not enable automatic resume. Artwork rotated
+automatically, Next preserved expiry, Return dismissed it and a short art expiry
+cleared. Original font/subtitle state and compression were restored after tests;
+Plex was left playing, with no armed timer or lingering screen. Deployed hashes
+and retained pipeline/provider settings are checked separately at closeout.

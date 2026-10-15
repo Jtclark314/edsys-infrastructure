@@ -14,8 +14,8 @@ def build(destination):
              ('kodi/service.py','service.py'), ('local_control.py','local_control.py'),
              ('manual_protocol.py','manual_protocol.py'),('kodi/manual_display.py','manual_display.py'),('kodi/decrypt_screen.py','decrypt_screen.py')]
     files.extend((str(p.relative_to(ROOT)), str(p.relative_to(ROOT))) for p in sorted((ROOT/'assets').glob('*.png')))
-    if len(files) != 17:
-        raise RuntimeError('Generate the eight original PNG assets first')
+    if len(files) != 21:
+        raise RuntimeError('Generate character assets and the four original art presets first')
     destination.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(destination, 'w', zipfile.ZIP_DEFLATED) as z:
         for source, target in files:

@@ -309,3 +309,25 @@ and restart once for changed Python. Provider/key/model/pipeline/Andrew settings
 remain intact. The complete configuration, dashboard, private-state and recovery
 workflow is in `../home-assistant-pi-plex/README.md`. Automatic voice-to-screen
 commands, speaking animation/captions and AI visual answers remain future work.
+
+## Manual nighttime controls and sleep timer
+
+The optional screen setup also registers `edsys_voice_knowledge.bedroom_comfort`,
+`sensor.bedroom_pi_night_controls` and `sensor.bedroom_pi_sleep_timer`. Fixed
+operations expose Kodi downmix compression, subtitle tracks/text sizes/timing,
+native audio/subtitle panels and explicit start/cancel sleep presets. Existing
+user permission/identity/room/Pi exposure and visible HDMI 1 checks apply. No
+LLM tool, provider setting, broad service dispatch, listener or OS action is
+added. The controller reads Kodi state directly rather than assuming a key had
+an effect; native panels are acknowledged as submitted. Compression requires
+multichannel-to-stereo playback with passthrough off. Audible/readability
+acceptance remains an owner check.
+
+The sleep job retains only its requesting HA context and deadline in memory.
+Expiry reauthorises, pauses only Pi video, disarms before writing and never
+resumes/retries. It includes queued next episodes on that Pi, leaves TV power
+alone and cancels on unload/restart. Cancel requires user permission but can
+work while the Pi is offline. New source is bundled by `install_knowledge.py`
+and covered by isolated native checks. Full setup, verification and rollback:
+`../home-assistant-pi-plex/README.md`. Built-in artwork and personal photos remain
+local; photos still require a selected source.

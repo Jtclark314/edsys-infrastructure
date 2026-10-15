@@ -184,8 +184,20 @@ re-encodes frames to at most 32,000 JPEG bytes; the encrypted envelope remains
 under 62,000 bytes. Refresh requests are about one second apart plus capture/
 transport time. Camera files rotate across three private runtime JPEGs and are
 deleted on close, expiry or add-on restart. Restarts discard views; no replay.
-Only original code/assets belong in the 17-file add-on ZIP. Private camera data,
+Only original code/assets belong in the 21-file add-on ZIP. Private camera data,
 calendar text, Plex URLs/logs and account state must stay outside model prompts,
 Git and RAG. Recovery: disable the owned add-on, compare current files and restore
 only its matching private `manual-screen-*` backup, preserving the linked profile
 and current movie. Remove the new screen service/dashboard separately if needed.
+
+## Original artwork mode
+
+`tools/build_art.py` generates four original geometric PNG presets, bundled in
+the 21-file add-on. Art is a closed manual layout with a numeric preset index;
+it accepts no path, URL or external image. It rotates every 20 seconds, hides its
+initial hint, supports Next/Back/Return and expires within two hours. Other
+manual views retain their five-minute maximum. Art is explicitly requested,
+never an automatic idle takeover, and it never changes media/audio playback.
+Personal photo folders remain future selected input. The HA Night & art tab
+controls this mode; its sleep timer and native subtitle/audio settings are
+separate from the renderer and the pending automatic voice-event contract.

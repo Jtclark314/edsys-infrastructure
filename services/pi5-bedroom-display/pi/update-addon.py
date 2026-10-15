@@ -19,7 +19,7 @@ def main(archive):
     if Path('/run/edsys-bedroom-display/control.sock').exists():raise RuntimeError('Disable only the owned add-on first; keep Kodi running')
     target=Path('/usr/share/kodi/addons')/ADDON
     if target.is_symlink() or not target.is_dir() or 'id="'+ADDON+'"' not in (target/'addon.xml').read_text():raise RuntimeError('Unmanaged add-on target')
-    expected={'addon.xml','default.py','service.py','model.py','local_control.py','views.json','manual_protocol.py','manual_display.py','decrypt_screen.py','assets/black.png','assets/panel.png',*('assets/butler-'+p+'.png' for p in ['idle','listening','thinking','speaking-0','speaking-1','failed'])}
+    expected={'addon.xml','default.py','service.py','model.py','local_control.py','views.json','manual_protocol.py','manual_display.py','decrypt_screen.py','assets/black.png', *('assets/art-'+name+'.png' for name in ['dunes','orbit','hills','tide']),'assets/panel.png',*('assets/butler-'+p+'.png' for p in ['idle','listening','thinking','speaking-0','speaking-1','failed'])}
     with zipfile.ZipFile(archive) as z:
         if set(z.namelist())!={ADDON+'/'+name for name in expected}:raise RuntimeError('Unexpected add-on archive')
         payload={name:z.read(ADDON+'/'+name) for name in expected}
