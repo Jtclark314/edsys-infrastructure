@@ -72,7 +72,7 @@ def main():
     recent=OrderedDict()
     player=xbmc.Player()
     try:
-        while not monitor.waitForAbort(0.05):
+        while not monitor.waitForAbort(0.025):
             manual.tick()
             if overlay and (overlay.done or time.monotonic()>=overlay.until):
                 overlay.close();overlay=None

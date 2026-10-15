@@ -10,8 +10,10 @@ The deployed animation is a 2D puppet of the dimensional illustration, not a 3D
 model or audio-driven lip sync.
 
 The original poses are 1024×1536. Remotion 4.0.489 renders six 512×768 RGBA loops,
-48 frames/4 seconds each at 12 fps. A deterministic continuous image-space rig
-animates the head, hair, breathing and hand gestures. Masked matching edit frames
+96 frames/4 seconds each at 24 fps. The v2 artwork faces the viewer, with level
+eyes and shoulders. A deterministic continuous image-space rig animates larger
+waves, clearer head tilts/nods, breathing, hair and speaking gestures. The raised
+arm mask excludes the hair. Masked matching edit frames
 provide the idle blink and varied speaking mouth. Triangle clip overlap and
 near-opaque interior normalization remove mesh seams while retaining hair alpha.
 No remote assets, runtime household data, TTS or provider credentials are used.
@@ -28,13 +30,14 @@ Exact packages/lock derive from the canonical 9950x Remotion toolkit; its
 installed dependencies can be reused with an ignored node_modules link. Keep
 default managed Headless Shell/gl=null and concurrency six. AI Store must be
 mounted. Frame outputs/manifest/ZIP/review are under
-`/mnt/ai-store/remotion/outputs/bedroom-phil/`; bundles use its sibling tmp tree.
+`/mnt/ai-store/remotion/outputs/bedroom-phil-v2/`; each bundle uses a unique
+directory in the sibling tmp tree, removed after successful rendering.
 The review uses NVENC H.264, no audio, limited-range BT.709/yuv420p and fast start.
 
 Full rendering is the delivery build; single-state rendering is iteration only.
 Run the parent `tools/build_kodi.py` with `--animation-dir` pointing to the full
-output folder. It verifies exactly 288 frame names, manifest digests and frame
-dimensions before constructing the closed 310-file add-on. Retain the output
+output folder. It verifies exactly 576 frame names, manifest digests and frame
+dimensions before constructing the closed 598-file add-on. Retain the output
 manifest and reviewed source art with private project assets, outside Git/RAG.
 
 The Pi displays cached local PNGs, not this Remotion/browser runtime or a second

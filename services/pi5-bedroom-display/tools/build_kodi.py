@@ -24,7 +24,7 @@ def build(destination,animation_dir):
         raise RuntimeError('Generate character assets and the four original art presets first')
     manifest=json.loads((animation_dir/'manifest.json').read_text())
     expected=animation_files()
-    if set(manifest['files'])!=expected or manifest.get('fps')!=12 or manifest.get('remotion')!='4.0.489':
+    if set(manifest['files'])!=expected or manifest.get('fps')!=24 or manifest.get('remotion')!='4.0.489':
         raise RuntimeError('Render the exact bounded Phil animation set first')
     for name in expected:
         raw=(animation_dir/name).read_bytes()

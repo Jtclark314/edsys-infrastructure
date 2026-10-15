@@ -21,10 +21,10 @@ def main(archive):
     target=Path('/usr/share/kodi/addons')/ADDON
     if target.is_symlink() or not target.is_dir() or 'id="'+ADDON+'"' not in (target/'addon.xml').read_text():raise RuntimeError('Unmanaged add-on target')
     expected={'addon.xml','default.py','service.py','model.py','local_control.py','views.json','manual_protocol.py','manual_display.py','decrypt_screen.py','assets/black.png', *('assets/art-'+name+'.png' for name in ['dunes','orbit','hills','tide']),'assets/panel.png',*('assets/butler-'+p+'.png' for p in ['idle','listening','thinking','speaking-0','speaking-1','failed'])}
-    expected|={'character.py',*(f'assets/phil/{state}-{frame:03}.png' for state in ['idle','listening','thinking','speaking','greeting','error'] for frame in range(48))}
+    expected|={'character.py',*(f'assets/phil/{state}-{frame:03}.png' for state in ['idle','listening','thinking','speaking','greeting','error'] for frame in range(96))}
     with zipfile.ZipFile(archive) as z:
         if len(z.namelist())!=len(expected) or set(z.namelist())!={ADDON+'/'+name for name in expected}:raise RuntimeError('Unexpected add-on archive')
-        if any(i.file_size>2*1024*1024 for i in z.infolist()) or sum(i.file_size for i in z.infolist())>180*1024*1024:raise RuntimeError('Oversized add-on')
+        if any(i.file_size>2*1024*1024 for i in z.infolist()) or sum(i.file_size for i in z.infolist())>360*1024*1024:raise RuntimeError('Oversized add-on')
         payload={name:z.read(ADDON+'/'+name) for name in expected}
     for name,raw in payload.items():
         if name.endswith('.py'):compile(raw,name,'exec')

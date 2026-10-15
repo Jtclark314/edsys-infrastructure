@@ -202,7 +202,7 @@ Personal photo folders remain future selected input. The HA Night & art tab
 controls this mode; its sleep timer and native subtitle/audio settings are
 separate from the renderer and the pending automatic voice-event contract.
 
-## Dimensional Phil animations: 2026-10-15
+## Dimensional Phil v1 animations: 2026-10-15
 
 Jeremy selected dimensional Phil design B. Its existing identity/outfit is
 retained in six four-second, 12 fps loops: idle (breathing/blink), listening,
@@ -240,7 +240,36 @@ The LG was off, so physical TV/combined-playback acceptance remains pending.
 
 Recovery: disable only this add-on, compare the current owned files with the
 reviewed deployment, and restore the prior `manual-screen-*` add-on backup.
-Remove only this package's added `character.py`/frame directory when reverting;
+When reverting v1 to the simple butler, remove only v1's added `character.py`/frame directory;
 preserve linked Plex/profile and any subsequent user changes. Native LG Plex
 remains an independent recovery path. Do not restart Kodi or restore a whole
 profile merely to roll back character artwork.
+
+## Frontal, expressive Phil v2: 2026-10-15
+
+Jeremy requested stronger motion and a more front-facing pose after reviewing
+v1. Matching frontal artwork now keeps level eyes and shoulders toward the
+viewer. Larger waves, listening nods, thinking tilts and speaking gestures run
+at 24 fps: six four-second loops, 96 frames each, 576 transparent 512×768 PNGs.
+The raised-arm mask was narrowed after visual QA found hair following the wave.
+The review is 24 seconds at 1080p/24 fps, NVENC H.264 with BT.709 limited range.
+This remains an illustration puppet; actual reply-audio correlation is pending.
+
+Add-on 0.5.0 has 598 closed files. The frame scheduler checks every 25 ms; no
+new Pi runtime/dependency/listener is introduced. Seventeen Pi tests and aligned
+Remotion/TypeScript checks pass. All deployed hashes match; native GUI capture
+shows frontal Phil and all five synthetic state samples advanced 27 frames in
+1.1 seconds. The 7.4-second paused-item smoke averaged 0.41 CPU core and about
+128 MiB Kodi RSS. It is not an active-playback or sustained-load result.
+
+Kodi PID, profile, exact paused item/position, firewall and listeners matched
+before/after. Operator overlays were dismissed. LG remained off; no playback
+action, TV wake, Kodi/HA restart or pipeline/provider change occurred. Owner
+review of this revised motion and physical/combined acceptance remain pending.
+
+Recovery from v2 to v1: disable only the owned add-on; compare current owned
+files against this deployment and the private prior add-on backup. Restore the
+backup's files and remove only v2 frame names 048–095 for each of the six states
+that are absent from that backup. Retain v1's `character.py` and frames 000–047.
+Preserve the linked profile and later user changes; do not restore a whole
+profile or restart Kodi to revert artwork.

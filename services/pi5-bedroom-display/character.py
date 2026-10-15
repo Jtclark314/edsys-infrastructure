@@ -4,9 +4,9 @@ from pathlib import Path
 import time
 
 STATES=('idle','listening','thinking','speaking','greeting','error')
-FPS=12
-FRAMES=48
-VERSION='dimensional-phil-v1'
+FPS=24
+FRAMES=96
+VERSION='dimensional-phil-v2'
 
 
 def animation_files():

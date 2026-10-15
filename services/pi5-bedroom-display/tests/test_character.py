@@ -19,7 +19,7 @@ class CharacterTests(unittest.TestCase):
         self.assertEqual(pose_for_view('processing',True),'thinking')
 
     def test_fixed_paths_no_arbitrary_assets_and_loop_boundary(self):
-        self.assertEqual(len(animation_files()),288)
+        self.assertEqual(len(animation_files()),576)
         for pose in ['../secrets','https://example.com','',None]:
             with self.assertRaises(ValueError):frame_path('/fixed',pose,1)
         for t in [True,-1,float('nan'),float('inf')]:
@@ -33,7 +33,7 @@ class CharacterTests(unittest.TestCase):
         self.assertTrue(c.tick(10));self.assertFalse(c.tick(10.01))
         self.assertTrue(c.tick(10.1));self.assertEqual(image.setImage.call_count,2)
         self.assertTrue(c.tick(14));self.assertEqual(c.status['character_pose'],'idle')
-        self.assertTrue(c.tick(14.1));self.assertEqual(c.status['character_frame'],1)
+        self.assertTrue(c.tick(14.1));self.assertEqual(c.status['character_frame'],2)
 
     def test_manual_butler_uses_greeting_then_idle_and_cards_never_talk(self):
         class Window:

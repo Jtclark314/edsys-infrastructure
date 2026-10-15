@@ -4,7 +4,7 @@ import {AbsoluteFill,Composition,Sequence,registerRoot,useCurrentFrame,delayRend
 export const states = ['idle','listening','thinking','speaking','greeting','error'] as const;
 type State = typeof states[number];
 type Point = [number,number];
-const W=512,H=768,N=48;
+const W=512,H=768,N=96,FPS=24;
 const TAU=Math.PI*2;
 const clamp=(n:number)=>Math.max(0,Math.min(1,n));
 const smooth=(n:number)=>{const t=clamp(n);return t*t*(3-2*t);};
@@ -16,25 +16,28 @@ const bell=(x:number,y:number,cx:number,cy:number,rx:number,ry:number)=>smooth(1
 function vertex(x:number,y:number,frame:number,state:State):Point {
   const t=frame/N,p=t*TAU;
   const breath=Math.sin(p), upper=smooth((1430-y)/1050);
-  let dx=1.8*breath*upper,dy=-3.2*breath*upper;
-  let head=0.009*Math.sin(p),nod=1.4*Math.sin(p);
-  if(state==='listening'){head=0.025*Math.sin(p);nod=2.6*Math.sin(p*2);}
-  if(state==='thinking'){head=0.014*Math.sin(p);nod=3*Math.sin(p);}
-  if(state==='speaking'){head=0.013*Math.sin(p*2);nod=2.5*Math.sin(p*3);}
-  if(state==='error'){head=0.022*Math.sin(p*2)*Math.sin(p/2)**2;nod=1.2*Math.sin(p);}
-  const hw=bell(x,y,520,195,310,295),a=head*hw;
-  dx+=((x-535)*(Math.cos(a)-1)-(y-340)*Math.sin(a))*hw;
-  dy+=((x-535)*Math.sin(a)+(y-340)*(Math.cos(a)-1))*hw+nod*hw;
-  const arm=state==='greeting'?0.105*Math.sin(p*3)*Math.sin(p/2)**2:
-    state==='speaking'?0.025*Math.sin(p*2):state==='error'?0.018*Math.sin(p):0;
+  let dx=2.5*breath*upper,dy=-5*breath*upper;
+  let head=0.025*Math.sin(p),nod=3*Math.sin(p);
+  if(state==='listening'){head=0.065*Math.sin(p);nod=6*Math.sin(p*2);}
+  if(state==='thinking'){head=0.045*Math.sin(p);nod=7*Math.sin(p);}
+  if(state==='speaking'){head=0.060*Math.sin(p*2);nod=7*Math.sin(p*3);}
+  if(state==='error'){head=0.085*Math.sin(p*2)*Math.sin(p/2)**2;nod=3*Math.sin(p);}
+  const hw=smooth((490-y)/190)*smooth(1-((x-512)/430)**4),a=head;
+  dx+=((x-512)*(Math.cos(a)-1)-(y-370)*Math.sin(a))*hw;
+  dy+=((x-512)*Math.sin(a)+(y-370)*(Math.cos(a)-1))*hw+nod*hw;
+  const arm=state==='greeting'?0.32*Math.sin(p*3)*Math.sin(p/2)**2:
+    state==='speaking'?0.22*Math.sin(p*2):state==='error'?0.085*Math.sin(p):0;
   const raised=state==='greeting';
-  const aw=bell(x,y,raised?800:805,raised?345:605,raised?180:220,raised?240:150);
-  const pivot:Point=raised?[735,510]:[670,615];
+  // Keep the hair beside his head out of the larger forearm wave.
+  const aw=smooth((x-(raised?740:645))/(raised?70:155))*smooth(((raised?680:820)-y)/160)*smooth((y-(raised?70:400))/130);
+  const pivot:Point=raised?[780,520]:[695,600];
   dx+=((x-pivot[0])*(Math.cos(arm)-1)-(y-pivot[1])*Math.sin(arm))*aw;
   dy+=((x-pivot[0])*Math.sin(arm)+(y-pivot[1])*(Math.cos(arm)-1))*aw;
   // A slight independent sway of the hair tips; no silhouette-changing effects.
-  dx+=1.7*Math.sin(p+0.8)*bell(x,y,335,340,210,210);
-  return [(x+dx)/2,(y+dy)/2];
+  dx+=4*Math.sin(p+0.8)*bell(x,y,335,340,210,210);
+  if(state==='error')dy-=7*Math.sin(p)**2*bell(x,y,730,530,200,220);
+  // Extra framing room keeps the larger gestures/head tilts inside the image.
+  return [(512+(x+dx-512)*.96)/2,(1490+(y+dy-1490)*.96)/2];
 }
 
 function triangle(ctx:CanvasRenderingContext2D,img:CanvasImageSource,src:Point[],dst:Point[]) {
@@ -80,12 +83,12 @@ const Phil:React.FC<{state:State}>=({state})=>{
       // Keep the same approved body during lip/blink changes; only masked face
       // regions use the identity-preserving image-generation edit frames.
       if(state==='idle'||state==='speaking'){
-        const blinkAmount=frame===34||frame===36?0.45:frame===35?1:0;
-        patch(s,blink,488,181,35,29,blinkAmount);patch(s,blink,572,200,34,29,blinkAmount);
+        const blinkAmount=[.35,.8,1,.8,.35][frame-68]||0;
+        patch(s,blink,464,183,34,28,blinkAmount);patch(s,blink,533,183,34,28,blinkAmount);
       }
       if(state==='speaking'){
-        const syllables=[0,.55,1,.35,0,.8,.3,0,1,.6,0,.35];
-        patch(s,mouth,511,265,57,43,syllables[frame%syllables.length]);
+        const syllables=[0,.2,.55,.9,1,.7,.35,.1,0,.4,.8,1,.6,.25,0,0,.5,1,.8,.4,.1,0,.25,.5];
+        patch(s,mouth,500,255,60,38,syllables[frame%syllables.length]);
       }
       // Generated inputs have a near-opaque (253/255) interior matte. Normalize
       // only that interior before overlapping mesh clips; retain soft hair alpha.
@@ -106,7 +109,7 @@ const Phil:React.FC<{state:State}>=({state})=>{
   },[frame,state]);
   return <canvas ref={ref} width={W} height={H} style={{width:W,height:H}}/>;
 };
-const descriptions:Record<State,string>={idle:'Breathing and a natural blink',listening:'An attentive nod, hand to headphones',thinking:'A thoughtful look at the tablet',speaking:'Mouth motion and a small hand gesture',greeting:'A friendly wave',error:'A restrained, concerned response'};
+const descriptions:Record<State,string>={idle:'Front-facing eye contact, breathing and blinking',listening:'A clear listening tilt and attentive nod',thinking:'A thoughtful chin gesture and tablet glance',speaking:'Expressive nods, mouth movement and hand gestures',greeting:'A bigger, friendly wave',error:'A concerned head shake and gentle shrug'};
 const Review=()=> <AbsoluteFill style={{background:'#111b24',color:'#ece3d4',fontFamily:'sans-serif'}}>
   {states.map((state,index)=><Sequence key={state} from={index*N} durationInFrames={N}>
     <div style={{position:'absolute',left:160,top:80,scale:'1.2',transformOrigin:'top left'}}><Phil state={state}/></div>
@@ -118,5 +121,5 @@ const Review=()=> <AbsoluteFill style={{background:'#111b24',color:'#ece3d4',fon
     </div>
   </Sequence>)}
 </AbsoluteFill>;
-const Root=()=> <>{states.map(state=><Composition key={state} id={'Phil-'+state} component={Phil} defaultProps={{state}} width={W} height={H} fps={12} durationInFrames={N}/>)}<Composition id="Phil-Review" component={Review} width={1920} height={1080} fps={12} durationInFrames={N*6}/></>;
+const Root=()=> <>{states.map(state=><Composition key={state} id={'Phil-'+state} component={Phil} defaultProps={{state}} width={W} height={H} fps={FPS} durationInFrames={N}/>)}<Composition id="Phil-Review" component={Review} width={1920} height={1080} fps={FPS} durationInFrames={N*6}/></>;
 registerRoot(Root);

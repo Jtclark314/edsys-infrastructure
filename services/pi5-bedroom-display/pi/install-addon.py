@@ -31,12 +31,12 @@ def main(archive):
     allowed={'addon.xml','default.py','service.py','model.py','local_control.py','views.json','manual_protocol.py','manual_display.py','decrypt_screen.py',
              'assets/panel.png','assets/black.png', *('assets/art-'+name+'.png' for name in ['dunes','orbit','hills','tide']), *('assets/butler-'+p+'.png' for p in
                 ['idle','listening','thinking','speaking-0','speaking-1','failed'])}
-    allowed|={'character.py',*(f'assets/phil/{state}-{frame:03}.png' for state in ['idle','listening','thinking','speaking','greeting','error'] for frame in range(48))}
+    allowed|={'character.py',*(f'assets/phil/{state}-{frame:03}.png' for state in ['idle','listening','thinking','speaking','greeting','error'] for frame in range(96))}
     with zipfile.ZipFile(archive) as z:
         names=set(z.namelist())
         if len(z.namelist())!=len(allowed) or names!={ADDON+'/'+name for name in allowed}:
             raise RuntimeError('Unexpected archive contents')
-        if any(i.file_size>2*1024*1024 for i in z.infolist()) or sum(i.file_size for i in z.infolist())>180*1024*1024:raise RuntimeError('Oversized add-on')
+        if any(i.file_size>2*1024*1024 for i in z.infolist()) or sum(i.file_size for i in z.infolist())>360*1024*1024:raise RuntimeError('Oversized add-on')
         for name in sorted(names):
             raw=z.read(name)
             if name.endswith('.py'):compile(raw,name,'exec')

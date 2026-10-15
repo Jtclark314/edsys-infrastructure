@@ -54,7 +54,7 @@ def main():
     try:
         while not dialog.done and time.monotonic() < dialog.until:
             dialog.tick()
-            if monitor.waitForAbort(0.05):
+            if monitor.waitForAbort(0.025):
                 break
     finally:
         dialog.close()
