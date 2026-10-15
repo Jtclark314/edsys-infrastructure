@@ -28,7 +28,7 @@ class VoiceTests(unittest.TestCase):
             def show(self):pass
             def close(self):pass
         gui=SimpleNamespace(WindowDialog=Window,ControlImage=lambda *a,**k:Mock(),ControlLabel=lambda *a,**k:Mock(),Window=lambda _:Mock())
-        with patch.dict(sys.modules,{'xbmcgui':gui}):
+        with patch.dict(sys.modules,{'xbmcgui':gui,'reply_audio':SimpleNamespace(ReplyAudio=Mock)}):
             spec=importlib.util.spec_from_file_location('voice_gui_fixture',ROOT/'kodi/voice_display.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
         with patch('time.time',return_value=1000):
             d=m.VoiceDisplay();first=self.message();d.receive(first)

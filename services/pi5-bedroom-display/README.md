@@ -3,7 +3,7 @@
 Native Kodi 21.3/GBM on the existing Pi5, with dimensional Phil animations and
 bounded presentation cards above Kodi's GUI/video. Home Assistant remains
 household authority. The owner selected existing Nimo voice for initial control;
-its microphone, Andrew voice and reply output stay on Nimo. Pi hands-free voice
+its microphone stays on Nimo. The selected LG reply route is described below. Pi hands-free voice
 is deferred until its physical microphone/speaker gate and acceptance pass.
 
 ## Verified scope
@@ -22,8 +22,9 @@ The 13 synthetic scenes exercise voice states, correlated speaking animation,
 camera-unavailable, morning/bedtime, answers, notifications, media, ambient,
 choices and failures. They contain no household data. A separate manual dashboard path now renders
 local camera previews and source-backed cards, as described below. Automatic
-voice events, playback ownership and Nimo audio correlation remain pending. `PlaybackLease` is a pure ownership-policy prototype, not an enabled
-pause/resume controller. Kodi screenshots can omit the DRM video plane;
+voice integration is implemented below, with Nimo installation and spoken acceptance
+pending. `PlaybackLease` guards the narrow HDMI reply handoff; the broader
+presentation contract remains unpromoted. Kodi screenshots can omit the DRM video plane;
 physical combined playback confirmation is recorded separately.
 
 ## Ownership and interface
@@ -274,7 +275,9 @@ that are absent from that backup. Retain v1's `character.py` and frames 000–04
 Preserve the linked profile and later user changes; do not restore a whole
 profile or restart Kodi to revert artwork.
 
-## Nimo lifecycle metadata: 2026-10-15
+## Earlier metadata-only revision: 2026-10-15
+
+This 0.6.0 historical revision is superseded by the LG reply implementation below.
 
 Add-on 0.6.0 has 599 closed files, retaining the accepted frontal 24 fps artwork.
 `voice_display.py` adds a transparent Phil/short-status overlay independent of
@@ -306,3 +309,64 @@ restore its prior v2 backup, removing only added `voice_display.py`. Retain all
 576 v2 artwork frames, character.py, linked Plex/profile and later user changes.
 Restore the prior HA component/private binding and Nimo scripts separately using
 their runbooks. Do not deploy an older 21-file/310-file animation package.
+
+## LG reply audio and guarded Plex return: 2026-10-15
+
+Jeremy selected **LG replies: pause Plex during speech, then resume safely**.
+HA/Pi software is installed and silently qualified. Nimo remains offline; its
+three-script update is staged, not installed. Spoken Nimo, actual movie pause/
+resume and physical LG/soundbar acceptance wait until Nimo is reachable and
+Jeremy is home. No audible speech or TV wake/input change was tested remotely.
+
+Nimo keeps Alt+V and microphone capture. The same HA pipeline and Andrew voice
+produce the reply. When LG is already awake on Pi HDMI 1, HA binds one native
+STT-to-TTS subscription to the authenticated voice lease and consumes only that
+pipeline's trusted TTS result. No client-supplied audio URL or provider key is
+accepted. Bounded mono PCM travels encrypted through existing HA-only Kodi HTTP;
+no new listener, package, provider or profile is added. TV-off/other-input turns
+retain ordinary Nimo speech. Manual dashboard cards retain their existing behavior.
+
+The Pi explicitly pauses only a playing internal video session, requires its
+native pause acknowledgement, releases Kodi's HDMI sink and runs a supervised
+fixed player. Phil speaks only after that player's ALSA device ownership and
+advancing audio pointer are observed. Clean completion restores Kodi audio;
+fresh HA permission/TV checks plus a one-use Pi lease can resume only the same
+unchanged owned pause. Already-paused media stays paused. Manual pause/seek/stop,
+source/power changes, dismissal, expiry, disconnect and uncertainty forfeit
+resume. Existing Kodi volume/mute is respected without restoring old settings.
+
+Nimo's completion proxy prevents duplicate local speech and delays native
+follow-up listening until Pi playback finishes. A confirmed failure before a
+speech commit may play the same generated reply once on Nimo; an attempted or
+uncertain commit never triggers automatic fallback/replay. Household commands
+are submitted only once. Native camera/device identity and reconnect guards remain.
+
+Verification: 28 Pi tests, 73 isolated checks in installed HA Core, 18 existing
+Nimo lifecycle checks, 14 LG-audio lifecycle checks and 14 keyboard checks pass.
+Silent encrypted HA-to-Pi WAV tests observed real ALSA startup, local speaking
+motion, clean release and cancellation. Kodi reacquired the HDMI device, no
+reply player/WAV/recovery marker remained, and the exact prepaused item/time was
+retained. All 601 Pi and 15 HA files match source. HA configuration passed and
+one normal restart loaded handlers; all four pipeline definitions and protected
+bindings matched. Live off-TV begin returned inactive. Kodi PID/profile,
+firewall/listeners and sleep-timer Off baseline were retained; LG stayed off.
+These checks do not establish spoken, active-movie or physical acceptance.
+
+Add-on 0.7.0 has 601 closed files and retains all 576 accepted frontal 24 fps
+frames. `reply_audio.py` owns the bounded handoff; `reply_player.py` has no
+network access and accepts only a private owned runtime WAV. Parent-pipe EOF,
+heartbeat loss, cancellation or a 63-second ceiling terminates the player.
+A private runtime marker lets add-on restart restore Kodi's audio engine, never
+resume an old movie. Native player notifications invalidate the lease; notification
+queue overflow forfeits recovery. PCM is 24 kHz/mono/16-bit, at most 60 seconds.
+The encrypted closed protocol accepts only sequential, hash-verified chunks
+bound to an already-visible current voice owner. No URL/executable command is
+accepted. Audio-engine suspend waits for the asynchronous ALSA sink release
+before launching aplay. Hardware progress parsing handles padded ALSA keys.
+
+To withdraw this addition, disable only the add-on, compare current hashes and
+restore the matching prior 599-file backup, removing only `reply_audio.py` and
+`reply_player.py`. Retain v2 frames, character.py, linked Plex/profile and later
+user changes; enable the add-on without restarting Kodi. Restore HA's matching
+14-file component/output binding and Nimo scripts separately as their runbooks
+specify. Do not restore an entire profile/VM or older art-only package.

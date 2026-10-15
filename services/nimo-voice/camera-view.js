@@ -14,7 +14,7 @@ window.edsysSetupNimo = async (pipelineId) => {
       const previous = connection.subscribeMessage;
       connection.subscribeMessage = function (callback, message, options) {
         return previous.call(this, callback, message,
-          message?.type === 'assist_pipeline/run' && message.pipeline === binding.pipeline ? {...options, resubscribe: false} : options);
+          ['assist_pipeline/run','edsys_voice_knowledge/phil_pipeline'].includes(message?.type) && message.pipeline === binding.pipeline ? {...options, resubscribe: false} : options);
       };
       binding.noReplay = true;
     }
@@ -24,7 +24,7 @@ window.edsysSetupNimo = async (pipelineId) => {
   window.edsysNimoBinding = state;
   const subscribe = connection.subscribeMessage;
   connection.subscribeMessage = function (callback, message, options) {
-    if (message?.type !== 'assist_pipeline/run' || message.pipeline !== state.pipeline) {
+    if (!['assist_pipeline/run','edsys_voice_knowledge/phil_pipeline'].includes(message?.type) || message.pipeline !== state.pipeline) {
       return subscribe.call(this, callback, message, options);
     }
     const sequence = ++state.sequence;
@@ -103,8 +103,9 @@ window.edsysSetupNimo = async (pipelineId) => {
   }
 };
 
-// Phil sees lifecycle metadata only. Native Assist retains microphone, speech,
-// audio, camera and command ownership. No text, URL, token or audio is relayed.
+// Native HA owns capture, intent execution and TTS. An eligible HDMI turn uses
+// a server-bound native pipeline subscription and an Audio-compatible completion
+// proxy; only the Pi's actual playback can complete that native frontend turn.
 window.edsysSetupPhil = async pipelineId => {
   const app = document.querySelector('home-assistant');
   const connection = app?.hass?.connection;
@@ -114,24 +115,24 @@ window.edsysSetupPhil = async pipelineId => {
   old?.stop();
   const state = {connection, pipeline: pipelineId, current: null};
   window.edsysPhilBinding = state;
-  const stop = () => {
+  function clear(run) { clearInterval(run.timer);clearInterval(run.poller); }
+  function stop() {
     const run = state.current;
     if (!run) return;
-    state.current = null;
-    clearInterval(run.timer);
+    state.current = null;clear(run);
     if (run.closed) return;
     run.closed = true;
+    run.fallback?.pause();
     const sequence = ++run.sequence;
-    // No retry, including after an uncertain timeout/disconnect.
+    // Never replay a command or retry an uncertain speech commit.
     run.queue = run.queue.catch(() => {}).then(() => app.hass.callWS({
       type: 'edsys_voice_knowledge/phil_update', session_id: run.session_id,
       sequence, phase: 'cancelled', audio_ref: null
     })).catch(() => {});
-  };
+  }
   state.stop = stop;
   window.edsysStopPhil = stop;
   connection.addEventListener?.('disconnected', stop);
-
   function audio() {
     const roots = [document];
     for (let i = 0; i < roots.length && i < 2000; i++) {
@@ -141,44 +142,84 @@ window.edsysSetupPhil = async pipelineId => {
     }
     return null;
   }
+  function current(run) { return state.current === run && !run.closed; }
   function enqueue(run, phase, ref = null) {
     const sequence = ++run.sequence;
     run.queue = run.queue.then(async () => {
-      if (run.closed || state.current !== run) return;
+      if (!current(run)) return;
       const result = await Promise.race([
         app.hass.callWS({type: 'edsys_voice_knowledge/phil_update',
           session_id: run.session_id, sequence, phase, audio_ref: ref}),
         new Promise((_, reject) => setTimeout(() => reject(Error('display-timeout')), 3000))
       ]);
-      if (!result?.active) { run.closed = true; clearInterval(run.timer); }
-    }).catch(() => { run.closed = true; clearInterval(run.timer); });
+      // Pi completion/outcome is read separately. Do not lose its safe fallback
+      // outcome to a simultaneous final heartbeat.
+      if (!result?.active && run.output !== 'pi') { run.closed = true;clear(run); }
+    }).catch(() => { if (run.output === 'pi') fail(run); else { run.closed = true;clear(run); } });
     return run.queue;
+  }
+  function complete(run, event) {
+    if (!current(run)) return;
+    clear(run);run.closed = true;run.terminal = true;state.current = null;
+    if (run.proxy) { run.proxy.ended = event === 'ended';run.proxy.paused = true;run.proxy.dispatchEvent(new Event(event)); }
+  }
+  function fail(run) {
+    if (!current(run)) return;
+    const proxy=run.proxy;stop();
+    if (proxy) proxy.dispatchEvent(new Event('error'));
   }
   function attach(run) {
     const nativeAudio = audio();
     if (!nativeAudio?.addEventListener) return;
     run.audio = nativeAudio;
-    const current = () => state.current === run && !run.closed;
-    const played = () => { if (current()) { run.audioStarted = true; enqueue(run, 'audio_start', run.audio_ref); } };
+    const played = () => { if (current(run)) { run.audioStarted = true;enqueue(run, 'audio_start', run.audio_ref); } };
     const ended = () => {
-      if (!current() || run.terminal) return;
-      run.terminal = true;clearInterval(run.timer);
-      enqueue(run, 'audio_end', run.audio_ref);
+      if (!current(run) || run.terminal) return;
+      run.terminal = true;clear(run);enqueue(run, 'audio_end', run.audio_ref);
     };
     nativeAudio.addEventListener('playing', played);
-    nativeAudio.addEventListener('waiting', () => { if (current() && run.audioStarted) enqueue(run, 'audio_waiting', run.audio_ref); });
+    nativeAudio.addEventListener('waiting', () => { if (current(run) && run.audioStarted) enqueue(run, 'audio_waiting', run.audio_ref); });
     nativeAudio.addEventListener('ended', ended);
-    nativeAudio.addEventListener('pause', () => {
-      if (!current()) return;
-      if (nativeAudio.ended) ended(); else stop();
-    });
-    nativeAudio.addEventListener('error', () => {
-      if (!current()) return;
-      clearInterval(run.timer);run.terminal = true;enqueue(run, 'failed');
-    });
+    nativeAudio.addEventListener('pause', () => { if (current(run)) { if (nativeAudio.ended) ended(); else stop(); } });
+    nativeAudio.addEventListener('error', () => { if (current(run)) { clear(run);run.terminal = true;enqueue(run, 'failed'); } });
     if (!nativeAudio.paused && nativeAudio.readyState >= 2 && nativeAudio.currentTime > 0) played();
   }
-
+  function remoteAudio(run, NativeAudio, url) {
+    const proxy = new EventTarget();
+    Object.assign(proxy, {paused: true, ended: false, readyState: 0, currentTime: 0,
+      play: () => Promise.resolve(),
+      pause: () => { if (current(run)) stop(); },
+      removeAttribute: name => { if (name === 'src') run.nativeUrl = null; }
+    });
+    run.proxy = proxy;run.nativeUrl = url;
+    async function poll() {
+      if (!current(run) || run.polling || run.fallback) return;
+      run.polling = true;
+      try {
+        const status = await Promise.race([
+          app.hass.callWS({type: 'edsys_voice_knowledge/phil_status', session_id: run.session_id}),
+          new Promise((_, reject) => setTimeout(() => reject(Error('reply-timeout')), 3000))
+        ]);
+        if (!current(run)) return;
+        if (status.started && !run.audioStarted) {
+          run.audioStarted = true;proxy.paused = false;proxy.readyState = 2;proxy.dispatchEvent(new Event('playing'));
+        }
+        if (status.audio_state === 'finished' && !status.active) complete(run, 'ended');
+        else if (status.audio_state === 'failed' && status.fallback_allowed === true && !status.started && run.nativeUrl) {
+          // Same generated TTS only, and only with an explicit pre-commit HA
+          // outcome. No pipeline/household command is submitted a second time.
+          clear(run);run.fallback = new NativeAudio(run.nativeUrl);
+          run.fallback.addEventListener('playing', () => { if (current(run)) proxy.dispatchEvent(new Event('playing')); });
+          run.fallback.addEventListener('ended', () => complete(run, 'ended'));
+          run.fallback.addEventListener('error', () => fail(run));
+          run.fallback.play().catch(() => fail(run));
+        } else if (!status.active) fail(run);
+      } catch { fail(run); }
+      finally { run.polling = false; }
+    }
+    run.poller = setInterval(() => void poll(), 350);
+    return proxy;
+  }
   const subscribe = connection.subscribeMessage;
   connection.subscribeMessage = async function(callback, message, options) {
     if (message?.type !== 'assist_pipeline/run' || message.pipeline !== state.pipeline || message.start_stage !== 'stt') {
@@ -186,7 +227,6 @@ window.edsysSetupPhil = async pipelineId => {
     }
     stop();
     let lease;
-    // A display failure never prevents the ordinary voice command from running.
     try {
       lease = await Promise.race([
         app.hass.callWS({type: 'edsys_voice_knowledge/phil_begin', pipeline_id: state.pipeline}),
@@ -198,21 +238,30 @@ window.edsysSetupPhil = async pipelineId => {
       state.current = run;
       run.timer = setInterval(() => { if (!run.terminal) enqueue(run, 'heartbeat'); }, 2000);
     }
+    const wire = run?.output === 'pi' ? {...message, type: 'edsys_voice_knowledge/phil_pipeline', phil_session_id: run.session_id} : message;
     try {
-      const unsubscribe = await subscribe.call(this, event => {
-        // Let HA create/advance its real native player first. We never replace
-        // the callback, mute audio, rewrite the pipeline or synthesize playback.
-        callback(event);
-        if (!run || state.current !== run || run.closed || run.terminal) return;
-        if (event?.type === 'run-start') attach(run);
+      return await subscribe.call(this, event => {
+        if (run?.output === 'pi' && current(run) && event?.type === 'run-start') {
+          // HA currently constructs its Audio synchronously in run-start. Scope
+          // the constructor substitution to that callback and restore it even
+          // on errors; do not mute unrelated browser media.
+          const NativeAudio = window.Audio;
+          try {
+            window.Audio = function(url) { return remoteAudio(run, NativeAudio, url); };
+            callback(event);
+          } finally { window.Audio = NativeAudio; }
+          if (!run.proxy) fail(run);
+        } else callback(event);
+        if (!run || !current(run) || run.terminal) return;
+        if (event?.type === 'run-start' && run.output !== 'pi') attach(run);
         else if (event?.type === 'stt-start') enqueue(run, 'listening');
         else if (['stt-vad-end','stt-end','intent-start'].includes(event?.type)) enqueue(run, 'processing');
         else if (event?.type === 'error') {
-          clearInterval(run.timer);run.terminal = true;enqueue(run, 'failed');
+          if (run.output === 'pi') fail(run);
+          else { clear(run);run.terminal = true;enqueue(run, 'failed'); }
         }
-        // run-end means generation finished. Audio may still be playing.
-      }, message, {...options, resubscribe: false});
-      return unsubscribe;
-    } catch (error) { stop(); throw error; }
+        // Generation run-end never completes reply playback/follow-up listening.
+      }, wire, {...options, resubscribe: false});
+    } catch (error) { stop();throw error; }
   };
 };

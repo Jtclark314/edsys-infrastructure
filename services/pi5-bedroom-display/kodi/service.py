@@ -67,7 +67,7 @@ def main():
     thread=threading.Thread(target=serve,args=(jobs,stop,scenes),daemon=True)
     thread.start()
     manual=ManualDisplay()
-    monitor=ScreenMonitor(manual.jobs)
+    monitor=ScreenMonitor(manual.jobs,manual.player_events);manual.monitor=monitor
     overlay=None
     recent=OrderedDict()
     player=xbmc.Player()

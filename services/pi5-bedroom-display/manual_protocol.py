@@ -1,12 +1,14 @@
 """Bounded manual dashboard messages over the existing Kodi connection.
 
 This is not the proposed automatic voice presentation-event contract. No URL,
-executable command, credential, audio or player action is accepted here.
+executable command or credential is accepted. Bounded PCM replies require a
+separate active voice owner and one-use playback lease.
 """
 import base64
 import json
 import math
 import os
+import re
 import time
 from uuid import UUID
 
@@ -25,6 +27,10 @@ ART_NAMES = ('dunes','orbit','hills','tide')
 VOICE_PROPERTY = 'edsys.bedroom.voice'
 VOICE_INFO_LABEL = 'Window(Home).Property('+VOICE_PROPERTY+')'
 VOICE_STATES = {'listening','processing','responding','idle','failed','cancelled'}
+REPLY_PROPERTY = 'edsys.bedroom.reply'
+REPLY_INFO_LABEL = 'Window(Home).Property('+REPLY_PROPERTY+')'
+MAX_REPLY = 2_880_044
+REPLY_CHUNK = 32_768
 
 
 def seal(message,key):
@@ -76,8 +82,28 @@ def validate(data, now=None):
     ttl=7201 if data.get('command')=='show' and data.get('kind')=='art' else 301
     if not now-30<=data['issued_at']<=now+5 or not now<data['expires_at']<=data['issued_at']+ttl:raise ValueError('Stale screen message')
     command=data.get('command')
-    if command=='voice':
+    if not isinstance(command,str):raise ValueError('Invalid command')
+    if command.startswith('reply_'):
+        allowed=common|{'audio_ref'}
+        UUID(data.get('audio_ref',''))
+        if data['expires_at']>data['issued_at']+8:raise ValueError('Reply message too long lived')
+        if command=='reply_prepare':
+            allowed|={'size','sha256'}
+            if type(data.get('size')) is not int or not 44<data['size']<=MAX_REPLY or not isinstance(data.get('sha256'),str) or not re.fullmatch('[a-f0-9]{64}',data['sha256']):raise ValueError('Invalid bounded reply')
+        elif command=='reply_chunk':
+            allowed|={'offset','data'}
+            if type(data.get('offset')) is not int or not 0<=data['offset']<MAX_REPLY or not isinstance(data.get('data'),str) or len(data['data'])>REPLY_CHUNK*4//3+4:raise ValueError('Invalid reply chunk')
+            raw=base64.b64decode(data['data'],validate=True)
+            if not 1<=len(raw)<=REPLY_CHUNK:raise ValueError('Invalid reply chunk size')
+        elif command=='reply_release':
+            allowed.add('resume')
+            if type(data.get('resume')) is not bool:raise ValueError('Invalid reply release')
+        elif command not in {'reply_commit','reply_cancel'}:raise ValueError('Unknown reply command')
+    elif command=='voice':
         allowed=common|{'state','audio_playing'}
+        if 'output' in data:
+            allowed.add('output')
+            if data['output'] not in {'nimo','pi'}:raise ValueError('Unknown voice output')
         if data.get('state') not in VOICE_STATES or type(data.get('audio_playing')) is not bool:raise ValueError('Invalid voice state')
         if data['audio_playing'] and data['state']!='responding':raise ValueError('Uncorrelated speaking')
         if data['expires_at']>data['issued_at']+8:raise ValueError('Voice heartbeat too long')

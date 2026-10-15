@@ -1,4 +1,4 @@
-"""Manual cards and refreshing camera images; never owns video/audio playback."""
+"""Manual cards and images; delegates correlated speech to the reply owner."""
 import base64
 from datetime import datetime
 import json
@@ -20,10 +20,13 @@ RUNTIME=Path('/run/edsys-bedroom-display')
 
 
 class ScreenMonitor(xbmc.Monitor):
-    def __init__(self,jobs):
-        super().__init__();self.jobs=jobs
+    def __init__(self,jobs,player_events=None):
+        super().__init__();self.jobs=jobs;self.player_events=player_events;self.player_overflow=False
 
     def onNotification(self,sender,method,data):
+        if self.player_events is not None and method.startswith('Player.'):
+            try:self.player_events.put_nowait(method)
+            except queue.Full:self.player_overflow=True
         if sender!=SENDER or method!='Other.'+MESSAGE:return
         try:
             if not isinstance(data,str) or len(data)>MAX_WIRE:raise ValueError('Oversized encrypted message')
@@ -107,6 +110,7 @@ class ManualDisplay:
         self.status={'version':1,'view':'idle','visible':False,'frames':0}
         self.expires=0;self.last_frame=0;self.published=0
         self.voice=VoiceDisplay()
+        self.player_events=queue.Queue(maxsize=64);self.monitor=None
         # Crash/restart discards prior private images, never replays a view.
         for path in RUNTIME.glob('screen-*.jpg'):path.unlink(missing_ok=True)
         self.publish()
@@ -122,6 +126,9 @@ class ManualDisplay:
 
     def tick(self):
         now=time.time()
+        if self.monitor and self.monitor.player_overflow:
+            self.monitor.player_overflow=False;self.voice.reply.abort('interrupted')
+        while not self.player_events.empty():self.voice.reply.notify(self.player_events.get_nowait())
         self.voice.tick()
         if self.window and self.window.avatar:self.window.avatar.setVisible(self.voice.window is None)
         if self.window:
@@ -136,7 +143,7 @@ class ManualDisplay:
         try:message=self.jobs.get_nowait()
         except queue.Empty:return
         try:
-            if message['command']=='voice':
+            if message['command']=='voice' or message['command'].startswith('reply_'):
                 self.voice.receive(message);return
             if not self.guard.accept(message,now):return
             key=message['request_id'];command=message['command']

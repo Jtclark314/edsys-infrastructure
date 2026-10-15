@@ -1,44 +1,60 @@
 # Home Assistant conversational voice
 
-## Nimo Phil animation lifecycle: 2026-10-15
+## LG reply audio and guarded Plex return: 2026-10-15
 
-Jeremy approved the revised Phil video and requested animation for every Nimo
-voice turn while the LG is already on Pi HDMI 1. The optional HA/Pi metadata
-bridge is installed; Nimo's three scripts are staged because that endpoint was
-offline. Spoken/end-to-end acceptance is pending. Reply audio remains on Nimo;
-LG/soundbar routing is still an owner choice. This bounded animation extension
-does not promote the broader bedroom presentation/data contract proposal.
+Jeremy selected **LG replies: pause Plex during speech, then resume safely**.
+HA/Pi software is installed and silently qualified. Nimo remains offline; its
+three-script update is staged, not installed. Spoken Nimo, actual movie pause/
+resume and physical LG/soundbar acceptance wait until Nimo is reachable and
+Jeremy is home. No audible speech or TV wake/input change was tested remotely.
 
-Private `edsys_voice_knowledge/phil_voice.json` binds only the existing native
-named pipeline ID; see `phil-voice.example.json`. It adds no provider credential
-or pipeline/profile change. `phil_voice.py` handles authenticated `phil_begin`
-and `phil_update` WebSocket messages. It validates the requesting user through
-the existing permission/exposure/identity guards and rechecks TV-on/physical
-HDMI 1 before each update. Native capture and Audio playback events arrive from
-Nimo; generation/run-end alone never asserts speaking. Each lease has a distinct
-audio reference, monotonic sequence, six-second client timeout and three-minute
-ceiling. Closed, superseded, wrong-user/audio, stale and duplicate events cannot
-revive a turn. The watchdog is a HA background task, cancelled on unload.
+Nimo keeps Alt+V and microphone capture. The same HA pipeline and Andrew voice
+produce the reply. When LG is already awake on Pi HDMI 1, HA binds one native
+STT-to-TTS subscription to the authenticated voice lease and consumes only that
+pipeline's trusted TTS result. No client-supplied audio URL or provider key is
+accepted. Bounded mono PCM travels encrypted through existing HA-only Kodi HTTP;
+no new listener, package, provider or profile is added. TV-off/other-input turns
+retain ordinary Nimo speech. Manual dashboard cards retain their existing behavior.
 
-The Pi receives only closed encrypted `voice` metadata through the existing
-Kodi connection; seven-second expiry clears lost heartbeats. The renderer owns
-no device, TTS, volume or movie action. Manual cameras/art/cards remain separate.
-No transcript, audio, URL or private household content is carried by this bridge.
-HA component 0.5.0 has 14 files. Install only the reviewed component/binding,
-check native configuration and restart Core once to load the new handler; retain
-all speech/backend/profile settings and ensure no active sleep timer is lost.
+The Pi explicitly pauses only a playing internal video session, requires its
+native pause acknowledgement, releases Kodi's HDMI sink and runs a supervised
+fixed player. Phil speaks only after that player's ALSA device ownership and
+advancing audio pointer are observed. Clean completion restores Kodi audio;
+fresh HA permission/TV checks plus a one-use Pi lease can resume only the same
+unchanged owned pause. Already-paused media stays paused. Manual pause/seek/stop,
+source/power changes, dismissal, expiry, disconnect and uncertainty forfeit
+resume. Existing Kodi volume/mute is respected without restoring old settings.
 
-Recovery: compare owned files, remove only `phil_voice.json` and the added
-`phil_voice.py`, restore the matching prior component backup and restart Core.
-Retain later user changes, native pipeline/provider state and the display key.
-Pi/client recovery is in their runbooks. Do not roll back the HA VM/profile.
+Nimo's completion proxy prevents duplicate local speech and delays native
+follow-up listening until Pi playback finishes. A confirmed failure before a
+speech commit may play the same generated reply once on Nimo; an attempted or
+uncertain commit never triggers automatic fallback/replay. Household commands
+are submitted only once. Native camera/device identity and reconnect guards remain.
 
-Checks: 66 isolated native Core tests, including seven lifecycle/authorization
-cases; Nimo lifecycle and Pi display guards pass. Native config/imports and exact
-component hashes passed. The live off-TV begin call was suppressed; pipeline
-readback matched before/after. Silent encrypted HA-to-Pi fixtures advanced all
-five poses and left the exact paused item/position intact. This is not a spoken
-Nimo or physical-TV pass.
+Verification: 28 Pi tests, 73 isolated checks in installed HA Core, 18 existing
+Nimo lifecycle checks, 14 LG-audio lifecycle checks and 14 keyboard checks pass.
+Silent encrypted HA-to-Pi WAV tests observed real ALSA startup, local speaking
+motion, clean release and cancellation. Kodi reacquired the HDMI device, no
+reply player/WAV/recovery marker remained, and the exact prepaused item/time was
+retained. All 601 Pi and 15 HA files match source. HA configuration passed and
+one normal restart loaded handlers; all four pipeline definitions and protected
+bindings matched. Live off-TV begin returned inactive. Kodi PID/profile,
+firewall/listeners and sleep-timer Off baseline were retained; LG stayed off.
+These checks do not establish spoken, active-movie or physical acceptance.
+
+HA component 0.6.0 has 15 closed files. `phil_voice.py` owns the authenticated
+lease; `phil_reply.py` wraps the installed Core schema/handler without editing
+Core, preserving binary input, context, subscriptions and command execution.
+Requalify this native handler and frontend callback dependency after HA upgrades.
+The private `phil_voice.json` selects the existing pipeline and output `pi`.
+Two-second heartbeats, six-second client loss, seven-second Pi expiry and a
+three-minute turn ceiling bound ownership; WAV replies are limited to 60 seconds.
+The broader bedroom presentation/data contract remains separate and unpromoted.
+
+Recovery: compare current owned hashes, restore the prior 14-file component and
+private Phil binding, remove only added `phil_reply.py`, and restart Core after
+configuration validation. Preserve speech profiles, provider state, native
+bindings/key and later user changes. Pi/client recovery is in their runbooks.
 
 Status, 2026-10-14: general chat, web search, read-only EdSys lookup and a bounded
 household pilot and Master Bedroom media remote tools are deployed

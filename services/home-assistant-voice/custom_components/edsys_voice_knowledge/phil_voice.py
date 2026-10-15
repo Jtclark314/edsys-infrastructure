@@ -1,4 +1,4 @@
-"""Authenticated Nimo animation lifecycle; no speech text or media actuation."""
+"""Authenticated Nimo lifecycle with an optional correlated HDMI reply lease."""
 from __future__ import annotations
 
 import asyncio
@@ -20,9 +20,18 @@ PHASES=('listening','processing','audio_start','audio_waiting','audio_end','fail
 
 
 class PhilVoice:
-    def __init__(self,screen,pipeline):
+    def __init__(self,screen,pipeline,output='nimo'):
         self.screen,self.pipeline=screen,pipeline
         self.active=None;self.lock=asyncio.Lock()
+        self.output=output;self.outcomes={}
+        from .phil_reply import PiReplies
+        self.replies=PiReplies(self)
+
+    def status(self,user,session):
+        lease=self.active if self.active and self.active['id']==session else self.outcomes.get(session)
+        if not lease or lease['user']!=user:return {'active':False,'audio_state':'cancelled','fallback_allowed':False}
+        return dict(active=self.active is lease,audio_state=lease.get('audio_state','pending'),
+                    started=lease.get('started',False),fallback_allowed=lease.get('fallback_allowed',False),resume_result=lease.get('resume_result'))
 
     async def read(self):
         data=await self.screen.rpc('XBMC.GetInfoLabels',labels=[VOICE_INFO_LABEL])
@@ -35,7 +44,7 @@ class PhilVoice:
     async def emit(self,lease,state,audio=False):
         lease['wire_sequence']+=1
         now=time.time()
-        message=self.screen.envelope(lease['id'],'voice',now+7,lease['wire_sequence'],state=state,audio_playing=audio)
+        message=self.screen.envelope(lease['id'],'voice',now+7,lease['wire_sequence'],state=state,audio_playing=audio,output=lease['output'])
         await self.screen.send(message)
         async with asyncio.timeout(3):
             while True:
@@ -48,6 +57,14 @@ class PhilVoice:
     async def finish(self,reason='cancelled'):
         lease,self.active=self.active,None
         if not lease:return
+        task=lease.get('reply_task')
+        if task and task is not asyncio.current_task():task.cancel()
+        if lease['output']=='pi':
+            if lease.get('audio_state') not in {'finished','failed','uncertain'}:lease['audio_state']='cancelled'
+            lease.setdefault('fallback_allowed',False)
+            self.outcomes[lease['id']]={k:lease[k] for k in ['id','user','audio_state','fallback_allowed','started'] if k in lease}
+            self.outcomes[lease['id']]['resume_result']=lease.get('resume_result')
+            if len(self.outcomes)>16:self.outcomes.pop(next(iter(self.outcomes)))
         # Clear only this lease; a late cancellation cannot dismiss a new turn.
         try:await self.emit(lease,reason)
         except ERRORS:pass
@@ -55,15 +72,17 @@ class PhilVoice:
     async def begin(self,user_id,pipeline):
         async with self.lock:
             if pipeline!=self.pipeline:return {'active':False}
+            from .phil_reply import native_ready
+            if self.output=='pi' and not native_ready():return {'active':False}
             context=Context(user_id=user_id)
             try:
                 await self.screen.authorize(context)
                 if self.active:await self.finish()
                 lease={'id':str(uuid4()),'audio_ref':str(uuid4()),'user':user_id,'context':context,
                        'sequence':-1,'wire_sequence':-1,'state':'listening','audio':False,'started':False,
-                       'created':time.monotonic(),'seen':time.monotonic()}
+                       'created':time.monotonic(),'seen':time.monotonic(),'output':self.output}
                 await self.emit(lease,'listening');self.active=lease
-                return {'active':True,'session_id':lease['id'],'audio_ref':lease['audio_ref'],'output':'nimo'}
+                return {'active':True,'session_id':lease['id'],'audio_ref':lease['audio_ref'],'output':self.output}
             except ERRORS:
                 return {'active':False}
 
@@ -83,7 +102,10 @@ class PhilVoice:
                 await self.screen.authorize(lease['context'])
                 status=await self.read()
                 if status.get('request_id')!=lease['id'] or not status.get('visible'):
-                    self.active=None;return {'active':False}
+                    await self.finish();return {'active':False}
+                if lease['output']=='pi' and phase.startswith('audio_'):raise PilotRefusal('Pi owns reply playback evidence.')
+                if lease['output']=='pi' and phase=='failed':
+                    lease.update(audio_state='failed',fallback_allowed=not lease.get('commit_attempted'));await self.finish();return {'active':False}
                 if phase in ('cancelled','audio_end'):
                     if phase=='audio_end' and not lease['started']:raise PilotRefusal('Audio did not start.')
                     await self.finish('idle' if phase=='audio_end' else 'cancelled');return {'active':False}
@@ -109,7 +131,7 @@ class PhilVoice:
                     try:
                         await self.screen.authorize(lease['context'])
                         status=await self.read()
-                        if status.get('request_id')!=lease['id'] or not status.get('visible'):self.active=None
+                        if status.get('request_id')!=lease['id'] or not status.get('visible'):await self.finish()
                     except ERRORS:await self.finish()
         finally:
             async with self.lock:await self.finish()
@@ -141,14 +163,31 @@ async def setup_phil(hass,entry):
     path=Path(hass.config.path(DOMAIN,'phil_voice.json'))
     websocket_api.async_register_command(hass,websocket_begin)
     websocket_api.async_register_command(hass,websocket_update)
+    from .phil_reply import websocket_pipeline,websocket_status
+    websocket_api.async_register_command(hass,websocket_pipeline)
+    websocket_api.async_register_command(hass,websocket_status)
     if not path.exists():return
     if path.is_symlink() or path.stat().st_size>2048:raise ValueError('Invalid Phil binding')
     config=await hass.async_add_executor_job(lambda:json.loads(path.read_text()))
-    if set(config)!={'version','pipeline_id','output'} or config['version']!=1 or config['output']!='nimo' or not isinstance(config['pipeline_id'],str):
+    if set(config)!={'version','pipeline_id','output'} or config['version']!=1 or config['output'] not in {'nimo','pi'} or not isinstance(config['pipeline_id'],str):
         raise ValueError('Unexpected Phil voice scope')
     screen=hass.data[DOMAIN].get('bedroom_screen')
     if not screen:return
-    controller=PhilVoice(screen,config['pipeline_id']);hass.data[DOMAIN]['phil_voice']=controller
+    controller=PhilVoice(screen,config['pipeline_id'],config['output']);hass.data[DOMAIN]['phil_voice']=controller
+    def service_changed(event):
+        lease=controller.active
+        if not lease or not lease.get('commit_attempted'):return
+        data=event.data;domain=data.get('domain');service=data.get('service');details=data.get('service_data',{})
+        targets=details.get('entity_id',[])
+        if isinstance(targets,str):targets=[targets]
+        known={b['entity_id'] for b in screen.remote.config['targets'].values()}
+        if domain in {'kodi','webostv','media_player'} and (not targets or known.intersection(targets)) and service not in {'volume_up','volume_down','volume_set','volume_mute'}:
+            lease['interrupted']=True
+            async def retire():
+                async with controller.lock:
+                    if controller.active is lease:await controller.finish()
+            hass.async_create_background_task(retire(),'Stop interrupted Phil speech')
+    entry.async_on_unload(hass.bus.async_listen('call_service',service_changed))
     task=hass.async_create_background_task(controller.watch(),'Nimo Phil display lifetime')
     entry.async_on_unload(task.cancel)
     entry.async_on_unload(lambda:hass.data[DOMAIN].pop('phil_voice',None))

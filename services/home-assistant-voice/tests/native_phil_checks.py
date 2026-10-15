@@ -83,7 +83,7 @@ class NativePhilChecks(unittest.IsolatedAsyncioTestCase):
         self.assertFalse((await self.send(lease,'heartbeat'))['active'])
         lease=await self.begin();self.voice_status.update(visible=False,state='dismissed')
         count=len(self.messages);self.assertFalse((await self.send(lease,'heartbeat'))['active'])
-        self.assertEqual(len(self.messages),count)
+        self.assertEqual(len(self.messages),count+1);self.assertEqual(self.messages[-1]['state'],'cancelled')
 
     async def test_transport_uncertainty_never_retries_and_native_voice_can_continue(self):
         count=0
