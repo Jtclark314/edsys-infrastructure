@@ -79,7 +79,18 @@ class EdSysVoice(conversation.ConversationEntity, conversation.AbstractConversat
                 return self._pilot_result(user_input, chat_log, {"verified": False, "message": "Native recognition needs requalification before home control."})
             native_input = replace(user_input, language=self.hass.config.language) if user_input.language in (None, "*") else user_input
             recognized = await native.async_debug_recognize(native_input)
-            if recognized and recognized.get("match"):
+            remote = self.hass.data.get(DOMAIN, {}).get("media_remote")
+            delegate_media = False
+            if remote:
+                try:
+                    media_result = await remote.local(request, recognized)
+                except PilotRefusal as error:
+                    return self._pilot_result(user_input, chat_log, {"verified": False, "message": str(error)})
+                if media_result is not None:
+                    delegate_media = media_result.get("delegate_media", False)
+                    if not delegate_media:
+                        return self._pilot_result(user_input, chat_log, media_result)
+            if not delegate_media and recognized and recognized.get("match"):
                 try:
                     data = await pilot.recognized_control(request, recognized)
                 except PilotRefusal as error:
@@ -115,7 +126,7 @@ class EdSysVoice(conversation.ConversationEntity, conversation.AbstractConversat
         except TimeoutError:
             if "request" in locals() and request.control_attempted:
                 response = intent.IntentResponse(language=user_input.language)
-                if request.outcome and request.outcome.get("verified"):
+                if request.outcome and (request.outcome.get("verified") or request.outcome.get("status") == "submitted"):
                     response.async_set_speech(request.outcome["message"])
                 else:
                     response.async_set_error(intent.IntentResponseErrorCode.FAILED_TO_HANDLE,
@@ -134,7 +145,7 @@ class EdSysVoice(conversation.ConversationEntity, conversation.AbstractConversat
 
     def _pilot_result(self, user_input, chat_log, data):
         response = intent.IntentResponse(language=user_input.language)
-        if data.get("verified"):
+        if data.get("verified") or data.get("status") == "submitted":
             response.async_set_speech(data["message"])
         else:
             response.async_set_error(intent.IntentResponseErrorCode.FAILED_TO_HANDLE, data["message"])

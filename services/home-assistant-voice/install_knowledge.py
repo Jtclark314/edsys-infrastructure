@@ -8,11 +8,11 @@ import shlex
 import subprocess
 
 ROOT = Path(__file__).resolve().parent
-NAMES = ("__init__.py", "config_flow.py", "conversation.py", "knowledge.py", "pilot.py", "pilot_policy.py", "manifest.json")
+NAMES = ("__init__.py", "config_flow.py", "conversation.py", "knowledge.py", "pilot.py", "pilot_policy.py", "remote_policy.py", "media_remote.py", "manifest.json")
 WORKER = r'''
 import hashlib,json,os,pathlib,sys,tempfile
 p=json.load(sys.stdin);root=pathlib.Path('/config/custom_components/edsys_voice_knowledge')
-allowed={'__init__.py','config_flow.py','conversation.py','knowledge.py','pilot.py','pilot_policy.py','manifest.json'}
+allowed={'__init__.py','config_flow.py','conversation.py','knowledge.py','pilot.py','pilot_policy.py','remote_policy.py','media_remote.py','manifest.json'}
 if set(p)!=allowed or root.is_symlink():raise RuntimeError('Unexpected component files or symlink')
 if root.exists():
  manifest=json.loads((root/'manifest.json').read_text())

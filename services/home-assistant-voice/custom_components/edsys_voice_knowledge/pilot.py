@@ -42,7 +42,7 @@ class Pilot:
         self.presentations = {}
 
     async def state(self, key, context, *, control=False):
-        binding = self.config["targets"].get(key) or self.config["cameras"].get(key)
+        binding = self.config["targets"].get(key) or self.config["cameras"].get(key) or getattr(self, "media_bindings", {}).get(key)
         if binding is None:
             raise PilotRefusal("That device is outside the reviewed pilot.")
         entity_id = binding["entity_id"]
@@ -108,6 +108,8 @@ class Pilot:
         return await self.control(request, target, operation, value)
 
     async def control(self, request, target, operation, value=None):
+        if request.control_attempted and request.outcome is not None:
+            return request.outcome
         check_control(request.text, target, operation, value)
         async with self.lock:
             # Suppress duplicate tool execution inside the same authenticated turn.

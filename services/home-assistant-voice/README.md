@@ -1,7 +1,7 @@
 # Home Assistant conversational voice
 
 Status, 2026-10-14: general chat, web search, read-only EdSys lookup and a bounded
-household pilot are deployed
+household pilot and Master Bedroom media remote tools are deployed
 in the existing named voice profile. Candidate and production pipeline/audio,
 backend-failure and synthetic full-speech checks passed. The owner confirmed
 audible native time, chat and knowledge replies through Alt+V on Nimo.
@@ -182,6 +182,91 @@ wake and wake-then-Plex launch reached TV-on/Plex state; app-launch fixture took
 about nine seconds. Absolute TV volume changed by one percentage point and
 was restored with verified replies/audio. Further media, Nimo camera and human acceptance are recorded
 in the owning current-state document, not inferred from these checks.
+
+## Master Bedroom full remote voice controls: 2026-10-14
+
+The owner authorized extending the existing Nimo pipeline to every LG and Pi
+Plex dashboard remote action. The optional private `media_remote.json` adds
+exactly two reviewed roles, LG and native Kodi. It preserves the original pilot
+bindings, camera behavior, provider/key/model, speech settings and profiles.
+Simple commands run locally; remaining media phrasing uses the existing cloud
+backend's `lookup_bedroom_media` and `control_bedroom_media` tools. Both paths
+use the same executor. The legacy cloud control tool becomes light-only while
+this media extension is configured; it cannot silently select the old LG Plex
+metadata client for a Pi request.
+
+| Say, for example | Result |
+| --- | --- |
+| Pause Plex / Resume the Pi | Current playback; generic Plex follows the visible LG input |
+| Could you lower the sound just a little on the TV? | Cloud interpretation, fixed LG volume-down action |
+| Set TV volume to twenty five percent / Mute TV / Unmute TV | LG/soundbar volume, including while Pi is active |
+| Show Pi / Switch TV to HDMI one | Physical HDMI 1, independent of its mutable PC label |
+| Open Plex on Pi / Open Netflix on LG | Fixed PM4K launch or a unique current LG app/input label |
+| Press right on Pi / Press Home on the LG remote | Explicit navigation target |
+| Skip back on Pi / Jump to 15:30 on Pi / Skip forward 30 seconds on Pi | Fixed step or validated seek in the current item |
+| Press seven on TV / Press guide on TV / Press red on TV | Bounded keypad/channel/colour function |
+| Show now playing on Pi / Press captions on LG | Player window or remote caption button |
+| Turn subtitles on Pi / Turn TV off / Wake TV | Fixed subtitle action or LG power |
+
+The remote vocabulary also includes previous/next, rewind/fast forward, arrows,
+OK, Back, Info, Options, Exit, Settings, all digits, dash/Enter, channel up/down,
+and all four colour keys. Apps/inputs must exist in the live source list. A
+channel number requires Live TV already active. A new title is chosen through
+Open Plex plus on-screen navigation; there is no arbitrary title/URL playback
+or library-search tool. Power controls the LG, not the Pi operating system.
+Explicit Pi playback can run with the LG off; generic active-screen playback
+asks to wake the TV. Opening Pi Plex does not also switch/wake the LG.
+
+The current LG app ID selects the active remote: HDMI 1 means Pi; another app
+means LG. The reviewed source label is only a fallback when app ID is absent.
+Volume, power, inputs and TV-only keys always address LG. Explicit Pi/LG selects
+navigation/playback, while bare bedroom still requires clarification. One
+immediate command per authenticated turn is accepted; parameters must match
+the utterance. Registry identity, effective room, active user permission,
+Assist exposure, availability and advertised native capabilities are rechecked.
+
+Stateful changes return verified only after HA readback. Navigation, captions,
+colours, channel keys and LG app transport return submitted/“Sent”; receipt of
+a key does not establish the on-screen result. The router owns the spoken
+outcome even if the model claims more. Duplicate calls in one turn, uncertain
+writes and partial wake/channel sequences are not replayed. Cancellation is
+preserved. Questions use lookup without actuation. Hardware/app-specific effects
+still depend on the active app and TV support.
+
+Run the policy/catalog tests with `python3 -m unittest discover -s
+services/home-assistant-voice/tests -p 'test_*.py'`, then `python3
+services/home-assistant-voice/test_native.py`. The latter stages the candidate
+in a temporary Core directory, runs fake-device permission/routing/timeout tests
+against installed HA libraries, and never installs it or calls real devices.
+Dashboard builders are used to check full explicit-button recipe coverage.
+
+Under owner authorization, use `configure_media_remote.py --tv MEDIA_ENTITY
+--pi MEDIA_ENTITY --private-state PRIVATE_DIR --apply`. It checks the current
+webOS/Kodi registry, Assist exposure and Master Bedroom assignments, saves
+pipeline recovery locally, and backs up the installed component in private HA
+`/config/edsys_voice_knowledge/recovery/media-remote-TIMESTAMP`. It writes only
+the two-role configuration, without registry, actuator or provider changes.
+Install with `install_knowledge.py`, validate Core configuration, then restart
+Core once. It deliberately refuses an existing media configuration/recovery
+record rather than blindly replaying a partial installation.
+
+To withdraw this extension, restore only that saved component, remove the newly
+added media configuration, validate and restart Core. Retain the original
+pilot, native Kodi/webOS integrations, provider settings, key, profiles and all
+later unrelated changes. Private bindings, baselines and fixture/audio logs
+stay outside Git/RAG. Deployment and human acceptance results are tracked in
+the owning current-state document. Voice-triggered butler presentation events
+and Pi microphone commissioning remain separate work packages.
+
+Qualification: 18 policy/catalog checks, 37 isolated Core checks and eight
+existing dashboard checks passed. Live named-pipeline fixtures returned audio
+for local Pi resume/pause and cloud tool calls for LG volume, Pi seek/Now playing
+and LG Netflix selection, followed by local HDMI 1 restoration. Final regression
+cases cover one-point exact volume changes and sending explicit play/pause
+despite a potentially stale polled snapshot. Native imports and Core config
+validation passed. These checks do not establish physical spoken Alt+V use or
+every app-specific key effect. Runtime/source/settings readback is recorded
+privately; the current-state document tracks owner acceptance separately.
 
 ## Recovery and acceptance
 
