@@ -7,6 +7,7 @@ import xbmc
 import xbmcgui
 
 from model import View, kodi_text
+from character import Character,frame_path,pose_for_view
 
 ROOT = Path(__file__).resolve().parent
 
@@ -23,7 +24,9 @@ class Overlay(xbmcgui.WindowDialog):
             return [round(x*w/1920), round(y*h/1080), round(width*w/1920), round(height*h/1080)]
 
         panel = xbmcgui.ControlImage(*rect(620, 570, 1180, 410), str(ROOT/'assets/panel.png'))
-        self.avatar = xbmcgui.ControlImage(*rect(120, 390, 470, 627), str(ROOT/'assets/butler-idle.png'), aspectRatio=2)
+        pose=pose_for_view(view.state,view.speaking)
+        self.avatar = xbmcgui.ControlImage(*rect(120, 390, 470, 627), str(frame_path(ROOT,pose,0)), aspectRatio=2)
+        self.character=Character(self.avatar,ROOT,pose)
         label = xbmcgui.ControlLabel(*rect(670, 605, 1080, 45), 'SYNTHETIC DEMO  /  '+view.state.upper(), font='font13', textColor='FFD4C5A3')
         heading = xbmcgui.ControlLabel(*rect(670, 655, 1080, 60), kodi_text(view.heading), font='font30', textColor='FFF4F0E7')
         body = xbmcgui.ControlTextBox(*rect(670, 730, 1060, 200), font='font13', textColor='FFCFDCD6')
@@ -37,10 +40,7 @@ class Overlay(xbmcgui.WindowDialog):
             self.done = True
 
     def tick(self):
-        pose = {'listening':'listening', 'processing':'thinking', 'failed':'failed'}.get(self.view.state, 'idle')
-        if self.view.speaking:
-            pose = 'speaking-'+str(int(time.monotonic()*5) % 2)
-        self.avatar.setImage(str(ROOT/'assets'/f'butler-{pose}.png'))
+        self.character.tick()
 
 
 def main():
@@ -54,7 +54,7 @@ def main():
     try:
         while not dialog.done and time.monotonic() < dialog.until:
             dialog.tick()
-            if monitor.waitForAbort(0.2):
+            if monitor.waitForAbort(0.05):
                 break
     finally:
         dialog.close()

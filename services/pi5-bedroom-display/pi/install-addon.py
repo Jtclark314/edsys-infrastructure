@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 import sys
 import zipfile
@@ -30,10 +31,16 @@ def main(archive):
     allowed={'addon.xml','default.py','service.py','model.py','local_control.py','views.json','manual_protocol.py','manual_display.py','decrypt_screen.py',
              'assets/panel.png','assets/black.png', *('assets/art-'+name+'.png' for name in ['dunes','orbit','hills','tide']), *('assets/butler-'+p+'.png' for p in
                 ['idle','listening','thinking','speaking-0','speaking-1','failed'])}
+    allowed|={'character.py',*(f'assets/phil/{state}-{frame:03}.png' for state in ['idle','listening','thinking','speaking','greeting','error'] for frame in range(48))}
     with zipfile.ZipFile(archive) as z:
         names=set(z.namelist())
-        if names!={ADDON+'/'+name for name in allowed}:
+        if len(z.namelist())!=len(allowed) or names!={ADDON+'/'+name for name in allowed}:
             raise RuntimeError('Unexpected archive contents')
+        if any(i.file_size>2*1024*1024 for i in z.infolist()) or sum(i.file_size for i in z.infolist())>180*1024*1024:raise RuntimeError('Oversized add-on')
+        for name in sorted(names):
+            raw=z.read(name)
+            if name.endswith('.py'):compile(raw,name,'exec')
+            if '/assets/phil/' in name and (raw[:8]!=b'\x89PNG\r\n\x1a\n' or struct.unpack('>II',raw[16:24])!=(512,768)):raise RuntimeError('Unexpected Phil frame format')
         for name in sorted(names):
             p=Path('/usr/share/kodi/addons')/name
             p.parent.mkdir(parents=True,exist_ok=True,mode=0o755)

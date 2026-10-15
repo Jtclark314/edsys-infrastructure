@@ -1,6 +1,6 @@
 # Pi5 Master Bedroom display pilot
 
-Native Kodi 21.3/GBM on the existing Pi5, with an original animated butler and
+Native Kodi 21.3/GBM on the existing Pi5, with dimensional Phil animations and
 bounded presentation cards above Kodi's GUI/video. Home Assistant remains
 household authority. The owner selected existing Nimo voice for initial control;
 its microphone, Andrew voice and reply output stay on Nimo. Pi hands-free voice
@@ -84,7 +84,7 @@ makes a private pre-install checkpoint. It does not upgrade the OS, edit boot
 configuration, start or enable Kodi.
 
 ```bash
-python3 services/pi5-bedroom-display/tools/build_kodi.py PRIVATE_ADDON_ZIP
+python3 services/pi5-bedroom-display/tools/build_kodi.py PRIVATE_ADDON_ZIP --animation-dir REVIEWED_REMOTION_OUTPUT
 # Copy source pi/ and ZIP privately to the reviewed Pi.
 sudo bash PRIVATE_SOURCE/pi/install-kodi.sh --apply
 sudo python3 PRIVATE_SOURCE/pi/install-addon.py PRIVATE_ADDON_ZIP
@@ -184,7 +184,7 @@ re-encodes frames to at most 32,000 JPEG bytes; the encrypted envelope remains
 under 62,000 bytes. Refresh requests are about one second apart plus capture/
 transport time. Camera files rotate across three private runtime JPEGs and are
 deleted on close, expiry or add-on restart. Restarts discard views; no replay.
-Only original code/assets belong in the 21-file add-on ZIP. Private camera data,
+Only original code/assets belong in the closed add-on ZIP. Private camera data,
 calendar text, Plex URLs/logs and account state must stay outside model prompts,
 Git and RAG. Recovery: disable the owned add-on, compare current files and restore
 only its matching private `manual-screen-*` backup, preserving the linked profile
@@ -193,7 +193,7 @@ and current movie. Remove the new screen service/dashboard separately if needed.
 ## Original artwork mode
 
 `tools/build_art.py` generates four original geometric PNG presets, bundled in
-the 21-file add-on. Art is a closed manual layout with a numeric preset index;
+the add-on. Art is a closed manual layout with a numeric preset index;
 it accepts no path, URL or external image. It rotates every 20 seconds, hides its
 initial hint, supports Next/Back/Return and expires within two hours. Other
 manual views retain their five-minute maximum. Art is explicitly requested,
@@ -201,3 +201,46 @@ never an automatic idle takeover, and it never changes media/audio playback.
 Personal photo folders remain future selected input. The HA Night & art tab
 controls this mode; its sleep timer and native subtitle/audio settings are
 separate from the renderer and the pending automatic voice-event contract.
+
+## Dimensional Phil animations: 2026-10-15
+
+Jeremy selected dimensional Phil design B. Its existing identity/outfit is
+retained in six four-second, 12 fps loops: idle (breathing/blink), listening,
+thinking, speaking (mouth/hand), greeting (wave) and error. The original source
+poses are 1024×1536; native playback uses 288 transparent 512×768 PNG frames.
+Remotion renders on 9950x, and the Pi uses its existing Kodi image layer/cache.
+No browser, second video decoder, new package, network listener or HA restart
+is required on the Pi. Character art does not itself prove a running voice flow.
+
+Manual **Show butler** greets once then idles; other manual household/media cards
+idle without speaking. Native fixture scenes use the matching listening/thinking/
+speaking/error states. Speaking still requires responding plus the existing
+audio-playing flag; fixture speech is explicitly simulated/silent. Actual Nimo
+audio correlation and automatic presentation routing remain HA-owned work.
+
+See [Remotion build source and provenance](animation/README.md). Original source
+poses and rendered media are protected project assets outside Git/RAG; the code,
+exact dependency lock, prompts and source hashes are tracked. Build requires the
+full reviewed output manifest and rejects missing/changed frames. The 310-file
+ZIP includes the existing 21-file manual/art foundation, `character.py` and 288
+fixed local frames. Fresh/updating installers reject extra/duplicate/oversized
+entries and wrong frame dimensions. Legacy simple assets remain only for the
+older browser qualification surface/recovery; Kodi now uses dimensional Phil.
+
+Verification: 17 Pi tests pass, including manual greeting-to-idle, frame bounds,
+no repeated same-frame loads and audio-state gating. Aligned Remotion/TypeScript,
+full six-state render and a color-verified 24-second NVENC review passed. A mesh
+seam found in visual QA was corrected before installation. Actual native GUI
+capture shows dimensional Phil; five fixture states advanced 13–14 frames in
+1.1-second samples. A 7.6-second paused-playback smoke averaged about 0.30 CPU
+core; this is not active-playback performance or sustained acceptance. All 310
+deployed file hashes match the package. Kodi PID, profile, paused item/position,
+listener and firewall baselines were retained; operator overlays were dismissed.
+The LG was off, so physical TV/combined-playback acceptance remains pending.
+
+Recovery: disable only this add-on, compare the current owned files with the
+reviewed deployment, and restore the prior `manual-screen-*` add-on backup.
+Remove only this package's added `character.py`/frame directory when reverting;
+preserve linked Plex/profile and any subsequent user changes. Native LG Plex
+remains an independent recovery path. Do not restart Kodi or restore a whole
+profile merely to roll back character artwork.

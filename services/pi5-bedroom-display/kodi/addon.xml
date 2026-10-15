@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<addon id="service.edsys.bedroom-display" name="Bedroom Pi Screen" version="0.3.0" provider-name="EdSys">
+<addon id="service.edsys.bedroom-display" name="Bedroom Pi Screen" version="0.4.0" provider-name="EdSys">
   <requires><import addon="xbmc.python" version="3.0.0"/></requires>
   <extension point="xbmc.service" library="service.py"/>
   <extension point="xbmc.python.script" library="default.py"><provides>executable</provides></extension>

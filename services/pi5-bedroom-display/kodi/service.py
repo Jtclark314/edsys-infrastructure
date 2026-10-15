@@ -98,6 +98,7 @@ def main():
                                     window_id=xbmcgui.getCurrentWindowId(),
                                     dialog_id=xbmcgui.getCurrentWindowDialogId(),
                                     overlay_seconds_remaining=round(max(0,overlay.until-time.monotonic()),1) if overlay else 0,
+                                    character=overlay.character.status if overlay else manual.status if manual.window and manual.window.character else None,
                                     plex=plex.get('result',{}).get('addon'))
                 elif op in ('scene','dismiss'):
                     if overlay:overlay.close();overlay=None

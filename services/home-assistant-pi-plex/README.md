@@ -186,7 +186,8 @@ Implementation: optional authenticated `bedroom_comfort` service plus night and
 sleep status sensors in the existing HA component. Its fixed operations reuse
 the native Kodi client; no new listener or voice/LLM tool is added. Provider/
 pipeline/speech/keys stay intact. Build art using `tools/build_art.py`, then the
-21-file Pi ZIP. Disable/update/re-enable only the owned add-on so Kodi continues.
+Pi ZIP (now 310 files with dimensional Phil; see the display animation build).
+Disable/update/re-enable only the owned add-on so Kodi continues.
 Back up the HA component/config, install its 13 reviewed files, check Core and
 restart once for changed Python. `deploy_comfort.py` requires the exact private
 accepted dashboard baseline before save/readback, preserving concurrent edits.

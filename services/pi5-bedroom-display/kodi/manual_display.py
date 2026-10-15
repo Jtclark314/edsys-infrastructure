@@ -12,6 +12,7 @@ import xbmc
 import xbmcgui
 from manual_protocol import SENDER,MESSAGE,PROPERTY,MAX_WIRE,ART_NAMES,SequenceGuard,validate
 from model import kodi_text
+from character import Character,frame_path
 
 ROOT=Path(__file__).resolve().parent
 RUNTIME=Path('/run/edsys-bedroom-display')
@@ -40,7 +41,7 @@ class ScreenWindow(xbmcgui.WindowDialog):
         w,h=self.getWidth(),self.getHeight()
         def rect(x,y,a,b):return [round(x*w/1920),round(y*h/1080),round(a*w/1920),round(b*h/1080)]
         self.clock=None;self.image=None;self.footer=None;self.files=[]
-        self.art_index=None
+        self.art_index=None;self.character=None
         if self.kind=='dark':
             self.addControl(xbmcgui.ControlImage(0,0,w,h,str(ROOT/'assets/black.png')))
         elif self.kind=='art':
@@ -63,7 +64,9 @@ class ScreenWindow(xbmcgui.WindowDialog):
             self.addControl(xbmcgui.ControlLabel(*rect(350,600,1220,55),'Back to return to video',font='font13',textColor='FF7C8C91',alignment=2))
         else:
             self.addControl(xbmcgui.ControlImage(*rect(620,460,1180,570),str(ROOT/'assets/panel.png')))
-            self.addControl(xbmcgui.ControlImage(*rect(120,390,470,627),str(ROOT/'assets/butler-idle.png'),aspectRatio=2))
+            greeting=self.kind=='butler';pose='greeting' if greeting else 'idle'
+            avatar=xbmcgui.ControlImage(*rect(120,390,470,627),str(frame_path(ROOT,pose,0)),aspectRatio=2)
+            self.addControl(avatar);self.character=Character(avatar,ROOT,pose,greeting=greeting)
             self.addControl(xbmcgui.ControlLabel(*rect(670,485,1080,65),kodi_text(message['heading']),font='font30',textColor='FFF4F0E7'))
             body=xbmcgui.ControlTextBox(*rect(670,560,1050,405),font='font13',textColor='FFCFDCD6')
             self.addControl(body)
@@ -77,6 +80,7 @@ class ScreenWindow(xbmcgui.WindowDialog):
         self.footer.setLabel('Updating images · Frame '+str(message['sequence']+1)+' · Back to close')
 
     def tick(self):
+        if self.character:self.character.tick()
         if self.art_index is not None:
             now=time.monotonic()
             if now>=self.hide_hint:self.footer.setVisible(False)
@@ -120,6 +124,8 @@ class ManualDisplay:
             elif self.status['view']=='camera' and now-self.last_frame>6:self.close('stale')
             else:
                 self.window.tick()
+                if self.window.character:
+                    self.status.update(self.window.character.status);self.publish()
                 if self.window.art_index is not None and self.status.get('art_index')!=self.window.art_index:
                     self.status['art_index']=self.window.art_index;self.publish()
         try:message=self.jobs.get_nowait()
