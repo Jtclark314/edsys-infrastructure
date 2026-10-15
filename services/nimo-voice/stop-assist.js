@@ -1,4 +1,5 @@
 (() => {
+  window.edsysStopPhil?.();
   if (window.edsysNimoBinding) window.edsysNimoBinding.sequence++;
   const roots = [document];
   for (let i = 0; i < roots.length && i < 2000; i++) {

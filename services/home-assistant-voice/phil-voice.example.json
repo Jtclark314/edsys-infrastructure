@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "pipeline_id": "REVIEWED_NATIVE_NIMO_PIPELINE_ID",
+  "output": "nimo"
+}

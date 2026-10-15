@@ -6,6 +6,7 @@
   if (!pipeline) return 'pipeline-missing';
   // The ordinary native assistant stays usable if the optional pilot is absent.
   try { await window.edsysSetupNimo?.(pipeline.id); } catch { }
+  try { await window.edsysSetupPhil?.(pipeline.id); } catch { }
   // Use HA's native documented Assist button action and its own authenticated
   // frontend. No token is read/exported and no direct device action is sent.
   const roots = [document];

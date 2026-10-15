@@ -144,3 +144,42 @@ to withdraw the new camera bridge while retaining its existing sign-in profile.
 
 Architecture: EdSys-Master `docs/NIMO_HA_VOICE.md` and `docs/PI5_EDGE_LIVINGROOM.md`.
 Native Assist action: https://www.home-assistant.io/voice_control/start_assist_from_dashboard/
+
+## Phil animation bridge: 2026-10-15
+
+The three-script Phil extension is implemented and staged; Nimo was offline,
+so client installation and the end-to-end spoken check are pending. No executable,
+WebView SDK, sign-in/profile, hotkey, microphone or Windows audio setting changes.
+Jeremy selected every Nimo voice turn while the LG is already awake on Pi HDMI 1.
+The bridge leaves reply audio on Nimo; LG/soundbar reply routing is an unresolved
+owner choice, not a deployed feature.
+
+`start-assist.js` installs the optional lifecycle decorator from `camera-view.js`.
+Only the named pipeline's STT-started turns participate. Native callbacks and
+no-replay subscription options remain intact. Listening follows native capture;
+STT/VAD/intent events select thinking. Speaking follows the actual native Audio
+object's `playing` event; buffering stops mouth movement. Generation/run-end
+does not end a still-playing reply. End, pause, error, window close, supersession
+and disconnect retire the corresponding turn. Camera presentation stays native.
+Only bounded lifecycle metadata and opaque correlation IDs go to HA: no text,
+audio, reply URLs, account state or provider credential is exported.
+
+HA rechecks user permission, exposure, stable Pi/TV identity and visible HDMI 1.
+It uses the existing authenticated Kodi HTTP client and encrypted screen path.
+Heartbeat is two seconds, Pi expiry seven seconds and maximum turn three minutes.
+No delayed replay or automatic TV wake/input switch, Plex pause/resume or volume
+change occurs. If the optional display is unavailable, ordinary voice continues.
+See the HA/display runbooks for the server package and narrower recovery.
+
+Stage the reviewed three scripts and a private `manifest.json` mapping each
+filename to its exact `before`/`after` SHA256. Run `update-phil.ps1 -StagedPath`
+in Nimo's ordinary user session after checking reachability and local pause.
+It refuses unknown installed changes, backs up the three scripts, checks source
+and installed hashes and leaves the executable/session alone. The next Alt+V
+loads them. No startup task or delayed installation is created. To withdraw a
+client update, restore only the matching three-script backup and restart only
+Nimo Voice to discard the in-memory decorator; retain sign-in/settings.
+
+Verification: 18 offline lifecycle and 14 existing keyboard checks, JavaScript
+syntax and PowerShell parsing pass. Actual Nimo DOM/native Audio event binding
+and human audibility remain to be confirmed on the reachable client.

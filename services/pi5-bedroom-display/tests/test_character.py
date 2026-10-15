@@ -47,7 +47,7 @@ class CharacterTests(unittest.TestCase):
             def setImage(self,*args):pass
         gui=SimpleNamespace(WindowDialog=Window,ControlImage=Control,ControlLabel=Control,ControlTextBox=Control)
         path=Path(__file__).resolve().parents[1]/'kodi/manual_display.py'
-        with patch.dict(sys.modules,{'xbmc':SimpleNamespace(Monitor=object),'xbmcgui':gui}):
+        with patch.dict(sys.modules,{'xbmc':SimpleNamespace(Monitor=object),'xbmcgui':gui}),patch.object(sys,'path',[str(path.parent),*sys.path]):
             spec=importlib.util.spec_from_file_location('manual_character_fixture',path)
             module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
             message={'kind':'butler','heading':'Phil','body':'','rows':[]}

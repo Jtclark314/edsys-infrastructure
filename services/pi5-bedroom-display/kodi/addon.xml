@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<addon id="service.edsys.bedroom-display" name="Bedroom Pi Screen" version="0.5.0" provider-name="EdSys">
+<addon id="service.edsys.bedroom-display" name="Bedroom Pi Screen" version="0.6.0" provider-name="EdSys">
   <requires><import addon="xbmc.python" version="3.0.0"/></requires>
   <extension point="xbmc.service" library="service.py"/>
   <extension point="xbmc.python.script" library="default.py"><provides>executable</provides></extension>
   <extension point="xbmc.addon.metadata">
-    <summary lang="en_GB">Manual HA screen cards and camera image previews</summary>
-    <description lang="en_GB">Bounded manual commands through the existing authenticated Kodi connection. Private local qualification tools remain separate. No microphone or automatic voice subscription.</description>
+    <summary lang="en_GB">HA screen cards, camera previews and Nimo Phil animations</summary>
+    <description lang="en_GB">Bounded encrypted cards and ephemeral Nimo lifecycle metadata through the existing authenticated Kodi connection. No microphone, speech content or player actions in this renderer.</description>
     <platform>all</platform><license>MIT</license>
   </extension>
 </addon>

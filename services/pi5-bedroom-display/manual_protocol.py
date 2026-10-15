@@ -22,6 +22,9 @@ MAX_WIRE = 62_000
 AAD = b'edsys.bedroom.manual-screen.v1'
 KINDS = {'butler', 'clock', 'dark', 'briefing', 'household', 'media', 'connections','art'}
 ART_NAMES = ('dunes','orbit','hills','tide')
+VOICE_PROPERTY = 'edsys.bedroom.voice'
+VOICE_INFO_LABEL = 'Window(Home).Property('+VOICE_PROPERTY+')'
+VOICE_STATES = {'listening','processing','responding','idle','failed','cancelled'}
 
 
 def seal(message,key):
@@ -73,7 +76,12 @@ def validate(data, now=None):
     ttl=7201 if data.get('command')=='show' and data.get('kind')=='art' else 301
     if not now-30<=data['issued_at']<=now+5 or not now<data['expires_at']<=data['issued_at']+ttl:raise ValueError('Stale screen message')
     command=data.get('command')
-    if command=='clear':allowed=common
+    if command=='voice':
+        allowed=common|{'state','audio_playing'}
+        if data.get('state') not in VOICE_STATES or type(data.get('audio_playing')) is not bool:raise ValueError('Invalid voice state')
+        if data['audio_playing'] and data['state']!='responding':raise ValueError('Uncorrelated speaking')
+        if data['expires_at']>data['issued_at']+8:raise ValueError('Voice heartbeat too long')
+    elif command=='clear':allowed=common
     elif command=='show':
         allowed=common|{'kind','heading','body','rows','timezone'}
         if data.get('kind') not in KINDS:raise ValueError('Unsupported screen view')

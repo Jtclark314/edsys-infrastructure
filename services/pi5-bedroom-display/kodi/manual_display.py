@@ -13,6 +13,7 @@ import xbmcgui
 from manual_protocol import SENDER,MESSAGE,PROPERTY,MAX_WIRE,ART_NAMES,SequenceGuard,validate
 from model import kodi_text
 from character import Character,frame_path
+from voice_display import VoiceDisplay
 
 ROOT=Path(__file__).resolve().parent
 RUNTIME=Path('/run/edsys-bedroom-display')
@@ -41,7 +42,7 @@ class ScreenWindow(xbmcgui.WindowDialog):
         w,h=self.getWidth(),self.getHeight()
         def rect(x,y,a,b):return [round(x*w/1920),round(y*h/1080),round(a*w/1920),round(b*h/1080)]
         self.clock=None;self.image=None;self.footer=None;self.files=[]
-        self.art_index=None;self.character=None
+        self.art_index=None;self.character=None;self.avatar=None
         if self.kind=='dark':
             self.addControl(xbmcgui.ControlImage(0,0,w,h,str(ROOT/'assets/black.png')))
         elif self.kind=='art':
@@ -66,6 +67,7 @@ class ScreenWindow(xbmcgui.WindowDialog):
             self.addControl(xbmcgui.ControlImage(*rect(620,460,1180,570),str(ROOT/'assets/panel.png')))
             greeting=self.kind=='butler';pose='greeting' if greeting else 'idle'
             avatar=xbmcgui.ControlImage(*rect(120,390,470,627),str(frame_path(ROOT,pose,0)),aspectRatio=2)
+            self.avatar=avatar
             self.addControl(avatar);self.character=Character(avatar,ROOT,pose,greeting=greeting)
             self.addControl(xbmcgui.ControlLabel(*rect(670,485,1080,65),kodi_text(message['heading']),font='font30',textColor='FFF4F0E7'))
             body=xbmcgui.ControlTextBox(*rect(670,560,1050,405),font='font13',textColor='FFCFDCD6')
@@ -104,6 +106,7 @@ class ManualDisplay:
         self.jobs=queue.Queue(maxsize=4);self.guard=SequenceGuard();self.window=None
         self.status={'version':1,'view':'idle','visible':False,'frames':0}
         self.expires=0;self.last_frame=0;self.published=0
+        self.voice=VoiceDisplay()
         # Crash/restart discards prior private images, never replays a view.
         for path in RUNTIME.glob('screen-*.jpg'):path.unlink(missing_ok=True)
         self.publish()
@@ -119,6 +122,8 @@ class ManualDisplay:
 
     def tick(self):
         now=time.time()
+        self.voice.tick()
+        if self.window and self.window.avatar:self.window.avatar.setVisible(self.voice.window is None)
         if self.window:
             if self.window.done or now>=self.expires:self.close()
             elif self.status['view']=='camera' and now-self.last_frame>6:self.close('stale')
@@ -131,9 +136,12 @@ class ManualDisplay:
         try:message=self.jobs.get_nowait()
         except queue.Empty:return
         try:
+            if message['command']=='voice':
+                self.voice.receive(message);return
             if not self.guard.accept(message,now):return
             key=message['request_id'];command=message['command']
             if command=='clear':
+                self.voice.close('dismissed')
                 self.close();self.status['request_id']=key;self.publish();return
             new=self.status.get('request_id')!=key or self.window is None
             if new:
@@ -148,4 +156,5 @@ class ManualDisplay:
             self.publish()
         except (ValueError,TypeError,KeyError,RuntimeError,OSError):self.close('failed')
 
-    def dispose(self):self.close('offline')
+    def dispose(self):
+        self.voice.close('offline');self.close('offline')

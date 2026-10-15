@@ -63,6 +63,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await setup_screen(hass, entry)
     from .bedroom_comfort import setup_comfort
     await setup_comfort(hass, entry)
+    from .phil_voice import setup_phil
+    await setup_phil(hass, entry)
     entry.async_on_unload(llm.async_register_api(hass, KnowledgeAPI(hass=hass, id=API_ID, name="EdSys voice (reviewed tools)")))
     await hass.config_entries.async_forward_entry_setups(entry, ["conversation", "sensor"])
     return True

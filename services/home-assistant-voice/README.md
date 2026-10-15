@@ -1,5 +1,45 @@
 # Home Assistant conversational voice
 
+## Nimo Phil animation lifecycle: 2026-10-15
+
+Jeremy approved the revised Phil video and requested animation for every Nimo
+voice turn while the LG is already on Pi HDMI 1. The optional HA/Pi metadata
+bridge is installed; Nimo's three scripts are staged because that endpoint was
+offline. Spoken/end-to-end acceptance is pending. Reply audio remains on Nimo;
+LG/soundbar routing is still an owner choice. This bounded animation extension
+does not promote the broader bedroom presentation/data contract proposal.
+
+Private `edsys_voice_knowledge/phil_voice.json` binds only the existing native
+named pipeline ID; see `phil-voice.example.json`. It adds no provider credential
+or pipeline/profile change. `phil_voice.py` handles authenticated `phil_begin`
+and `phil_update` WebSocket messages. It validates the requesting user through
+the existing permission/exposure/identity guards and rechecks TV-on/physical
+HDMI 1 before each update. Native capture and Audio playback events arrive from
+Nimo; generation/run-end alone never asserts speaking. Each lease has a distinct
+audio reference, monotonic sequence, six-second client timeout and three-minute
+ceiling. Closed, superseded, wrong-user/audio, stale and duplicate events cannot
+revive a turn. The watchdog is a HA background task, cancelled on unload.
+
+The Pi receives only closed encrypted `voice` metadata through the existing
+Kodi connection; seven-second expiry clears lost heartbeats. The renderer owns
+no device, TTS, volume or movie action. Manual cameras/art/cards remain separate.
+No transcript, audio, URL or private household content is carried by this bridge.
+HA component 0.5.0 has 14 files. Install only the reviewed component/binding,
+check native configuration and restart Core once to load the new handler; retain
+all speech/backend/profile settings and ensure no active sleep timer is lost.
+
+Recovery: compare owned files, remove only `phil_voice.json` and the added
+`phil_voice.py`, restore the matching prior component backup and restart Core.
+Retain later user changes, native pipeline/provider state and the display key.
+Pi/client recovery is in their runbooks. Do not roll back the HA VM/profile.
+
+Checks: 66 isolated native Core tests, including seven lifecycle/authorization
+cases; Nimo lifecycle and Pi display guards pass. Native config/imports and exact
+component hashes passed. The live off-TV begin call was suppressed; pipeline
+readback matched before/after. Silent encrypted HA-to-Pi fixtures advanced all
+five poses and left the exact paused item/position intact. This is not a spoken
+Nimo or physical-TV pass.
+
 Status, 2026-10-14: general chat, web search, read-only EdSys lookup and a bounded
 household pilot and Master Bedroom media remote tools are deployed
 in the existing named voice profile. Candidate and production pipeline/audio,

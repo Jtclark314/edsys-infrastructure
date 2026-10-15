@@ -273,3 +273,36 @@ backup's files and remove only v2 frame names 048–095 for each of the six stat
 that are absent from that backup. Retain v1's `character.py` and frames 000–047.
 Preserve the linked profile and later user changes; do not restore a whole
 profile or restart Kodi to revert artwork.
+
+## Nimo lifecycle metadata: 2026-10-15
+
+Add-on 0.6.0 has 599 closed files, retaining the accepted frontal 24 fps artwork.
+`voice_display.py` adds a transparent Phil/short-status overlay independent of
+manual camera/art cards. The encrypted manual transport now accepts only the
+closed `voice` state/audio-playing fields. No text, URL, TTS or player command
+is added. Nimo/HA own the real capture/playback correlation and user/TV gate.
+The renderer never pauses/resumes media, changes volume or wakes/switches LG.
+Manual-card avatars hide while the voice avatar is visible, then return.
+
+A turn must begin with a fresh listening/sequence-zero event. Dismissal,
+replacement, seven-second heartbeat expiry and add-on restart prevent older
+heartbeats from reopening it. Back closes the overlay; HA observes that closure
+and forfeits that turn. A lost connection needs a new user-started voice turn.
+Speaking requires responding plus the correlated native-audio-playing flag;
+generation or a reply-ready event alone leaves the mouth idle. Buffering stops
+speech motion. Actual microphone/audio stay on Nimo for this revision.
+
+Nineteen Pi tests, 18 Nimo lifecycle checks and 66 native HA checks pass. Silent
+HA-to-Pi encrypted HTTP fixtures advanced listening/thinking/idle/speaking/error
+by 22–27 updates per 1.1-second sample; simulated audio was explicitly a fixture.
+Each pose and final dismissal were acknowledged, with the exact paused item and
+position retained. The first hub-round-trip harness correctly expired its slow
+heartbeat; moving the fixed fixture inside HA qualified normal transport timing.
+LG stayed off. This is software transport/rendering evidence, not spoken Nimo,
+physical display or audio acceptance. Nimo is offline and its update is staged.
+
+To withdraw this addition, compare owned hashes, disable only this add-on and
+restore its prior v2 backup, removing only added `voice_display.py`. Retain all
+576 v2 artwork frames, character.py, linked Plex/profile and later user changes.
+Restore the prior HA component/private binding and Nimo scripts separately using
+their runbooks. Do not deploy an older 21-file/310-file animation package.
