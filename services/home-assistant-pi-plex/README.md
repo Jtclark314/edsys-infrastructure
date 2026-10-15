@@ -98,3 +98,55 @@ watch progress. Keep native LG Plex available independently.
 
 Owner: Jeremy. Architecture: EdSys-Master `docs/PI5_EDGE_LIVINGROOM.md` and
 `docs/NIMO_HA_VOICE.md`. [Native Kodi integration](https://www.home-assistant.io/integrations/kodi/).
+
+## Full Bedroom Pi dashboard: 2026-10-14
+
+Sidebar **Bedroom Pi**, `/edsys-pi/player`, now has five native tabs: Player,
+TV screen, Household, LG remote and Capabilities. It reuses the accepted player
+and LG controls, adds native apps/input choices and a full LG remote, seven
+camera popup/large-preview button pairs, manual screen cards, bedside Color Light
+brightness, Family/Home calendars and Reminders. The accepted Media page remains
+and receives only one navigation link. No frontend resource is added.
+
+Camera previews are refreshing still images, not full-motion inset video. Popup
+lasts 30 seconds; large preview 60 seconds. Clock/dark last five minutes; all
+views can be dismissed. Use **Show Pi · HDMI 1** first. The screen service never
+pauses, seeks, resumes or replaces a movie. Household records and images remain
+local and are not added to the voice model's tools or prompts. Voice animation,
+AI answer cards, full-motion inset, weather, opening/temperature sources, photo
+assets and automatic alerts remain explicitly planned on Capabilities.
+
+Preparation requires the already-qualified native Kodi/media-remote setup and
+selected local source IDs. `configure_screen.py` validates stable identity,
+platform, area and current permissions, prepares private recovery/config, and
+with `--apply` provisions a purpose-specific encrypted-screen key on HA and Pi.
+Both require the existing Python cryptography dependency. Do not replay a failed
+partial setup; inspect both destinations first. Key/bindings/config/recovery
+records stay mode 0600 outside source. No provider/pipeline/profile changes.
+
+```bash
+python3 services/home-assistant-pi-plex/configure_screen.py \
+  --media-binding PRIVATE_EXISTING_BINDING --selected-sources PRIVATE_SELECTION \
+  --private-state PRIVATE_SCREEN_RECOVERY --apply
+# Install/reload the reviewed display add-on, install the HA component, validate
+# Core, then restart Core once to load changed Python. Kodi need not restart.
+python3 services/home-assistant-pi-plex/deploy_full.py --binding PRIVATE_BINDING \
+  --private-state PRIVATE_DASHBOARD_RECOVERY --apply
+```
+
+`deploy_full.py` refuses an existing dashboard and saves exact private before/
+candidate/readback records. Verify permissions, desktop/narrow native layouts,
+actual button-to-renderer acknowledgements, preview refresh/expiry/dismissal and
+Plex advancing uninterrupted. On 2026-10-14 Jeremy confirmed the Front Porch
+preview above playing Plex. Actual Dismiss/Daily briefing dashboard clicks
+reached the renderer; all seven cameras returned images, all card types rendered,
+and a large Back Patio preview advanced then expired. No private card contents
+were exported for verification. Pure Pi checks (12), native Core checks (45),
+Pi dashboard checks (5) and existing LG checks (5) passed.
+
+Recovery: compare latest dashboards with the saved baseline, remove only the
+new `edsys-pi` dashboard and the one full-dashboard link, retaining accepted
+Media views. Unload the owned HA integration, restore only its component/screen
+config from private recovery, then reload/restart Core as required. Roll back
+only the display add-on through its owned checkpoint; do not restore an old
+whole Kodi profile, position or play state over subsequent user activity.

@@ -27,8 +27,8 @@ def main(archive):
     checkpoint.mkdir(mode=0o700)
     shutil.copy2(manifest,checkpoint/'addon-manifest.xml')
     shutil.copytree('/var/lib/edsys-voice/.kodi',checkpoint/'kodi-profile',symlinks=True)
-    allowed={'addon.xml','default.py','service.py','model.py','local_control.py','views.json',
-             'assets/panel.png', *('assets/butler-'+p+'.png' for p in
+    allowed={'addon.xml','default.py','service.py','model.py','local_control.py','views.json','manual_protocol.py','manual_display.py','decrypt_screen.py',
+             'assets/panel.png','assets/black.png', *('assets/butler-'+p+'.png' for p in
                 ['idle','listening','thinking','speaking-0','speaking-1','failed'])}
     with zipfile.ZipFile(archive) as z:
         names=set(z.namelist())

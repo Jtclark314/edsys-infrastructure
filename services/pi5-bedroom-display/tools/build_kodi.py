@@ -11,10 +11,11 @@ ADDON = 'service.edsys.bedroom-display'
 def build(destination):
     files = [('kodi/addon.xml','addon.xml'), ('kodi/default.py','default.py'),
              ('model.py','model.py'), ('views.json','views.json'),
-             ('kodi/service.py','service.py'), ('local_control.py','local_control.py')]
+             ('kodi/service.py','service.py'), ('local_control.py','local_control.py'),
+             ('manual_protocol.py','manual_protocol.py'),('kodi/manual_display.py','manual_display.py'),('kodi/decrypt_screen.py','decrypt_screen.py')]
     files.extend((str(p.relative_to(ROOT)), str(p.relative_to(ROOT))) for p in sorted((ROOT/'assets').glob('*.png')))
-    if len(files) != 13:
-        raise RuntimeError('Generate the seven original PNG assets first')
+    if len(files) != 17:
+        raise RuntimeError('Generate the eight original PNG assets first')
     destination.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(destination, 'w', zipfile.ZIP_DEFLATED) as z:
         for source, target in files:

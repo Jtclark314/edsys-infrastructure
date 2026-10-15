@@ -17,6 +17,7 @@ import xbmcgui
 from default import Overlay
 from local_control import KEYS, SOCKET, validate_request
 from model import View
+from manual_display import ManualDisplay, ScreenMonitor
 
 ROOT=Path(__file__).resolve().parent
 TEST=Path('/var/lib/edsys-voice/bedroom-qualification/sample-1080p-h264.mp4')
@@ -65,12 +66,14 @@ def main():
     jobs,stop=queue.Queue(maxsize=16),threading.Event()
     thread=threading.Thread(target=serve,args=(jobs,stop,scenes),daemon=True)
     thread.start()
-    monitor=xbmc.Monitor()
+    manual=ManualDisplay()
+    monitor=ScreenMonitor(manual.jobs)
     overlay=None
     recent=OrderedDict()
     player=xbmc.Player()
     try:
         while not monitor.waitForAbort(0.05):
+            manual.tick()
             if overlay and (overlay.done or time.monotonic()>=overlay.until):
                 overlay.close();overlay=None
             if overlay:overlay.tick()
@@ -127,6 +130,7 @@ def main():
             while len(recent)>512:recent.popitem(last=False)
             reply.put(response)
     finally:
+        manual.dispose()
         if overlay:overlay.close()
         stop.set()
         thread.join(timeout=3)

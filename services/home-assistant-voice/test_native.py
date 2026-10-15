@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import shlex
 import subprocess
-from install_knowledge import NAMES
+from install_knowledge import component_payload
 
 ROOT=Path(__file__).resolve().parent
 WORKER=r'''
@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix='edsys-voice-candidate-') as tmp:
 
 if __name__=='__main__':
     component=ROOT/'custom_components/edsys_voice_knowledge'
-    payload={'component':{n:(component/n).read_text() for n in NAMES},
+    payload={'component':component_payload(),
              'tests':{p.name:p.read_text() for p in (ROOT/'tests').glob('native_*_checks.py')}}
     command=shlex.join(['qm','guest','exec','300','--pass-stdin','1','--timeout','90','--','docker','exec','-i','homeassistant','python3','-c',WORKER])
     proc=subprocess.run(['ssh','-o','BatchMode=yes','-o','ClearAllForwardings=yes','pve-node3',command],input=json.dumps(payload),capture_output=True,text=True,timeout=105,check=True)

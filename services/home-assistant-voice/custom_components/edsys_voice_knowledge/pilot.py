@@ -49,6 +49,8 @@ class Pilot:
         registry = er.async_get(self.hass).async_get(entity_id)
         if registry is None or registry.disabled_by or registry.device_id != binding["device_id"] or registry.config_entry_id != binding["config_entry_id"]:
             raise PilotRefusal("The device mapping changed. It needs review before control.")
+        if any(getattr(registry,key,None)!=binding[key] for key in ('unique_id','platform') if key in binding):
+            raise PilotRefusal("The source identity changed. It needs review before use.")
         if "area_id" in binding and er.async_get_effective_area_id(self.hass, registry) != binding["area_id"]:
             raise PilotRefusal("The device's room assignment changed. It needs review before control.")
         user_id = getattr(context, "user_id", None)

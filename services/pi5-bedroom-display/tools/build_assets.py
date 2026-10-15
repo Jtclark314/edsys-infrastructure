@@ -62,3 +62,4 @@ if __name__ == '__main__':
     for pose in ['idle', 'listening', 'thinking', 'speaking-0', 'speaking-1', 'failed']:
         character(pose).save(DEST / f'butler-{pose}.png', optimize=True)
     Image.new('RGBA', (8, 8), (14, 27, 36, 239)).save(DEST / 'panel.png')
+    Image.new('RGB', (1,1), (0,0,0)).save(DEST / 'black.png')

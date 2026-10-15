@@ -281,3 +281,31 @@ Model/provider limits and budgets remain owner-controlled. Do not claim a hard
 monthly spend cap or inspected key permissions. Requalify after HA/model changes.
 Physical Pi commissioning and room/soak tests remain separate. Additional Pi
 services remain deferred until physical voice acceptance.
+
+## Manual TV screen service
+
+The optional `bedroom_screen.json` enables the authenticated
+`edsys_voice_knowledge.bedroom_screen` dashboard service and
+`sensor.bedroom_pi_screen`. Actions: camera_popup, camera_large, clear, butler,
+clock, dark, media, briefing, household, connections; duration 10–300 seconds.
+The native HA Kodi runtime client is reused without reading/exporting its
+credentials. Its qualified runtime interface is checked; an incompatible future
+Core update fails closed. Access rechecks HA user permission, Pi Assist exposure,
+stable entity/config-entry/room identities and the visible HDMI 1 input. Clear
+works even if the LG is off or on another input. Camera access is rechecked for
+every frame. Source bindings also pin registry unique ID/platform; null areas
+are pinned rather than silently inferred.
+
+Images and Family/Home/Reminders are fetched locally and rendered by Pi; none
+are exposed to the OpenAI tools. The closed manual protocol is bundled from
+`../pi5-bedroom-display/manual_protocol.py`; it is separate from the proposed
+automatic voice presentation contract. AES-GCM content encryption keeps private
+payloads out of PM4K notification logs. Only the Pi's existing authenticated HTTP
+connection is used, without a listener or new HA/camera credential on Pi. Sensor
+state is a software render acknowledgement, not independent physical proof.
+
+Install with `install_knowledge.py`, run candidate `test_native.py`, validate Core
+and restart once for changed Python. Provider/key/model/pipeline/Andrew settings
+remain intact. The complete configuration, dashboard, private-state and recovery
+workflow is in `../home-assistant-pi-plex/README.md`. Automatic voice-to-screen
+commands, speaking animation/captions and AI visual answers remain future work.

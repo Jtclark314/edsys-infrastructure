@@ -59,10 +59,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await setup_pilot(hass, entry)
     from .media_remote import setup_media_remote
     await setup_media_remote(hass, entry)
+    from .bedroom_screen import setup_screen
+    await setup_screen(hass, entry)
     entry.async_on_unload(llm.async_register_api(hass, KnowledgeAPI(hass=hass, id=API_ID, name="EdSys voice (reviewed tools)")))
-    await hass.config_entries.async_forward_entry_setups(entry, ["conversation"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["conversation", "sensor"])
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    return await hass.config_entries.async_unload_platforms(entry, ["conversation"])
+    return await hass.config_entries.async_unload_platforms(entry, ["conversation", "sensor"])
