@@ -313,10 +313,14 @@ their runbooks. Do not deploy an older 21-file/310-file animation package.
 ## LG reply audio and guarded Plex return: 2026-10-15
 
 Jeremy selected **LG replies: pause Plex during speech, then resume safely**.
-HA/Pi software is installed and silently qualified. Nimo remains offline; its
-three-script update is staged, not installed. Spoken Nimo, actual movie pause/
-resume and physical LG/soundbar acceptance wait until Nimo is reachable and
-Jeremy is home. No audible speech or TV wake/input change was tested remotely.
+HA/Pi software is installed and silently qualified. On October 15 evening,
+Nimo's three-script update was installed in the existing Nimo Voice app. All three
+installed and three recovery hashes match; executable/settings/LG keyboard
+script, browser profile, running process and Alt+V registration were retained.
+Jeremy is home and requested that live voice/Phil/audio/playback tests wait until
+his show ends. The scripts load on the next Alt+V; native frontend binding,
+audibility and actual movie pause/resume remain pending. No live voice test,
+HA/Pi restart, TV power/input or playback command was issued during installation.
 
 Nimo keeps Alt+V and microphone capture. The same HA pipeline and Andrew voice
 produce the reply. When LG is already awake on Pi HDMI 1, HA binds one native
