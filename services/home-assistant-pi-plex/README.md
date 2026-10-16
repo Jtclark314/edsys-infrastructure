@@ -214,3 +214,15 @@ automatically, Next preserved expiry, Return dismissed it and a short art expiry
 cleared. Original font/subtitle state and compression were restored after tests;
 Plex was left playing, with no armed timer or lingering screen. Deployed hashes
 and retained pipeline/provider settings are checked separately at closeout.
+
+## Music and books
+
+`full_dashboard.add_music_view` extends the live Pi dashboard with one Player
+navigation link and a native **Music & books** view, preserving all other cards.
+It links to existing MA ingress and the existing ABS LAN UI and reuses explicit
+Pi transport actions plus the LG remote. Deployment must compare the latest
+live dashboard before saving and read it back; do not rebuild old views over
+later edits. Source/runbook: [Music Assistant](../music-assistant/README.md).
+Select **Bedroom Pi Plex** in MA; ABS's own web player plays on its browser.
+Starting media replaces the current Pi session. Actual music/audiobook playback
+and Phil interruption remain held/unqualified, as labeled on the view.

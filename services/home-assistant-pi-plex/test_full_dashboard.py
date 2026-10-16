@@ -11,11 +11,11 @@ class FullDashboardTests(unittest.TestCase):
 
     def test_native_dashboard_covers_manual_actions_and_keeps_unavailable_features_honest(self):
         dashboard=build(self.binding());views=dashboard['views']
-        self.assertEqual([v['path'] for v in views],['player','night','screen','household','lg-remote','capabilities'])
+        self.assertEqual([v['path'] for v in views],['player','music-books','night','screen','household','lg-remote','capabilities'])
         text=str(dashboard)
         for item in ['camera_popup','camera_large','clear','clock','dark','butler','media','briefing','household','connections','full-motion','still planned']:
             self.assertIn(item,text)
-        self.assertNotIn('shell_command',text);self.assertNotIn('custom:',text);self.assertNotIn('http://',text)
+        self.assertNotIn('shell_command',text);self.assertNotIn('custom:',text);self.assertEqual(text.count('http://'),1);self.assertIn('http://192.168.50.50:13378/',text)
 
     def test_night_controls_are_explicit_with_cancellation_and_no_photo_or_power_side_effect(self):
         view=next(v for v in build(self.binding())['views'] if v['path']=='night');text=str(view)

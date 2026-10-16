@@ -215,3 +215,14 @@ tiers:
         healthchecks:
           - url: http://192.168.50.50:3011/
             codes: [200, 302]
+
+  - name: bedroom-media
+    blocking: false
+    required_mounts: [/mnt/media]
+    projects:
+      - name: audiobookshelf
+        files: [/srv/ssd1/docker/stacks/audiobookshelf/docker-compose.yml]
+        services: [audiobookshelf]
+        healthchecks:
+          - url: http://127.0.0.1:13378/ping
+            codes: [200]

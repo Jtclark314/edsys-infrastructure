@@ -117,7 +117,7 @@ def build(binding):
                    section([heading('Still planned','progress-clock'),note('''Voice-synchronised animation and captions, AI visual answers, full-motion camera inset, weather, real door/temperature readings, personal photo sources, and automatic problem notifications need further setup or qualification.
 
 The controls above use current sources. Missing capabilities are shown here until they have a working connection and a screen test. Camera AI analysis stays off.''')])]}
-    return {'title':'Bedroom Pi','views':[player_view,night,screen_view,household,lg_view,plan]}
+    return add_music_view({'title':'Bedroom Pi','views':[player_view,night,screen_view,household,lg_view,plan]},player)
 
 
 def add_link(original):
@@ -126,3 +126,31 @@ def add_link(original):
     link=nav('Full Bedroom Pi dashboard','monitor-dashboard','/'+URL+'/player')
     if any('Full Bedroom Pi dashboard' in str(s) for s in view.get('sections',[])):raise ValueError('Full dashboard link already exists')
     view['sections'].append(section([link]));return result
+
+
+def music_view(player):
+    """Browse in the existing servers; transport controls target only the Pi."""
+    entity(player)
+    return {'title':'Music & books','path':'music-books','icon':'mdi:music-box-multiple','type':'sections','max_columns':2,
+      'sections':[section([heading('Choose something to play','music-box-multiple'),
+        nav('Open Music Assistant','music','/hassio/ingress/d5369777_music_assistant'),
+        {'type':'button','name':'Open Audiobookshelf','icon':'mdi:bookshelf',
+         'tap_action':{'action':'url','url_path':'http://192.168.50.50:13378/'}},
+        note('In Music Assistant, choose **Bedroom Pi Plex** as the output, then browse Music or Audiobooks. Music plays through the Pi’s HDMI output to the LG/soundbar. Starting a selection replaces the current Pi playback, including Plex.'),
+        note('Audiobookshelf manages books and listening progress. Its separate web player plays on the device running that browser; use Music Assistant to send a book to the Pi. Existing account sign-in is required.'),
+        nav('LG input & volume','remote-tv','/'+URL+'/lg-remote')]),
+       section([heading('Pi playback','raspberry-pi'),{'type':'media-control','entity':player},
+        grid([button('Resume Pi','play','media_player.media_play',player),button('Pause Pi','pause','media_player.media_pause',player),button('Stop Pi','stop','media_player.media_stop',player)]),
+        grid([button('Previous','skip-previous','media_player.media_previous_track',player),button('Next','skip-next','media_player.media_next_track',player)],2),
+        nav('Plex & Pi navigation','plex','/'+URL+'/player'),
+        note('Music and audiobook sound checks are pending. Phil’s speech pause/resume currently supports video only. Music and audiobook interruption, chapter seeking and resume still need setup or listening tests.')])]}
+
+
+def add_music_view(original,player):
+    """Append only the new view and one Player link, preserving live dashboard edits."""
+    result=copy.deepcopy(original)
+    if any(v.get('path')=='music-books' for v in result['views']):raise ValueError('Music view already exists; inspect instead of overwriting')
+    current=next(v for v in result['views'] if v.get('path')=='player')
+    current['sections'][0]['cards'].append(nav('Music & audiobooks','music-box-multiple','/'+URL+'/music-books'))
+    result['views'].insert(1,music_view(player))
+    return result
