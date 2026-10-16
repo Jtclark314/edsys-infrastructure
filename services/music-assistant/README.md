@@ -79,8 +79,9 @@ Select **Bedroom Pi Plex** in Music Assistant before choosing music or a book.
 A new selection replaces current Pi playback, including Plex. Volume/input stays
 with the existing LG remote. Do not start playback as a connectivity check while
 the owner is watching. The native Pi dashboard media card and explicit transport
-buttons address the same endpoint; previous/next behavior depends on the active
-player queue and is not a substitute for qualified audiobook chapter selection.
+buttons address the same endpoint. Track/queue navigation and audiobook position
+belong in Music Assistant, which owns the streamed queue; the new view does not
+misroute Next/Previous to Kodi’s separate local queue.
 
 ### Verification and limits
 

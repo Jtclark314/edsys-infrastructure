@@ -141,8 +141,8 @@ def music_view(player):
         nav('LG input & volume','remote-tv','/'+URL+'/lg-remote')]),
        section([heading('Pi playback','raspberry-pi'),{'type':'media-control','entity':player},
         grid([button('Resume Pi','play','media_player.media_play',player),button('Pause Pi','pause','media_player.media_pause',player),button('Stop Pi','stop','media_player.media_stop',player)]),
-        grid([button('Previous','skip-previous','media_player.media_previous_track',player),button('Next','skip-next','media_player.media_next_track',player)],2),
         nav('Plex & Pi navigation','plex','/'+URL+'/player'),
+        note('Choose tracks, queue order and audiobook position in Music Assistant. These Pi buttons control whatever is currently playing on the TV.'),
         note('Music and audiobook sound checks are pending. Phil’s speech pause/resume currently supports video only. Music and audiobook interruption, chapter seeking and resume still need setup or listening tests.')])]}
 
 
