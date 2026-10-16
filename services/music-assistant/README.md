@@ -114,3 +114,56 @@ progress or remove original media. To cold-stop ABS again, remove only its
 `bedroom-media` tier from the ordered recovery manifest before stopping that
 existing container. Keep config, metadata and media. Its current `unless-stopped`
 policy and existing Compose labels are retained, with `/mnt/media` gating recovery.
+
+## Dashboard access and player selection — 2026-10-16
+
+Use the consistent teal **Music Assistant** native shortcut, with the description
+**Music & audiobooks**, in Home's Now Playing, the four indoor TV rooms in Spaces,
+Media overview and its four remote/player views, and Bedroom Pi's Player,
+Music & books, Night & art and LG remote. Four dashboards have fourteen placements
+across eleven views. Existing Music launchers are replaced, avoiding duplicates;
+existing TV, Plex, scene, lighting and other cards remain in order.
+
+The target is the existing HA app route `/app/d5369777_music_assistant`.
+The old `/hassio/ingress/…` frontend route is not registered on this HA version;
+it redirects to the default dashboard. Use the live `app` panel instead.
+Navigation opens MA inside HA using the current HA session, including remote HA
+access; it does not rely on a browser reaching the private direct MA LAN URL.
+No player is selected automatically and navigation sends no playback, input,
+volume or power command. Native shortcut appearance is owned by HA; no custom
+frontend resource or theme is required.
+
+In MA, click the **current device name at the bottom right** to open **Players**,
+then select **Bedroom Pi Plex**. The neighboring **1 Player / Group members**
+control manages the current group and is not the full output selector. On
+October 16 the actual Nimo Chrome output picker contained the enabled, available,
+non-hidden Pi. Selecting it changed the visible current output to Bedroom Pi
+Plex without starting media; Kodi remained paused at the same position. No
+provider repair/reload/recreation was needed. Merely listing a player through a
+privileged API is not sufficient evidence of visibility in the user's picker.
+
+`dashboard_access.py` produces native shortcuts and a narrow, idempotent candidate
+against explicit existing sections. It saves private before/after JSON, compares
+all targets before the first save, compares each again before its write, and
+requires exact readback. An unknown/partial result requires inspection rather
+than replay. Review the dry run before applying:
+
+```bash
+python3 services/music-assistant/dashboard_access.py --private-state PRIVATE_DIR
+python3 services/music-assistant/dashboard_access.py --private-state PRIVATE_DIR --apply
+```
+
+Keep all live JSON private. For rollback, compare each current dashboard to its
+saved after-version and restore only these launchers and the output-picker help
+paragraph, preserving later user edits. A stale checkpoint must not be forced over
+a newer dashboard. Pi's full-dashboard builder reuses the same shortcut definition.
+
+References: [HA native shortcut card](https://www.home-assistant.io/dashboards/shortcut/),
+[MA player settings](https://www.music-assistant.io/settings/individual-player/).
+
+Desktop verification on Nimo showed the native teal tile in Home and the Master
+Bedroom remote. Actual clicks from both opened MA at the current app route with
+Bedroom Pi Plex selected. Kodi's paused position was unchanged. The interrupted
+UI check recovered after starting only the existing stopped desktop-control
+helper, with no local pause or pending requests present. This is navigation and
+picker acceptance, not a music/book sound or speech-interruption test.

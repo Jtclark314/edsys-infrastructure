@@ -215,3 +215,37 @@ disabled; native HTTP polling applies. No frontend dependency or HA restart.
 The Pi presentation-event/voice integration remains a separate work package.
 See `../services/home-assistant-pi-plex/README.md` for setup and narrow recovery;
 never restore an old complete dashboard or private profile over later changes.
+
+## Music Assistant access: 2026-10-16
+
+Fourteen native teal **Music Assistant** shortcuts, described as **Music &
+audiobooks**, now sit with playback controls across Home, four indoor TV rooms
+in Spaces, all five Media views, and Bedroom Pi's Player, Music & books, Night &
+art and LG remote. These cover eleven views in four dashboards. Existing Music
+launchers were replaced; other cards/actions and view order were preserved.
+
+Each uses the existing HA app ingress route, preserving the current HA access
+path instead of requiring the direct private MA LAN URL. Opening a shortcut
+only navigates; it neither selects an output nor starts playback or changes
+TV power/input. Native cards need no theme or new frontend resource. The Pi's
+Music & books guidance identifies the bottom-right current-device-name button
+as MA's output picker. The adjacent Group members control is separate.
+
+Live Nimo inspection found the Pi available in the actual MA picker. Selecting
+Bedroom Pi Plex changed its displayed output without starting music; Kodi's
+paused time remained unchanged. No provider reconfiguration/reload was needed.
+Four dashboard before/after pairs passed exact saved readback and a structural
+comparison proving that only launcher cards and the output-picker help paragraph
+changed. Six existing native Pi/LG dashboard checks and syntax checks pass.
+
+Owning builder/deployer and narrow rollback:
+`../services/music-assistant/dashboard_access.py` and
+`../services/music-assistant/README.md`. Keep private dashboard checkpoints
+outside Git/RAG; compare the saved after-version before restoring owned cards.
+
+The native registered frontend target is `/app/d5369777_music_assistant` on this
+HA version. The old `/hassio/ingress/…` route is not registered and falls back to
+Home. The deployer now checks for the `app` panel. Native teal tiles rendered on
+Nimo; actual Home and Master Bedroom remote clicks reached MA with Bedroom Pi
+Plex selected. The paused Pi position remained unchanged. No music/book sound,
+voice selection or speech interruption was tested by this navigation check.

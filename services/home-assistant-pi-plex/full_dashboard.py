@@ -15,6 +15,16 @@ def note(text):return {'type':'markdown','content':text}
 def nav(title,icon,path):return {'type':'button','name':title,'icon':'mdi:'+icon,'tap_action':{'action':'navigate','navigation_path':path}}
 
 
+def music_access():
+    spec=importlib.util.spec_from_file_location('bedroom_music_access',Path(__file__).resolve().parents[1]/'music-assistant/dashboard_access.py')
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    return module
+
+
+def music_launcher():
+    return music_access().shortcut()
+
+
 def screen(title,icon,action,**data):
     return {'type':'button','name':title,'icon':'mdi:'+icon,'icon_height':'30px','show_state':False,
             'tap_action':{'action':'perform-action','perform_action':'edsys_voice_knowledge.bedroom_screen','data':{'action':action,**data}},
@@ -117,7 +127,7 @@ def build(binding):
                    section([heading('Still planned','progress-clock'),note('''Voice-synchronised animation and captions, AI visual answers, full-motion camera inset, weather, real door/temperature readings, personal photo sources, and automatic problem notifications need further setup or qualification.
 
 The controls above use current sources. Missing capabilities are shown here until they have a working connection and a screen test. Camera AI analysis stays off.''')])]}
-    return add_music_view({'title':'Bedroom Pi','views':[player_view,night,screen_view,household,lg_view,plan]},player)
+    return music_access().extend(add_music_view({'title':'Bedroom Pi','views':[player_view,night,screen_view,household,lg_view,plan]},player),'edsys-pi')[0]
 
 
 def add_link(original):
@@ -133,10 +143,10 @@ def music_view(player):
     entity(player)
     return {'title':'Music & books','path':'music-books','icon':'mdi:music-box-multiple','type':'sections','max_columns':2,
       'sections':[section([heading('Choose something to play','music-box-multiple'),
-        nav('Open Music Assistant','music','/hassio/ingress/d5369777_music_assistant'),
+        music_launcher(),
         {'type':'button','name':'Open Audiobookshelf','icon':'mdi:bookshelf',
          'tap_action':{'action':'url','url_path':'http://192.168.50.50:13378/'}},
-        note('In Music Assistant, choose **Bedroom Pi Plex** as the output, then browse Music or Audiobooks. Music plays through the Pi’s HDMI output to the LG/soundbar. Starting a selection replaces the current Pi playback, including Plex.'),
+        note('In Music Assistant, click the current device name at the **bottom right** to open the player picker and choose **Bedroom Pi Plex** as the output, then browse Music or Audiobooks. Music plays through the Pi’s HDMI output to the LG/soundbar. Starting a selection replaces the current Pi playback, including Plex.'),
         note('Audiobookshelf manages books and listening progress. Its separate web player plays on the device running that browser; use Music Assistant to send a book to the Pi. Existing account sign-in is required.'),
         nav('LG input & volume','remote-tv','/'+URL+'/lg-remote')]),
        section([heading('Pi playback','raspberry-pi'),{'type':'media-control','entity':player},
