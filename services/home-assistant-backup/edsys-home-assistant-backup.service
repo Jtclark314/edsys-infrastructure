@@ -1,0 +1,25 @@
+[Unit]
+Description=Export and verify the current protected Home Assistant native backup
+Wants=network-online.target
+After=network-online.target
+Before=edsys-backup.service
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/usr/bin/python3 /srv/edsys/edsys-infrastructure/services/home-assistant-backup/collect.py --progress
+TimeoutStartSec=35min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+RuntimeDirectory=edsys-home-assistant-backup
+RuntimeDirectoryMode=0700
+ReadWritePaths=/srv/edsys-backup/staging/home-assistant /srv/edsys-backup/.home-assistant-incoming
+
+# Independently scheduled: an HA outage must not prevent other critical backups.
+# Do not add this service as Requires= or a fatal ExecStartPre= on edsys-backup.

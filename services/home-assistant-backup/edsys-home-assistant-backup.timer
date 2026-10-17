@@ -1,0 +1,11 @@
+[Unit]
+Description=Stage the daily HA native backup before the existing encrypted backup
+
+[Timer]
+OnCalendar=*-*-* 01:40:00 America/New_York
+Persistent=true
+RandomizedDelaySec=0
+Unit=edsys-home-assistant-backup.service
+
+[Install]
+WantedBy=timers.target
