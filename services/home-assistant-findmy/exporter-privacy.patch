@@ -1,0 +1,47 @@
+diff --git a/src/main.rs b/src/main.rs
+index 83d283f..1135015 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -506,3 +506,2 @@ fn read_password() -> String {
+-        let mut pass = String::new();
+-        std::io::stdin().read_line(&mut pass).unwrap();
+-        pass.trim().to_string()
++        eprintln!("Secret input requires a private interactive terminal; piped input is refused.");
++        std::process::exit(2);
+@@ -685 +684,4 @@ fn disable_echo_read() -> String {
+-        libc::tcgetattr(fd, &mut termios);
++        if libc::tcgetattr(fd, &mut termios) != 0 {
++            eprintln!("Cannot read terminal settings; secret input refused.");
++            std::process::exit(2);
++        }
+@@ -688 +690,4 @@ fn disable_echo_read() -> String {
+-        libc::tcsetattr(fd, libc::TCSANOW, &termios);
++        if libc::tcsetattr(fd, libc::TCSANOW, &termios) != 0 {
++            eprintln!("Cannot disable terminal echo; secret input refused.");
++            std::process::exit(2);
++        }
+@@ -690,2 +695,6 @@ fn disable_echo_read() -> String {
+-        std::io::stdin().read_line(&mut pass).unwrap();
+-        libc::tcsetattr(fd, libc::TCSANOW, &old);
++        let read_result = std::io::stdin().read_line(&mut pass);
++        let restored = libc::tcsetattr(fd, libc::TCSANOW, &old) == 0;
++        if !restored || !matches!(read_result, Ok(n) if n > 0) {
++            eprintln!("Secret input ended or terminal restore failed.");
++            std::process::exit(2);
++        }
+@@ -854,3 +863 @@ async fn login_interactive(
+-                let mut code = String::new();
+-                std::io::stdin().read_line(&mut code).unwrap();
+-                let code = code.trim().to_string();
++                let code = read_password();
+@@ -1543,5 +1550,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+-        plist::to_file_xml(&plist_path, &accessory_to_plist(acc))?;
+-        std::fs::write(
+-            &json_path,
+-            serde_json::to_string_pretty(&accessory_to_json(acc))? + "\n",
+-        )?;
++        let mut plist_bytes = Vec::new();
++        plist::to_writer_xml(&mut plist_bytes, &accessory_to_plist(acc))?;
++        write_private_file(&plist_path, &plist_bytes)?;
++        let json_bytes = serde_json::to_string_pretty(&accessory_to_json(acc))? + "\n";
++        write_private_file(&json_path, json_bytes.as_bytes())?;

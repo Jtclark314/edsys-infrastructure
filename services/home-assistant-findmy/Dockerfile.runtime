@@ -1,0 +1,6 @@
+FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 libstdc++6 && rm -rf /var/lib/apt/lists/*
+COPY --chmod=0555 export-findmy /usr/local/bin/export-findmy
+ENV RUST_LOG=off
+WORKDIR /private
+ENTRYPOINT ["/usr/local/bin/export-findmy"]

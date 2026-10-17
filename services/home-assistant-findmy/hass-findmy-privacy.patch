@@ -1,0 +1,42 @@
+diff --git a/custom_components/findmy/config_flow.py b/custom_components/findmy/config_flow.py
+index 224f5a3..baed630 100644
+--- a/custom_components/findmy/config_flow.py
++++ b/custom_components/findmy/config_flow.py
+@@ -373 +373,5 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+-        _LOGGER.debug("%s Step: acc_2fa_submit - %s", self.__class__.__name__, info)
++        _LOGGER.debug(
++            "%s Step: acc_2fa_submit - %s",
++            self.__class__.__name__,
++            {**(info or {}), "code": "**REDACTED**"},
++        )
+@@ -408,0 +413,5 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
++        # Retain the authenticated session, but never persist the Apple password
++        # in Home Assistant's config entries or backups. Session expiry requests
++        # interactive re-authentication through the normal config flow.
++        account_data = self._account.to_json()
++        account_data["account"]["password"] = None
+@@ -411 +420 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+-            account_data=self._account.to_json(),
++            account_data=account_data,
+@@ -551 +560,5 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+-        _LOGGER.debug("%s Step: dev_static - %s", self.__class__.__name__, info)
++        _LOGGER.debug(
++            "%s Step: dev_static - %s",
++            self.__class__.__name__,
++            {**(info or {}), "private_key": "**REDACTED**"},
++        )
+diff --git a/custom_components/findmy/coordinator.py b/custom_components/findmy/coordinator.py
+index f5694b8..92d896f 100644
+--- a/custom_components/findmy/coordinator.py
++++ b/custom_components/findmy/coordinator.py
+@@ -235,0 +236,10 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
++        except ValueError as err:
++            success = False
++            # FindMy tries to sign in again after an expired session receives
++            # HTTP 401. We intentionally persist no Apple password, so request
++            # interactive re-authentication instead of leaving the entry stale.
++            if str(err) == "No username or password specified":
++                raise ConfigEntryAuthFailed(
++                    "Apple session expired; sign in again",
++                ) from err
++            raise

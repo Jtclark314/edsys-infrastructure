@@ -1,0 +1,14 @@
+{
+  "exporter_repository": "https://github.com/stek29/export-findmy",
+  "exporter_commit": "eb5a3a93116478e1c088dc90fa84e1bb30ee232e",
+  "rustpush_commit": "82dc6f8342176e4f9171b62354cbdd13eaa18b38",
+  "ha_repository": "https://github.com/malmeloo/hass-FindMy",
+  "ha_commit": "b2e678516bfa76e1663605cadba1a802ae0a2cdc",
+  "findmy_python": "0.10.2",
+  "compiler": "rustc 1.99.1",
+  "build_jobs": 4,
+  "build_memory_gib": 8,
+  "runtime_image": "sha256:6727a5460db694b4b88bf765e2e13abec4deb73230e1adf88d84a1dcd5182725",
+  "binary_sha256": "f52096a1a5ae9af6acf87832b05e107a81aef69ea1b14d97c8b0f1f65f98747d",
+  "anisette_image": "dadoum/anisette-v3-server@sha256:8577c27cb7592900947960799bf03c79a53bf857ed951e4c48ef6e06c6e0f488"
+}
