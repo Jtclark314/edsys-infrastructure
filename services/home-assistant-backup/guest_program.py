@@ -4,8 +4,10 @@ The controller sends this file to Python in hassio_supervisor through the existi
 QEMU guest-agent route. No provider credential or arbitrary path is accepted.
 """
 import base64
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 import hashlib
+import io
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -140,6 +142,36 @@ def describe(root, filename, with_hash=False):
         return result
 
 
+def verify_key(root, filename, expected, password):
+    if not isinstance(password, str) or not 0 < len(password) <= 4096:
+        raise BackupError('invalid_key_request')
+    with open_archive(root, filename) as stream:
+        unchanged(root, filename, stream, expected)
+        if not eligible(archive_metadata(stream)):
+            raise BackupError('ineligible_key_archive')
+        stream.seek(0)
+        matches, count = False, 0
+        try:
+            # Suppress library diagnostics as well as exception text: the only
+            # permitted response is an aggregate cryptographic verdict.
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                from securetar import SecureTarArchive
+                # Duplicate the same already-open inode so library close behavior
+                # cannot prevent the final source-fingerprint check.
+                with os.fdopen(os.dup(stream.fileno()), 'rb') as secure_stream:
+                    with SecureTarArchive(fileobj=secure_stream, password=password) as archive:
+                        entries = [entry for entry in archive.tar.getmembers()
+                                   if entry.name.endswith(('.tar.gz', '.tar'))]
+                        results = [archive.validate(entry) for entry in entries]
+                        count = len(entries)
+                        matches = count >= 4 and all(result is True for result in results)
+        except Exception:
+            # A bad key and an unavailable/failed validator both refuse proof.
+            matches, count = False, 0
+        unchanged(root, filename, stream, expected)
+        return {'key_matches': matches, 'validated_members': count}
+
+
 def operation(payload, root=ROOT):
     if not isinstance(payload, dict):
         raise BackupError('invalid_guest_request')
@@ -157,6 +189,8 @@ def operation(payload, root=ROOT):
         return items
     if action == 'describe' and set(payload) == {'action', 'filename'}:
         return describe(root, payload['filename'], with_hash=True)
+    if action == 'verify-key' and set(payload) == {'action', 'filename', 'fingerprint', 'password'}:
+        return verify_key(root, payload['filename'], payload['fingerprint'], payload['password'])
     if action == 'chunk' and set(payload) == {'action', 'filename', 'fingerprint', 'offset', 'length'}:
         offset, length = payload['offset'], payload['length']
         if (type(offset) is not int or type(length) is not int or offset < 0
@@ -179,8 +213,8 @@ def operation(payload, root=ROOT):
 
 if __name__ == '__main__':
     try:
-        request = sys.stdin.read(4097)
-        if len(request) > 4096:
+        request = sys.stdin.read(32769)
+        if len(request) > 32768:
             raise BackupError('oversized_guest_request')
         print(json.dumps(operation(json.loads(request))))
     except Exception:

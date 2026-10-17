@@ -58,7 +58,12 @@ Each source file is opened without following symlinks. Export checks the source
 device/inode/size/mtime/ctime before and after each bounded one-MiB chunk and
 validates each chunk's SHA-256 and exact offset/length. Before publication it
 rechecks the full source identity/hash, full local archive hash, outer metadata
-and the recovery-key copy. Truncated QGA output, changed files, malformed
+and the recovery-key copy. Every export and idempotent reuse also proves the
+current hub key matches the same stable native archive using the installed
+Supervisor `SecureTarArchive.validate` on all encrypted component members.
+The key travels only in protected SSH/QGA stdin, never in a command argument,
+diagnostic or status. A missing validator, bad key or changed archive refuses
+publication. Truncated QGA output, changed files, malformed
 metadata or incomplete transfers fail closed. No guest output, archive bytes or
 key values are printed. `--progress` emits aggregate byte counts only.
 
@@ -72,10 +77,9 @@ QGA failures. Serialize this export with other guest-agent operations.
 
 Outer tar validation rejects links, special members, duplicate names and path
 traversal. It never extracts archive members. It checks encrypted component
-presence and explicit database metadata; it does not claim to decrypt/restore
-the nested HA database or prove the native recovery key by application restore.
-The key's validity is established separately by native configuration/readback
-and a controlled restore exercise.
+presence and explicit database metadata. Cryptographic key/member validation
+does not restore the nested HA database or prove HA/MA application recovery;
+those still require a controlled isolated restore exercise.
 
 Completed files are flushed and verified, then the generation is atomically
 renamed into selected staging. No incomplete generation is selected by the

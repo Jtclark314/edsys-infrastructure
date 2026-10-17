@@ -152,7 +152,7 @@ class Transport:
             raise BackupError('guest_transport_failed') from None
 
     def __call__(self, payload):
-        if not isinstance(payload, dict) or payload.get('action') not in {'inventory', 'describe', 'chunk'}:
+        if not isinstance(payload, dict) or payload.get('action') not in {'inventory', 'describe', 'chunk', 'verify-key'}:
             raise BackupError('invalid_guest_request')
         args = ['qm', 'guest', 'exec', '300', '--pass-stdin', '1', '--timeout', '90',
                 '--', 'docker', 'exec', '-i', 'hassio_supervisor', 'python3', '-c', self.code]
@@ -267,6 +267,16 @@ def collect(transport, stage=STAGE, incoming=INCOMING, key_path=KEY, now=None,
             raise BackupError('guest_archive_changed')
         if not guest.SLUG.fullmatch(description['metadata']['slug']):
             raise BackupError('invalid_backup_id')
+        try:
+            password = key.decode('utf-8').rstrip('\r\n')
+        except UnicodeError:
+            raise BackupError('invalid_recovery_key') from None
+        key_proof = transport({'action': 'verify-key', 'filename': description['filename'],
+                               'fingerprint': description['fingerprint'], 'password': password})
+        if (not isinstance(key_proof, dict) or key_proof.get('key_matches') is not True
+                or type(key_proof.get('validated_members')) is not int
+                or key_proof['validated_members'] < 4):
+            raise BackupError('native_key_verification_failed')
         target = stage / description['metadata']['slug']
         reused = target.exists() or target.is_symlink()
         if reused:
@@ -314,6 +324,7 @@ def collect(transport, stage=STAGE, incoming=INCOMING, key_path=KEY, now=None,
             write_private(temporary / 'recovery-key', key)
             manifest = {'schema': 1, 'collected_at': now.isoformat(),
                         'metadata': description['metadata'], 'guest': description,
+                        'native_key_verification': key_proof,
                         'files': {'native-backup.tar': {'bytes': description['size'],
                                                        'sha256': description['sha256']},
                                   'recovery-key': {'bytes': len(key),
@@ -327,7 +338,8 @@ def collect(transport, stage=STAGE, incoming=INCOMING, key_path=KEY, now=None,
         result = {'status': 'success', 'checked_at': now.isoformat(), 'backup_id': target.name,
                   'backup_date': description['metadata']['date'], 'bytes': description['size'],
                   'reused': reused, 'native_protected': True, 'required_apps': 3,
-                  'database_included': True}
+                  'database_included': True, 'native_key_verified': True,
+                  'validated_encrypted_members': key_proof['validated_members']}
         atomic_json(stage / 'last-success.json', result)
         atomic_json(stage / 'status.json', result)
         return result

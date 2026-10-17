@@ -66,8 +66,28 @@ class FakeTransport:
         return self.modify(payload, value) if self.modify else value
 
 
+def securetar_mock(monkeypatch, expected='private-test-recovery-key', on_validate=None):
+    class FakeSecureTarArchive:
+        def __init__(self, *, fileobj, password):
+            self.tar = tarfile.open(fileobj=fileobj, mode='r:')
+            self.password = password
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.tar.close()
+
+        def validate(self, member):
+            if on_validate:
+                on_validate(member, self.password)
+            return self.password == expected
+    monkeypatch.setitem(sys.modules, 'securetar', SimpleNamespace(SecureTarArchive=FakeSecureTarArchive))
+
+
 @pytest.fixture
-def environment(tmp_path):
+def environment(tmp_path, monkeypatch):
+    securetar_mock(monkeypatch)
     tmp_path.chmod(0o700)
     source = tmp_path / 'guest'
     source.mkdir(mode=0o700)
@@ -449,3 +469,102 @@ def test_chunk_retry_does_not_restart_the_whole_export(environment):
     assert actions.count('describe') == 2
     assert actions.count('chunk') == 2
     assert clock.delays == [1]
+
+
+@pytest.mark.parametrize('correct', [True, False])
+def test_guest_checks_key_on_bound_file_without_output(environment, correct, monkeypatch, capsys):
+    seen = []
+    def validator(member, password):
+        seen.append(member.name)
+        print('private library diagnostic ' + password)
+        print('private stderr ' + password, file=sys.stderr)
+    securetar_mock(monkeypatch, on_validate=validator)
+    info = guest.describe(environment.source, FILENAME)
+    result = guest.operation({'action': 'verify-key', 'filename': FILENAME,
+                              'fingerprint': info['fingerprint'],
+                              'password': 'private-test-recovery-key' if correct else 'wrong-private-key'},
+                             environment.source)
+    assert result == {'key_matches': correct, 'validated_members': 4}
+    assert len(seen) == 4
+    assert capsys.readouterr() == ('', '')
+
+
+def test_guest_key_verification_refuses_source_change(environment):
+    info = guest.describe(environment.source, FILENAME)
+    with (environment.source / FILENAME).open('ab') as stream:
+        stream.write(b'x' * 512)
+    with pytest.raises(guest.BackupError, match='guest_archive_changed'):
+        guest.operation({'action': 'verify-key', 'filename': FILENAME,
+                         'fingerprint': info['fingerprint'], 'password': 'private-test-recovery-key'},
+                        environment.source)
+
+
+def test_guest_key_verification_rechecks_after_validation(environment, monkeypatch):
+    changed = False
+    def validator(member, password):
+        nonlocal changed
+        if not changed:
+            changed = True
+            with (environment.source / FILENAME).open('ab') as stream:
+                stream.write(b'x' * 512)
+    securetar_mock(monkeypatch, on_validate=validator)
+    info = guest.describe(environment.source, FILENAME)
+    with pytest.raises(guest.BackupError, match='guest_archive_changed'):
+        guest.operation({'action': 'verify-key', 'filename': FILENAME,
+                         'fingerprint': info['fingerprint'], 'password': 'private-test-recovery-key'},
+                        environment.source)
+
+
+def test_wrong_native_key_refuses_publication_and_sensitive_status(environment):
+    environment.key.write_bytes(b'wrong-private-key')
+    with pytest.raises(guest.BackupError, match='native_key_verification_failed'):
+        collector.collect(**environment.args)
+    assert not (environment.args['stage'] / 'ab270a93').exists()
+    assert not any(call['action'] == 'chunk' for call in environment.transport.calls)
+    status = (environment.args['stage'] / 'status.json').read_text()
+    assert 'wrong-private-key' not in status
+
+
+def test_key_drift_on_idempotent_reuse_is_reverified(environment):
+    collector.collect(**environment.args)
+    success = (environment.args['stage'] / 'last-success.json').read_bytes()
+    environment.transport.calls.clear()
+    environment.key.write_bytes(b'wrong-private-key')
+    with pytest.raises(guest.BackupError, match='native_key_verification_failed'):
+        collector.collect(**environment.args)
+    assert any(call['action'] == 'verify-key' for call in environment.transport.calls)
+    assert (environment.args['stage'] / 'last-success.json').read_bytes() == success
+    assert (environment.args['stage'] / 'ab270a93').is_dir()
+
+
+def test_pre_key_proof_generation_reused_only_after_fresh_key_proof(environment):
+    collector.collect(**environment.args)
+    path = environment.args['stage'] / 'ab270a93' / 'manifest.json'
+    manifest = json.loads(path.read_text())
+    manifest.pop('native_key_verification')
+    path.write_text(json.dumps(manifest))
+    before = path.read_bytes()
+    environment.transport.calls.clear()
+    result = collector.collect(**environment.args)
+    assert result['reused'] is True and result['native_key_verified'] is True
+    assert any(call['action'] == 'verify-key' for call in environment.transport.calls)
+    assert not any(call['action'] == 'chunk' for call in environment.transport.calls)
+    assert path.read_bytes() == before
+
+
+def test_key_never_enters_transport_command(environment):
+    clock, commands = FakeClock(), []
+    def runner(command, **kwargs):
+        commands.append(command)
+        payload = json.loads(kwargs['input'])
+        return response(guest.operation(payload, environment.source))
+    environment.args['transport'] = collector.Transport(runner, clock, clock.sleep)
+    collector.collect(**environment.args)
+    assert 'private-test-recovery-key' not in json.dumps(commands)
+
+
+def test_securetar_unavailable_refuses_key_proof(environment, monkeypatch):
+    monkeypatch.setitem(sys.modules, 'securetar', None)
+    with pytest.raises(guest.BackupError, match='native_key_verification_failed'):
+        collector.collect(**environment.args)
+    assert not (environment.args['stage'] / 'ab270a93').exists()
