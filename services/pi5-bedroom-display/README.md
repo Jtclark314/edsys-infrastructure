@@ -1,5 +1,16 @@
 # Pi5 Master Bedroom display pilot
 
+## Deployment checkpoint — October 16 evening
+
+Add-on 0.7.1 is installed with 602 exact file hashes, including 576 unchanged
+approved Phil frames. Only the add-on was disabled/re-enabled; Kodi's process,
+media identity/state and settings were preserved. The source fixes cover
+player-aware rejection and named ALSA continuing-progress guards; 52 offline
+Pi display checks pass. This is software/readback verification. No voice,
+playback or overlay test was triggered; the owner's show-end hold remains.
+HA 0.6.1 is staged separately and still requires a normal Core restart.
+
+
 Native Kodi 21.3/GBM on the existing Pi5, with dimensional Phil animations and
 bounded presentation cards above Kodi's GUI/video. Home Assistant remains
 household authority. The owner selected existing Nimo voice for initial control;
@@ -318,7 +329,7 @@ Nimo's three-script update was installed in the existing Nimo Voice app. All thr
 installed and three recovery hashes match; executable/settings/LG keyboard
 script, browser profile, running process and Alt+V registration were retained.
 Jeremy is home and requested that live voice/Phil/audio/playback tests wait until
-his show ends. The scripts load on the next Alt+V; native frontend binding,
+his show ends. Fresh frontend initialization is required; native frontend binding,
 audibility and actual movie pause/resume remain pending. No live voice test,
 HA/Pi restart, TV power/input or playback command was issued during installation.
 

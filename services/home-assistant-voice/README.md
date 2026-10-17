@@ -1,5 +1,15 @@
 # Home Assistant conversational voice
 
+## Deployment checkpoint — October 16 evening
+
+Priority routing source is version 0.6.1. Its 15 files are staged in
+`/config/edsys_voice_knowledge/staged/priority-0.6.1/component`; active 0.6.0
+was retained. Activate with a normal Core restart after the owner's show-end
+hold is released. Config-entry reload retains cached modules and is insufficient.
+The companion Pi 0.7.1 is installed. All 25 HA routing/offline checks pass;
+physical reply/interrupt/resume acceptance remains held.
+
+
 ## Player-aware reply routing candidate: 2026-10-16
 
 This source change is an offline-qualified candidate; deployment and live voice/
@@ -25,7 +35,7 @@ the companion audio fix; deploy that helper and its package allowlists together.
 For recovery, compare current owned hashes and restore only these routing/
 protocol/reply files from the prior component/add-on checkpoint, retaining native
 profiles, provider state, current media/progress and later user edits. Validate
-Core before an authorized component reload/restart. Offline tests use only local
+Core before the authorized normal Core restart. Offline tests use only local
 Core/transport stubs and fake player backends; installed-Core/frontend callbacks,
 human hearing and live interruption cases remain held.
 
@@ -37,7 +47,7 @@ Nimo's three-script update was installed in the existing Nimo Voice app. All thr
 installed and three recovery hashes match; executable/settings/LG keyboard
 script, browser profile, running process and Alt+V registration were retained.
 Jeremy is home and requested that live voice/Phil/audio/playback tests wait until
-his show ends. The scripts load on the next Alt+V; native frontend binding,
+his show ends. Fresh frontend initialization is required; native frontend binding,
 audibility and actual movie pause/resume remain pending. No live voice test,
 HA/Pi restart, TV power/input or playback command was issued during installation.
 

@@ -1,5 +1,15 @@
 # Nimo Home Assistant voice
 
+## Deployment checkpoint — October 16 evening
+
+The corrected three-script priority package is installed on disk with exact
+hash readback; the 0.3.0 executable, profile, Alt+V binding and existing process
+were retained. All 66 targeted offline checks pass. An already-open WebView
+can retain its old decorator, so installed scripts do not establish active
+frontend behavior. Fresh initialization and spoken acceptance remain on the
+owner's show-end hold. No desktop helper watchdog or Scheduled Task was changed.
+
+
 Status, 2026-10-14: deployed native Windows client **0.3.0**. The owner pressed **Alt+V**,
 asked “What time is it?” and confirmed hearing Home Assistant's spoken reply.
 This acceptance used Ethernet. Wi-Fi handover, sleep and Windows logon recovery
@@ -154,7 +164,7 @@ Nimo's three-script update was installed in the existing Nimo Voice app. All thr
 installed and three recovery hashes match; executable/settings/LG keyboard
 script, browser profile, running process and Alt+V registration were retained.
 Jeremy is home and requested that live voice/Phil/audio/playback tests wait until
-his show ends. The scripts load on the next Alt+V; native frontend binding,
+his show ends. Fresh frontend initialization is required; native frontend binding,
 audibility and actual movie pause/resume remain pending. No live voice test,
 HA/Pi restart, TV power/input or playback command was issued during installation.
 

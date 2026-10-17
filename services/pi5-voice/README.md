@@ -1,5 +1,17 @@
 # Pi5 voice endpoint
 
+## Deployment checkpoint — October 16 evening
+
+The reviewed wrapper and user unit are installed with exact hash readback;
+only user-manager daemon-reload was performed. Voice remains inactive and
+uncommissioned with no USB capture hardware. Fourteen offline gate checks pass.
+Detected device loss exits 78 and requires operator revalidation/manual start;
+no automatic replug activation is installed. Five-second polling can miss a
+shorter unplug/replug. Live hardware, microphone and sound tests remain held.
+The current shared Nimo-first HA pipeline uses Andrew; the older prepared
+endpoint description below is historical where it names a prior voice.
+
+
 Status: software prepared and reboot checked; microphone/speaker commissioning,
 room acceptance and a 24-hour hands-free voice soak are pending. The later
 owner-authorized Nimo-first Kodi/display pilot proceeds independently of this
