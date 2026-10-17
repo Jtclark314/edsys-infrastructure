@@ -18,7 +18,7 @@ from homeassistant.components.assist_pipeline.websocket_api import websocket_run
 from . import DOMAIN
 from .bedroom_screen import ERRORS
 from .pilot_policy import PilotRefusal
-from .screen_protocol import REPLY_CHUNK,REPLY_INFO_LABEL,MAX_REPLY
+from .screen_protocol import REPLY_CHUNK,REPLY_INFO_LABEL,MAX_REPLY,reply_player_id,reply_video_playing,reply_rejected_before_handoff
 
 
 def native_ready():
@@ -42,6 +42,13 @@ def pcm_wave(data):
 class PiReplies:
     def __init__(self,controller):self.controller=controller
 
+    async def preflight(self):
+        """Read only player type/speed before selecting a Pi speech lease."""
+        screen=self.controller.screen
+        player=reply_player_id(await screen.rpc('Player.GetActivePlayers'))
+        if player is not None:
+            reply_video_playing(await screen.rpc('Player.GetProperties',playerid=player,properties=['speed']))
+
     def check(self,lease):
         if self.controller.active is not lease or lease.get('interrupted'):raise PilotRefusal('Voice session changed.')
 
@@ -64,7 +71,12 @@ class PiReplies:
         async with asyncio.timeout(4):
             while True:
                 self.check(lease);status=await self.read(lease)
+                self.check(lease)
                 if status and status.get('sequence')==lease['reply_sequence']:
+                    if status.get('state')=='rejected':
+                        if command=='commit' and reply_rejected_before_handoff(status,lease['id'],lease['audio_ref'],lease['reply_sequence'],lease.get('reply_sha256')):
+                            return status
+                        raise PilotRefusal('Pi reply rejection is not proof of an unused sink.')
                     if status.get('state') in {'failed','cancelled','interrupted'}:raise PilotRefusal('Pi reply rejected.')
                     if command=='prepare' and (status.get('state')!='receiving' or status.get('received')!=0):raise PilotRefusal('Pi preparation uncertain.')
                     if command=='chunk' and status.get('received')!=data['offset']+len(base64.b64decode(data['data'])):raise PilotRefusal('Pi chunk uncertain.')
@@ -96,11 +108,21 @@ class PiReplies:
                     if size>4_000_000:raise ValueError('Reply stream too large')
                     parts.append(part)
             wav=await c.screen.hass.async_add_executor_job(pcm_wave,b''.join(parts));parts.clear()
-            await self.send(lease,'prepare',size=len(wav),sha256=hashlib.sha256(wav).hexdigest())
+            lease['reply_sha256']=hashlib.sha256(wav).hexdigest()
+            await self.send(lease,'prepare',size=len(wav),sha256=lease['reply_sha256'])
             for offset in range(0,len(wav),REPLY_CHUNK):
                 await self.send(lease,'chunk',offset=offset,data=base64.b64encode(wav[offset:offset+REPLY_CHUNK]).decode())
             lease['commit_attempted']=True
             status=await self.send(lease,'commit')
+            if reply_rejected_before_handoff(status,lease['id'],lease['audio_ref'],lease.get('reply_sequence'),lease['reply_sha256']):
+                # This is the same already-generated reply, never a second
+                # pipeline/household command. No other post-commit failure can
+                # grant fallback, and a cancelled/replaced lease cannot do so.
+                async with c.lock:
+                    self.check(lease)
+                    lease.update(audio_state='failed',fallback_allowed=True)
+                    await c.finish()
+                return
             async with asyncio.timeout(70):
                 while True:
                     self.check(lease)

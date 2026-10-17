@@ -13,7 +13,7 @@ from unittest.mock import Mock,patch
 from uuid import uuid4
 import wave
 
-ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+ROOT=Path(__file__).resolve().parents[1];sys.path[:0]=[str(ROOT),str(ROOT/'kodi')]
 from model import PlaybackSnapshot
 from manual_protocol import validate,seal,unseal,REPLY_CHUNK
 
@@ -119,10 +119,52 @@ class ReplyTests(unittest.TestCase):
             return {'speed':0,'time':{'hours':0,'minutes':17,'seconds':5,'milliseconds':688}}
         b.rpc=rpc;self.assertFalse(b.snapshot(0,0).playing)
         players[0]['playertype']='external'
-        with self.assertRaises(RuntimeError):b.snapshot(0,0)
+        with self.assertRaises(ValueError):b.snapshot(0,0)
+
+    def test_missing_item_or_malformed_position_cannot_lend_the_video_sink(self):
+        b=module.KodiBackend()
+        for item,stamp in [(None,dict(hours=0,minutes=0,seconds=0,milliseconds=0)),
+                           ('fixture',dict(hours=0,minutes=0,seconds=0,milliseconds=True)),
+                           ('fixture',dict(hours=0,minutes=60,seconds=0,milliseconds=0)),('fixture',None)]:
+            def rpc(method,**params):
+                if method=='Player.GetActivePlayers':return [dict(playerid=1,type='video',playertype='internal')]
+                if method=='Player.GetProperties':return dict(speed=1,time=stamp)
+                if method=='Player.GetItem':return {'item':{'file':item}}
+                raise AssertionError('No write allowed')
+            b.rpc=rpc
+            with self.subTest(item=item,stamp=stamp),self.assertRaises(ValueError):b.snapshot(0,0)
 
     def test_failed_helper_restores_engine_and_never_resumes(self):
         self.start();self.reply.events.put_nowait((self.reply.player_token,{'event':'finished','ok':False}));self.reply.tick(True)
         self.assertEqual(self.reply.status['state'],'failed');self.assertFalse(self.reply.suspended);self.assertNotIn('resume',self.backend.calls)
+
+    def test_audio_race_after_preflight_rejects_exact_commit_without_handoff(self):
+        # HA may have observed an eligible idle/video state before this upload.
+        self.prepare()
+        actual=module.KodiBackend();calls=[]
+        def rpc(method,**params):
+            calls.append(method)
+            return [{'playerid':0,'type':'audio','playertype':'internal'}]
+        actual.rpc=rpc;self.backend.snapshot=actual.snapshot
+        message=self.send('commit')
+        self.assertEqual(calls,['Player.GetActivePlayers']);self.assertEqual(self.backend.calls,[])
+        from manual_protocol import reply_rejected_before_handoff
+        self.assertTrue(reply_rejected_before_handoff(self.reply.status,self.key,self.ref,self.seq,self.reply.digest))
+        self.assertFalse(list(Path(self.tmp.name).glob('reply-*.wav')))
+        self.reply.receive(message,self.key)
+        self.assertEqual(calls,['Player.GetActivePlayers']);self.assertEqual(self.backend.calls,[])
+
+    def test_pause_or_sink_failure_after_possible_handoff_never_proves_rejection(self):
+        from manual_protocol import reply_rejected_before_handoff
+        for stage in ['pause','suspend']:
+            self.key=str(uuid4());self.ref=str(uuid4());self.seq=-1
+            self.backend=Backend(playing=stage=='pause')
+            self.reply=module.ReplyAudio(self.backend,self.tmp.name);self.prepare()
+            def fail():raise RuntimeError('uncertain native effect')
+            setattr(self.backend,stage,fail)
+            with self.assertRaises(RuntimeError):self.send('commit')
+            self.reply.abort('failed')
+            self.assertTrue(self.reply.status['handoff_attempted'])
+            self.assertFalse(reply_rejected_before_handoff(self.reply.status,self.key,self.ref,self.seq,self.reply.digest))
 
 if __name__=='__main__':unittest.main()

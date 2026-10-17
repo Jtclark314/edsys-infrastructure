@@ -20,6 +20,7 @@ class NativePhilChecks(unittest.IsolatedAsyncioTestCase):
         await NativeScreenChecks.asyncSetUp(self)
         self.voice_status={'version':1,'visible':False,'state':'idle'};self.messages=[]
         async def rpc(method,**data):
+            if method=='Player.GetActivePlayers':return []
             if method=='XBMC.GetInfoLabels':return {VOICE_INFO_LABEL:json.dumps(self.voice_status)}
             m=unseal(data['data'],self.screen.key);self.messages.append(m)
             self.voice_status={'version':1,'request_id':m['request_id'],'sequence':m['sequence'],

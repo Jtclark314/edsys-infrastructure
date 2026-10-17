@@ -14,8 +14,9 @@ import wave
 
 import xbmc
 import xbmcgui
-from manual_protocol import REPLY_PROPERTY,validate
+from manual_protocol import REPLY_PROPERTY,validate,reply_player_id,reply_video_playing
 from model import PlaybackSnapshot,PlaybackLease
+from alsa_status import read_playback_status
 
 ROOT=Path(__file__).resolve().parent
 RUNTIME=Path('/run/edsys-bedroom-display')
@@ -29,13 +30,16 @@ class KodiBackend:
 
     def snapshot(self,revision,epoch):
         players=self.rpc('Player.GetActivePlayers')
-        if not players:return None
-        if len(players)!=1 or players[0].get('playerid')!=1 or players[0].get('type')!='video' or players[0].get('playertype','internal')!='internal':raise RuntimeError('Unsupported foreground player')
+        if reply_player_id(players) is None:return None
         p=self.rpc('Player.GetProperties',playerid=1,properties=['speed','time'])
-        if p['speed'] not in (0,1):raise RuntimeError('Unsupported playback speed')
+        playing=reply_video_playing(p)
         item=self.rpc('Player.GetItem',playerid=1,properties=['file'])['item']['file']
-        t=p['time'];position=t['hours']*3600+t['minutes']*60+t['seconds']+t['milliseconds']/1000
-        return PlaybackSnapshot('pi-video',str(epoch),hashlib.sha256(item.encode()).hexdigest(),p['speed']==1,position,revision)
+        if not isinstance(item,str) or not item:raise ValueError('Unknown video identity')
+        t=p['time']
+        if not isinstance(t,dict) or any(type(t.get(k)) is not int or not 0<=t[k]<=limit for k,limit in [('hours',999999),('minutes',59),('seconds',59),('milliseconds',999)]):
+            raise ValueError('Unknown video position')
+        position=t['hours']*3600+t['minutes']*60+t['seconds']+t['milliseconds']/1000
+        return PlaybackSnapshot('pi-video',str(epoch),hashlib.sha256(item.encode()).hexdigest(),playing,position,revision)
 
     def pause(self):
         if self.rpc('Player.PlayPause',playerid=1,play=False).get('speed')!=0:raise RuntimeError('Pause uncertain')
@@ -58,7 +62,7 @@ class KodiBackend:
         # device to be released; never race aplay against Kodi's closing sink.
         until=time.monotonic()+2
         while time.monotonic()<until:
-            if Path('/proc/asound/card0/pcm0p/sub0/status').read_text().strip()=='closed':return
+            if read_playback_status().get('state')=='closed':return
             time.sleep(.025)
         raise RuntimeError('HDMI sink did not release')
 
@@ -134,7 +138,8 @@ class ReplyAudio:
             self.path=self.runtime/('reply-'+self.audio_ref+'.wav')
             fd=os.open(self.path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600);os.close(fd)
             self.status={'version':1,'request_id':self.current,'audio_ref':self.audio_ref,'sequence':0,
-                         'state':'receiving','received':0,'started':False,'paused_by_us':False}
+                         'state':'receiving','received':0,'sha256':self.digest,'started':False,
+                         'paused_by_us':False,'handoff_attempted':False}
         else:
             if (m['request_id'],m['audio_ref'],m['sequence'])!=(self.current,getattr(self,'audio_ref',None),getattr(self,'sequence',-1)+1):return
             self.sequence=m['sequence'];self.status['sequence']=self.sequence
@@ -156,9 +161,17 @@ class ReplyAudio:
                     if __import__('sys').byteorder!='little':samples.byteswap()
                     with wave.open(str(self.path),'wb') as w:
                         w.setnchannels(1);w.setsampwidth(2);w.setframerate(24000);w.writeframes(samples.tobytes())
-                before=self.backend.snapshot(self.revision,self.epoch)
+                try:before=self.backend.snapshot(self.revision,self.epoch)
+                except (OSError,ValueError,RuntimeError,KeyError,TypeError):
+                    # A foreground player can change after HA's preflight. This
+                    # exact rejection is issued only here, before even an
+                    # attempted pause/suspend/launch, and cannot follow a retry.
+                    self.cleanup_file()
+                    self.status.update(state='rejected',reason='player_state_unsupported')
+                    self.publish();return
                 self.lease=PlaybackLease(before) if before else None
                 self.status['state']='pause_wait';self.deadline=time.monotonic()+2
+                self.status['handoff_attempted']=True
                 if before and before.playing:
                     self.pending_pause=True;self.backend.pause()
                 else:self.start()
@@ -196,7 +209,7 @@ class ReplyAudio:
     def tick(self,valid):
         if not self.current:return
         try:
-            if not valid and self.status['state'] not in {'idle','released','cancelled','failed','interrupted'}:self.abort();return
+            if not valid and self.status['state'] not in {'idle','released','cancelled','failed','interrupted','rejected'}:self.abort();return
             if self.status['state']=='pause_wait':
                 if not self.pending_pause and self.lease and self.lease.paused_by_us:self.start()
                 elif time.monotonic()>=self.deadline:self.abort('failed')

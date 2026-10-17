@@ -55,4 +55,28 @@ class ManualProtocolTests(unittest.TestCase):
             c={**m,**change}
             with self.subTest(change=change),self.assertRaises(ValueError):p.validate(c,1000)
 
+    def test_reply_route_accepts_only_idle_or_explicit_internal_video_normal_speed(self):
+        video={'playerid':1,'type':'video','playertype':'internal'}
+        self.assertIsNone(p.reply_player_id([]));self.assertEqual(p.reply_player_id([video]),1)
+        for players in [None,{},[video,video],[None],[{**video,'playerid':True}],
+                        [{**video,'playerid':0,'type':'audio'}],[{**video,'playertype':'external'}],
+                        [{'playerid':1,'type':'video'}]]:
+            with self.subTest(players=players),self.assertRaises(ValueError):p.reply_player_id(players)
+        for speed in [0,1]:self.assertEqual(p.reply_video_playing({'speed':speed}),speed==1)
+        for properties in [None,{},dict(speed=True),dict(speed=2),dict(speed=1.0)]:
+            with self.subTest(properties=properties),self.assertRaises(ValueError):p.reply_video_playing(properties)
+
+    def test_only_exact_unused_commit_rejection_is_fallback_proof(self):
+        key,ref=str(uuid4()),str(uuid4());digest='a'*64
+        status=dict(version=1,request_id=key,audio_ref=ref,sequence=4,sha256=digest,
+                    state='rejected',reason='player_state_unsupported',started=False,
+                    paused_by_us=False,handoff_attempted=False)
+        self.assertTrue(p.reply_rejected_before_handoff(status,key,ref,4,digest))
+        for change in [dict(version=True),dict(request_id=str(uuid4())),dict(audio_ref=str(uuid4())),dict(sequence=3),
+                       dict(sequence=True),dict(sha256='b'*64),dict(state='failed'),dict(reason='timeout'),
+                       dict(started=True),dict(started=0),dict(paused_by_us=True),dict(handoff_attempted=True),
+                       dict(handoff_attempted=None)]:
+            with self.subTest(change=change):self.assertFalse(p.reply_rejected_before_handoff({**status,**change},key,ref,4,digest))
+        self.assertFalse(p.reply_rejected_before_handoff(status,key,ref,4,None))
+
 if __name__=='__main__':unittest.main()

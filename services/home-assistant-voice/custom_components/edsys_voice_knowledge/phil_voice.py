@@ -73,16 +73,24 @@ class PhilVoice:
         async with self.lock:
             if pipeline!=self.pipeline:return {'active':False}
             from .phil_reply import native_ready
-            if self.output=='pi' and not native_ready():return {'active':False}
             context=Context(user_id=user_id)
             try:
                 await self.screen.authorize(context)
                 if self.active:await self.finish()
+                output=self.output
+                if output=='pi':
+                    if not native_ready():output='nimo'
+                    else:
+                        try:await self.replies.preflight()
+                        except ERRORS:output='nimo'
+                    # Playback can change during those reads, as can the TV or
+                    # caller's permission. A Nimo lease still needs this gate.
+                    await self.screen.authorize(context)
                 lease={'id':str(uuid4()),'audio_ref':str(uuid4()),'user':user_id,'context':context,
                        'sequence':-1,'wire_sequence':-1,'state':'listening','audio':False,'started':False,
-                       'created':time.monotonic(),'seen':time.monotonic(),'output':self.output}
+                       'created':time.monotonic(),'seen':time.monotonic(),'output':output}
                 await self.emit(lease,'listening');self.active=lease
-                return {'active':True,'session_id':lease['id'],'audio_ref':lease['audio_ref'],'output':self.output}
+                return {'active':True,'session_id':lease['id'],'audio_ref':lease['audio_ref'],'output':lease['output']}
             except ERRORS:
                 return {'active':False}
 

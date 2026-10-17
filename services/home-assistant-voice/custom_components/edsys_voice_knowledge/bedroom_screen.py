@@ -67,7 +67,7 @@ class BedroomScreen:
         return client
 
     async def rpc(self,method,**params):
-        if method not in {'JSONRPC.NotifyAll','XBMC.GetInfoLabels'}:raise ValueError('Unsupported display transport method')
+        if method not in {'JSONRPC.NotifyAll','XBMC.GetInfoLabels','Player.GetActivePlayers','Player.GetProperties'}:raise ValueError('Unsupported display transport method')
         async with asyncio.timeout(5):return await self.client().call_method(method,**params)
 
     async def read(self):

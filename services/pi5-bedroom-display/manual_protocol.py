@@ -33,6 +33,36 @@ MAX_REPLY = 2_880_044
 REPLY_CHUNK = 32_768
 
 
+def reply_player_id(players):
+    """Only idle or one explicitly internal video player can lend the sink."""
+    if not isinstance(players,list):raise ValueError('Unknown foreground player')
+    if not players:return None
+    if len(players)!=1 or not isinstance(players[0],dict):raise ValueError('Unsupported foreground player')
+    player=players[0]
+    if type(player.get('playerid')) is not int or player['playerid']!=1 or player.get('type')!='video' or player.get('playertype')!='internal':
+        raise ValueError('Unsupported foreground player')
+    return 1
+
+
+def reply_video_playing(properties):
+    """Unknown speeds fail closed on both the HA preflight and Pi commit."""
+    speed=properties.get('speed') if isinstance(properties,dict) else None
+    if type(speed) is not int or speed not in (0,1):raise ValueError('Unsupported playback speed')
+    return speed==1
+
+
+def reply_rejected_before_handoff(status,request_id,audio_ref,sequence,digest):
+    """An authenticated, exact commit rejection is proof; a timeout is not."""
+    return (isinstance(status,dict) and type(status.get('version')) is int and status['version']==1
+            and status.get('request_id')==request_id and status.get('audio_ref')==audio_ref
+            and type(sequence) is int and type(status.get('sequence')) is int and status['sequence']==sequence
+            and isinstance(digest,str) and re.fullmatch('[a-f0-9]{64}',digest) is not None
+            and status.get('sha256')==digest and status.get('state')=='rejected'
+            and status.get('reason')=='player_state_unsupported'
+            and status.get('started') is False and status.get('paused_by_us') is False
+            and status.get('handoff_attempted') is False)
+
+
 def seal(message,key):
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     raw=json.dumps(message,separators=(',',':'),ensure_ascii=True).encode()

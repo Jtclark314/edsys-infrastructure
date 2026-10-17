@@ -1,5 +1,34 @@
 # Home Assistant conversational voice
 
+## Player-aware reply routing candidate: 2026-10-16
+
+This source change is an offline-qualified candidate; deployment and live voice/
+playback acceptance are separate. Before selecting Pi reply audio, HA reads only
+the authenticated Kodi foreground player type and speed. Idle or one explicitly
+internal video player at normal/paused speed can use Pi audio. Music, audiobooks,
+external/multiple players or unknown metadata retain ordinary Nimo speech, with
+Phil animation on the Pi when the existing TV/input/user/exposure gates permit.
+No title, file or media URL is fetched for this routing decision. A changed TV,
+permission or unavailable display degrades to ordinary Nimo without a Pi lease.
+
+The Pi revalidates its current player at the speech commit, before any pause,
+sink suspension or player launch attempt. It can explicitly reject that exact
+commit with request ID, audio reference, sequence and prepared WAV digest plus
+false started/paused/handoff flags. Only this authenticated, still-owned proof
+permits one Nimo playback of the same generated reply. A missing/malformed/lost
+acknowledgement, changed turn or any possible handoff keeps fallback disabled.
+The pipeline and household command are never run again. This is conservative
+Nimo routing during music/books; MA-aware interruption/return is not added.
+
+The Pi sink-release check uses the shared named-card ALSA status helper from
+the companion audio fix; deploy that helper and its package allowlists together.
+For recovery, compare current owned hashes and restore only these routing/
+protocol/reply files from the prior component/add-on checkpoint, retaining native
+profiles, provider state, current media/progress and later user edits. Validate
+Core before an authorized component reload/restart. Offline tests use only local
+Core/transport stubs and fake player backends; installed-Core/frontend callbacks,
+human hearing and live interruption cases remain held.
+
 ## LG reply audio and guarded Plex return: 2026-10-15
 
 Jeremy selected **LG replies: pause Plex during speech, then resume safely**.
