@@ -8,13 +8,14 @@
   "compiler": "rustc 1.99.1",
   "build_jobs": 4,
   "build_memory_gib": 8,
-  "runtime_image": "sha256:9d9bfbd255324eee1b7f9268fce4a4ff469019f4ce208d995e3947980c6e2147",
-  "binary_sha256": "85b9535145ec86d2886030f3e83e8444dbcd4cad9b23ab307e5ed62e15adaabd",
+  "runtime_image": "sha256:fdd617d6b391591b208a607a5b12a8b3f19c57c4dc28eb739960d7bb87b528af",
+  "binary_sha256": "e6b9546e5a4b0297e89ebb3fa62892ba7a1b3453d15e8e2f364197ecba6f14db",
   "anisette_image": "dadoum/anisette-v3-server@sha256:8577c27cb7592900947960799bf03c79a53bf857ed951e4c48ef6e06c6e0f488",
   "omnisette_transport_patch_sha256": "ed1407f3c019efbc254f40c187675bfd4190f2cd8cc9d22d12d11c3deac04dc3",
-  "exporter_offline_tests": 20,
+  "exporter_offline_tests": 23,
   "transport_offline_tests": 4,
-  "exporter_linux_identity_patch_sha256": "fddc3314706e94bfdb16f5d73d4eae44d2b759a57d55e26bfd6667693f3772bb",
-  "auth_offline_tests": 22,
-  "icloud_auth_response_patch_sha256": "6c5ec610451ebd02b82368ac19c34003ecde90ca3e8a0f6364f7ffa3d390d560"
+  "exporter_linux_identity_patch_sha256": "e746e3fbac95c0f06acd2cd24205e9c518b1ebbc60c34626fca38e0e39fcac17",
+  "auth_offline_tests": 25,
+  "icloud_auth_response_patch_sha256": "7cf06e7ff918c21246c6dde1f12035b5f9c86dcf7cba9d468bac03b79b0666b0",
+  "exporter_privacy_patch_sha256": "22a6a3686ad8fd14639f98e7d1114d4e62690ccf0b6fce1be61f031b2d6013f9"
 }

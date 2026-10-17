@@ -1,40 +1,55 @@
-diff --git a/src/main.rs b/src/main.rs
-index 83d283f..1135015 100644
 --- a/src/main.rs
 +++ b/src/main.rs
-@@ -506,3 +506,2 @@ fn read_password() -> String {
+@@ -506,3 +506,2 @@
 -        let mut pass = String::new();
 -        std::io::stdin().read_line(&mut pass).unwrap();
 -        pass.trim().to_string()
 +        eprintln!("Secret input requires a private interactive terminal; piped input is refused.");
 +        std::process::exit(2);
-@@ -685 +684,4 @@ fn disable_echo_read() -> String {
+@@ -678,0 +678,11 @@
++fn remove_terminal_line_ending(mut input: String) -> String {
++    // Preserve the exact secret, including significant Unicode whitespace.
++    if input.ends_with('\n') {
++        input.pop();
++        if input.ends_with('\r') {
++            input.pop();
++        }
++    }
++    input
++}
++
+@@ -685 +695,4 @@
 -        libc::tcgetattr(fd, &mut termios);
 +        if libc::tcgetattr(fd, &mut termios) != 0 {
 +            eprintln!("Cannot read terminal settings; secret input refused.");
 +            std::process::exit(2);
 +        }
-@@ -688 +690,4 @@ fn disable_echo_read() -> String {
+@@ -688 +701,4 @@
 -        libc::tcsetattr(fd, libc::TCSANOW, &termios);
 +        if libc::tcsetattr(fd, libc::TCSANOW, &termios) != 0 {
 +            eprintln!("Cannot disable terminal echo; secret input refused.");
 +            std::process::exit(2);
 +        }
-@@ -690,2 +695,6 @@ fn disable_echo_read() -> String {
+@@ -690,3 +706,7 @@
 -        std::io::stdin().read_line(&mut pass).unwrap();
 -        libc::tcsetattr(fd, libc::TCSANOW, &old);
+-        pass.trim().to_string()
 +        let read_result = std::io::stdin().read_line(&mut pass);
 +        let restored = libc::tcsetattr(fd, libc::TCSANOW, &old) == 0;
 +        if !restored || !matches!(read_result, Ok(n) if n > 0) {
 +            eprintln!("Secret input ended or terminal restore failed.");
 +            std::process::exit(2);
 +        }
-@@ -854,3 +863 @@ async fn login_interactive(
++        remove_terminal_line_ending(pass)
+@@ -700 +720 @@
+-    pass.trim().to_string()
++    remove_terminal_line_ending(pass)
+@@ -854,3 +874 @@
 -                let mut code = String::new();
 -                std::io::stdin().read_line(&mut code).unwrap();
 -                let code = code.trim().to_string();
 +                let code = read_password();
-@@ -1543,5 +1550,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+@@ -1543,5 +1561,5 @@
 -        plist::to_file_xml(&plist_path, &accessory_to_plist(acc))?;
 -        std::fs::write(
 -            &json_path,
@@ -45,3 +60,26 @@ index 83d283f..1135015 100644
 +        write_private_file(&plist_path, &plist_bytes)?;
 +        let json_bytes = serde_json::to_string_pretty(&accessory_to_json(acc))? + "\n";
 +        write_private_file(&json_path, json_bytes.as_bytes())?;
+@@ -1570,0 +1589,22 @@
++    #[test]
++    fn secret_input_preserves_significant_whitespace() {
++        for secret in ["  padded  ", "\ttab\t", "\u{a0}unicode\u{2003}", "inside space"] {
++            assert_eq!(super::remove_terminal_line_ending(format!("{secret}\n")), secret);
++            assert_eq!(super::remove_terminal_line_ending(secret.to_owned()), secret);
++        }
++    }
++
++    #[test]
++    fn secret_input_removes_only_one_terminal_line_ending() {
++        for (input, expected) in [("secret\n", "secret"), ("secret\r\n", "secret"),
++            ("\n", ""), ("\r\n", ""), ("secret\r", "secret\r"), ("secret\n\n", "secret\n")] {
++            assert_eq!(super::remove_terminal_line_ending(input.to_owned()), expected);
++        }
++    }
++
++    use super::{
++        accessory_basename, accessory_to_json, accessory_to_plist, remove_auth_cache,
++        sanitize_filename_component, serial_from_identifier, DeviceProfile,
++    };
++    use std::fs;
++

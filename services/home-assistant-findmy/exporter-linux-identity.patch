@@ -41,7 +41,24 @@
 +    }
 +}
 +
-@@ -196,0 +234,8 @@
+@@ -62,0 +100,8 @@
++        Self::load_with_identity_policy(path, true)
++    }
++
++    fn load_existing(path: &Path) -> Result<LoadedDeviceProfile, Box<dyn std::error::Error>> {
++        Self::load_with_identity_policy(path, false)
++    }
++
++    fn load_with_identity_policy(path: &Path, allow_generation: bool) -> Result<LoadedDeviceProfile, Box<dyn std::error::Error>> {
+@@ -87,0 +133,3 @@
++            if !allow_generation {
++                return Err("Initial sign-in check requires an existing complete device identity".into());
++            }
+@@ -98,0 +147,3 @@
++            if !allow_generation {
++                return Err("Initial sign-in check requires an existing complete device identity".into());
++            }
+@@ -196,0 +248,8 @@
 +    }
 +
 +    fn get_adi_mme_info(&self, for_item: &str, _require_mac: bool) -> String {
@@ -50,29 +67,51 @@
 +        } else {
 +            self.get_mme_clientinfo(for_item)
 +        }
-@@ -726 +771 @@
+@@ -737 +796 @@
 -    account: &AppleAccount<RemoteAnisetteProviderV3>,
 +    account: &AppleAccount<LinuxAnisetteProvider>,
-@@ -820,2 +865,2 @@
+@@ -831,2 +890,2 @@
 -    anisette_client: ArcAnisetteClient<RemoteAnisetteProviderV3>,
 -) -> Result<AppleAccount<RemoteAnisetteProviderV3>, icloud_auth::Error> {
 +    anisette_client: ArcAnisetteClient<LinuxAnisetteProvider>,
 +) -> Result<AppleAccount<LinuxAnisetteProvider>, icloud_auth::Error> {
-@@ -871 +916 @@
+@@ -882 +941 @@
 -    keychain: &KeychainClient<RemoteAnisetteProviderV3>,
 +    keychain: &KeychainClient<LinuxAnisetteProvider>,
-@@ -985,0 +1031 @@
+@@ -996,0 +1056,2 @@
 +    let mut check_anisette = false;
-@@ -1011,0 +1058,3 @@
++    let mut check_login_init = false;
+@@ -1022,0 +1084,6 @@
 +            }
 +            "--check-anisette" => {
 +                check_anisette = true;
-@@ -1045,0 +1095 @@
++            }
++            "--check-login-init" => {
++                check_login_init = true;
+@@ -1056,0 +1124,2 @@
 +                eprintln!("  --check-anisette        Check helper provisioning without Apple account sign-in");
-@@ -1076 +1126 @@
++                eprintln!("  --check-login-init      Private initial sign-in check; sends no password proof");
+@@ -1076,0 +1146,9 @@
++    if check_login_init {
++        if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
++            return Err("Initial sign-in check requires the owner's private interactive terminal".into());
++        }
++        if check_anisette || clear_auth_cache || clear_keychain_state || delete_own_escrow_bottle {
++            return Err("Initial sign-in check cannot be combined with other diagnostic or maintenance flags".into());
++        }
++    }
++
+@@ -1087 +1165 @@
 -    let anisette_config_path = profile_dir.join("anisette_state");
 +    let anisette_config_path = profile_dir.join("anisette_state_windows_v1");
-@@ -1079,0 +1130,18 @@
+@@ -1090 +1168,24 @@
+-    let mut loaded_device_profile = DeviceProfile::load(&device_profile_path)?;
++    let mut loaded_device_profile = if check_login_init {
++        DeviceProfile::load_existing(&device_profile_path)
++            .map_err(|_| "Cannot load an existing complete private profile for the initial sign-in check")?
++    } else {
++        DeviceProfile::load(&device_profile_path)?
++    };
 +
 +    if check_anisette {
 +        // Use the same provider as login, but never prompt for account credentials,
@@ -91,7 +130,24 @@
 +        eprintln!("Helper provisioning and header retrieval passed; no Apple account sign-in attempted.");
 +        return Ok(());
 +    }
-@@ -1128,4 +1196,6 @@
+@@ -1095,0 +1197,16 @@
++    }
++
++    if check_login_init {
++        if apple_id.is_empty() {
++            return Err("Apple ID is required for the initial sign-in check".into());
++        }
++        let original_info = loaded_device_profile.profile.get_gsa_config(&APSState::default(), false);
++        let login_info = linux_login_info(original_info);
++        let client = Arc::new(Mutex::new(AnisetteClient::new(LinuxAnisetteProvider::new(
++            anisette_url, login_info.clone(), anisette_config_path, WINDOWS_DELEGATE_INFO.into(),
++        ))));
++        let mut account = AppleAccount::new_with_anisette(login_info, client)?;
++        eprintln!("[1/1] Checking Apple's initial sign-in response; no password proof is sent...");
++        tokio::time::timeout(std::time::Duration::from_secs(45), account.probe_login_init(&apple_id)).await??;
++        eprintln!("Apple accepted the initial sign-in request. Password and 2FA remain untested.");
++        return Ok(());
+@@ -1139,4 +1256,6 @@
 -    let login_info = config.get_gsa_config(&APSState::default(), false);
 -
 -    let anisette_client: ArcAnisetteClient<RemoteAnisetteProviderV3> = Arc::new(Mutex::new(
@@ -102,11 +158,11 @@
 +
 +    let anisette_client: ArcAnisetteClient<LinuxAnisetteProvider> = Arc::new(Mutex::new(
 +        AnisetteClient::new(LinuxAnisetteProvider::new(
-@@ -1134 +1204,2 @@
+@@ -1145 +1264,2 @@
 -            anisette_config_path,
 +            anisette_config_path.clone(),
 +            WINDOWS_DELEGATE_INFO.into(),
-@@ -1181,0 +1253,8 @@
+@@ -1192,0 +1313,8 @@
 +    // Account refresh/delegates keep the Windows PET context. CloudKit retains
 +    // the original profile context and reads the same already-provisioned ADI identity.
 +    let keychain_anisette_client: ArcAnisetteClient<LinuxAnisetteProvider> = Arc::new(Mutex::new(
@@ -115,20 +171,43 @@
 +        )),
 +    ));
 +
-@@ -1211 +1290 @@
+@@ -1222 +1350 @@
 -            anisette: anisette_client.clone(),
 +            anisette: keychain_anisette_client.clone(),
-@@ -1217 +1296 @@
+@@ -1228 +1356 @@
 -            anisette: anisette_client.clone(),
 +            anisette: keychain_anisette_client.clone(),
-@@ -1300 +1379 @@
+@@ -1311 +1439 @@
 -        anisette: anisette_client.clone(),
 +        anisette: keychain_anisette_client.clone(),
-@@ -1307 +1386 @@
+@@ -1318 +1446 @@
 -        anisette: anisette_client.clone(),
 +        anisette: keychain_anisette_client.clone(),
-@@ -1582,0 +1662,104 @@
+@@ -1604,0 +1733,18 @@
++    #[test]
++    fn initial_diagnostic_never_generates_or_rewrites_profile_identity() {
++        let directory = std::env::temp_dir().join(format!("export-findmy-readonly-profile-{}", uuid::Uuid::new_v4()));
++        fs::create_dir_all(&directory).unwrap();
++        let path = directory.join("device-profile.toml");
++        let source = include_str!("../device-profile.template.toml");
++        for (uuid, udid) in [("", ""), ("9240D5F0-5A1D-44D7-95CE-CA9D0ED90E9A", ""),
++            ("9240D5F0-5A1D-44D7-95CE-CA9D0ED90E9A", "0123456789ABCDEF0123456789ABCDEF")] {
++            let fixture = source.replace("device_uuid = \"\"", &format!("device_uuid = \"{uuid}\""))
++                .replace("udid = \"\"", &format!("udid = \"{udid}\""));
++            fs::write(&path, &fixture).unwrap();
++            assert_eq!(DeviceProfile::load_existing(&path).is_ok(), !uuid.is_empty() && !udid.is_empty());
++            assert_eq!(fs::read_to_string(&path).unwrap(), fixture);
++            assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
++        }
++        fs::remove_dir_all(directory).unwrap();
++    }
 +
+@@ -1611,5 +1757,103 @@
+-    use super::{
+-        accessory_basename, accessory_to_json, accessory_to_plist, remove_auth_cache,
+-        sanitize_filename_component, serial_from_identifier, DeviceProfile,
+-    };
+-    use std::fs;
 +    fn synthetic_login_info() -> omnisette::LoginClientInfo {
 +        omnisette::LoginClientInfo {
 +            ak_context_type: "imessage".into(), client_app_name: "Messages".into(),

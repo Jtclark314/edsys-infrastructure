@@ -4,20 +4,24 @@ set -euo pipefail
 umask 077
 ulimit -c 0
 task_root=/home/jeremy/.local/share/edsys-findmy/2026-10-17
-image=sha256:9d9bfbd255324eee1b7f9268fce4a4ff469019f4ce208d995e3947980c6e2147
+image=sha256:fdd617d6b391591b208a607a5b12a8b3f19c57c4dc28eb739960d7bb87b528af
 helper=edsys-findmy-anisette
 if [[ ${1:-} == --check ]]; then
   docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
     --read-only --user "$(id -u):$(id -g)" "$image" --help
   exit
 fi
-if [[ ${1:-} != --check-helper ]]; then
-  if [[ $# != 0 || ! -t 0 || ! -t 1 ]]; then
-    echo 'Run without arguments in your own interactive 9950x terminal.' >&2
-    exit 2
-  fi
-elif [[ $# != 1 ]]; then
-  echo 'Use --check-helper alone for the local helper check.' >&2
+mode=export
+if [[ $# == 1 && ${1:-} == --check-signin ]]; then
+  mode=init
+elif [[ $# == 1 && ${1:-} == --check-helper ]]; then
+  mode=helper
+elif [[ $# != 0 ]]; then
+  echo 'Use no arguments, --check-signin, --check-helper, or --check.' >&2
+  exit 2
+fi
+if [[ $mode != helper && ( ! -t 0 || ! -t 1 ) ]]; then
+  echo 'Run in your own interactive 9950x terminal.' >&2
   exit 2
 fi
 mkdir -p "$task_root/private/export"
@@ -42,17 +46,24 @@ if [[ $ready != 1 ]]; then
   echo 'The local authentication helper is not ready. No Apple sign-in was attempted.' >&2
   exit 1
 fi
-if [[ ${1:-} == --check-helper ]]; then
+if [[ $mode == helper ]]; then
   echo 'Local authentication helper ready; no Apple sign-in attempted.'
   exit 0
 fi
 echo 'Find My Linux trial — private Apple sign-in'
-echo 'Exporter build: 20261017-windows1 (Apple sign-in compatibility fix)'
+echo 'Exporter build: 20261017-windows2 (staged sign-in diagnostics)'
 echo 'Apple sign-in uses Windows compatibility metadata; the existing CloudKit peer profile is preserved.'
-echo 'This registers an exporter peer with iCloud Keychain and can export all paired tags.'
-echo 'Its local state can contain broader Keychain secrets; it stays private on this host.'
-echo 'Password, verification code and device passcode are hidden. No Docker logs are retained.'
-echo 'Choose the actual trusted device whose passcode you know; do not guess or retry repeatedly.'
+args=(--device-profile /private/device-profile.toml --anisette-url http://anisette:6969 --no-auth-cache)
+if [[ $mode == init ]]; then
+  args+=(--check-login-init)
+  echo 'Password-free check: enter only your Apple ID. One SRP init request; no password proof or 2FA.'
+  echo 'This check does not sign in, join Keychain, or export trackers. No Docker logs are retained.'
+else
+  echo 'This registers an exporter peer with iCloud Keychain and can export all paired tags.'
+  echo 'Its local state can contain broader Keychain secrets; it stays private on this host.'
+  echo 'Password, verification code and device passcode are hidden. No Docker logs are retained.'
+  echo 'Choose the actual trusted device whose passcode you know; do not guess or retry repeatedly.'
+fi
 echo
 docker run --rm -it --name edsys-findmy-private-export --log-driver none \
   --network edsys-findmy-pilot --cpus 2 --memory 2g --pids-limit 128 \
@@ -61,6 +72,7 @@ docker run --rm -it --name edsys-findmy-private-export --log-driver none \
   --tmpfs /tmp:rw,nosuid,noexec,size=64m \
   --env RUST_LOG=off --env RUST_BACKTRACE=0 \
   --mount "type=bind,src=$task_root/private/export,dst=/private" \
-  "$image" --device-profile /private/device-profile.toml \
-  --anisette-url http://anisette:6969 --no-auth-cache
-"$task_root/ha-checks/venv/bin/python" "$task_root/select-tracker.py"
+  "$image" "${args[@]}"
+if [[ $mode == export ]]; then
+  "$task_root/ha-checks/venv/bin/python" "$task_root/select-tracker.py"
+fi

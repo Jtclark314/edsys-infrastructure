@@ -3,9 +3,10 @@
 Prepared on 9950x, October 17, 2026. Linux exporter build and isolated checks
 pass. A subsequent private sign-in exposed a local helper URL defect before
 Apple password verification; that fix exposed Apple SRP error -80045. A
-Windows compatibility candidate is installed after the Android candidate
-returned HTML. A nonexistent-account negative check reaches Apple's structured
--20970 rejection; real owner authentication remains pending. Real key export, HA installation and tracker freshness remain pending.
+Windows compatibility build now reaches structured Apple responses after the
+Android candidate returned HTML. The latest build adds a private password-free
+initial-request diagnostic and corrects secret whitespace handling. Real exporter
+authentication, key export, HA installation and tracker freshness remain pending.
 The current exporter has no QR/passkey sign-in flow. No HA files, integrations,
 automations, media or voice settings have been changed by this pilot.
 
@@ -89,6 +90,9 @@ for local `/v3/client_info` readiness before asking for credentials: 20 attempts
 each with a one-second curl limit and 0.25-second pause (roughly 25 seconds max).
 `--check-helper` performs only that local readiness check, discards the response
 body and stops the helper afterward; it never starts the Apple account flow.
+`--check-signin` is different: run it only in the owner's private terminal. It
+asks for the Apple ID and sends one initial SRP request to Apple, without a
+password proof, 2FA, delegate fetch, Keychain join or tracker export.
 
 The self-hosted, digest-pinned Dadoum anisette-v3 helper is named
 `edsys-findmy-anisette` on the dedicated `edsys-findmy-pilot` Docker network,
@@ -208,6 +212,44 @@ Owner was given the unchanged private terminal command for one retry, with
 `20261017-windows1` required in its opening text. No HA file/restart/device
 change or scheduled continuation occurred. A later real export still needs
 one-tag validation, protected HA backup and independent HA auth qualification.
+
+## Password-free sign-in diagnosis — October 17, 2026
+
+Build `20261017-windows2` keeps the existing Windows metadata, helper identity,
+SRP implementation and endpoint. Apple error -20209 from this client does not
+by itself prove that all Apple sessions or official web sign-in are blocked.
+Do not automatically prescribe another password reset or an app-specific
+password; this exporter uses the primary-account SRP/2FA flow.
+
+The installed source had two concrete defects: secret input used `trim()`,
+which changed significant leading/trailing whitespace, and structured Apple
+errors discarded the known request stage. Secret reads now remove only one
+terminal LF/CRLF, preserving other whitespace. GSA errors expose only fixed
+stage, HTTP status and Apple error code; no response body or server message.
+No password-calculation defect explaining -20209 was established.
+
+Run the next check once, in the owner's private terminal:
+
+```sh
+bash /home/jeremy/.local/bin/edsys-findmy-export --check-signin
+```
+
+It must display `20261017-windows2` and asks only for Apple ID. The diagnostic
+shares the exact initial request path with real login and stops after the
+initial response, before cache/keystore/output handling. An incomplete device
+profile is refused without generating or rewriting peer identifiers. The local
+helper can provision/update its own authentication state if needed. It sends a fresh public
+SRP ephemeral, never a password proof or completion request. A positive result
+proves only that Apple accepted this initial request; password and 2FA remain
+untested. A rejection reports stage/status/code. Account-specific requests can
+still be subject to Apple's rate/risk controls; there are no automatic retries.
+The wrapper stops its helper afterward and does not run tracker selection.
+
+All 52 offline checks pass: 23 exporter, 25 auth library and 4 transport/header.
+Focused regressions include secret whitespace and CRLF cases, exact
+shared init-only request serialization, and synthetic -20209 responses at init
+and complete. No real owner account or additional live account probe is used
+by Codex. Existing private state is retained; HA remains untouched.
 
 ## Account effects and sensitive state
 

@@ -5,7 +5,7 @@
 +srp = { version = "0.6.0", git = "https://github.com/stek29/rustpush.git", branch = "local/export-findmy-changes" }
 --- a/icloud-auth/src/lib.rs
 +++ b/icloud-auth/src/lib.rs
-@@ -14,0 +15,8 @@
+@@ -14,0 +15,14 @@
 +    #[error("Apple sign-in {stage}: HTTP {http_status}, {kind}")]
 +    GsaResponse {
 +        stage: &'static str,
@@ -14,9 +14,20 @@
 +    },
 +    #[error("Apple sign-in {stage}: transport request failed")]
 +    GsaTransport { stage: &'static str },
++    #[error("Apple sign-in {stage}: HTTP {http_status}, Apple code {apple_code}")]
++    GsaAppleResponse {
++        stage: &'static str,
++        http_status: u16,
++        apple_code: i64,
++    },
 --- a/icloud-auth/src/client.rs
 +++ b/icloud-auth/src/client.rs
-@@ -38,0 +39,152 @@
+@@ -11 +11 @@
+-    header::{HeaderMap, HeaderName, HeaderValue}, Certificate, Client, ClientBuilder, Proxy, Response
++    header::{HeaderMap, HeaderName, HeaderValue}, Certificate, Client, ClientBuilder, Proxy, Request, Response
+@@ -36,0 +37,235 @@
++}
++
 +#[cfg(test)]
 +mod gsa_response_tests {
 +    use super::*;
@@ -59,19 +70,100 @@
 +    }
 +
 +    #[test]
-+    fn structured_apple_error_survives_http_401() {
++    fn structured_apple_error_preserves_stage_status_and_code_without_message() {
 +        let status = dictionary([
 +            ("ec", Value::Integer((-20101).into())),
 +            ("em", Value::String("Synthetic Apple rejection".into())),
 +        ]);
 +        let error = decode_gsa_response(401, &wire_response(status.clone()), "SRP complete").unwrap_err();
-+        assert!(matches!(error, Error::AuthSrpWithMessage(-20101, message)
-+            if message == "Synthetic Apple rejection"));
++        assert!(matches!(error, Error::GsaAppleResponse {
++            stage: "SRP complete", http_status: 401, apple_code: -20101,
++        }));
++        assert!(!format!("{error:?} {error}").contains("Synthetic Apple rejection"));
 +
 +        let mut unwrapped = Vec::new();
 +        plist::to_writer_xml(&mut unwrapped, &dictionary([("Status", Value::Dictionary(status))])).unwrap();
 +        assert!(matches!(decode_gsa_response(401, &unwrapped, "SRP complete"),
-+            Err(Error::AuthSrpWithMessage(-20101, _))));
++            Err(Error::GsaAppleResponse {
++                stage: "SRP complete", http_status: 401, apple_code: -20101,
++            })));
++    }
++
++    #[test]
++    fn security_lock_fixture_distinguishes_init_from_complete() {
++        let body = wire_response(dictionary([
++            ("ec", Value::Integer((-20209).into())),
++            ("em", Value::String("private-response-marker".into())),
++        ]));
++        for stage in ["SRP init", "SRP complete"] {
++            let error = decode_gsa_response(200, &body, stage).unwrap_err();
++            assert!(matches!(error, Error::GsaAppleResponse {
++                stage: found, http_status: 200, apple_code: -20209,
++            } if found == stage));
++            assert!(!format!("{error:?} {error}").contains("private-response-marker"));
++        }
++    }
++
++    #[test]
++    fn shared_init_request_has_fixed_endpoint_and_no_password_proof() {
++        let anisette = AnisetteData {
++            base_headers: HashMap::from([
++                ("X-Apple-I-MD".into(), "synthetic-otp".into()),
++                ("X-Mme-Client-Info".into(), "synthetic-delegate-info".into()),
++            ]),
++            client_info: LoginClientInfo {
++                ak_context_type: "imessage".into(),
++                client_app_name: "Messages".into(),
++                client_bundle_id: "com.apple.MobileSMS".into(),
++                mme_client_info_akd: "synthetic-windows-authkit".into(),
++                akd_user_agent: "synthetic-user-agent".into(),
++                ..Default::default()
++            },
++        };
++        let (request, headers) = build_gsa_init_request(
++            &Client::new(), "synthetic@example.invalid", vec![1, 2, 3], &anisette, "synthetic-request-id",
++        ).unwrap();
++        assert_eq!(request.method(), reqwest::Method::POST);
++        assert_eq!(request.url().as_str(), GSA_ENDPOINT);
++        assert_eq!(request.headers().get_all("X-MMe-Client-Info").iter().count(), 1);
++        assert_eq!(request.headers()["X-MMe-Client-Info"], "synthetic-windows-authkit");
++        assert_eq!(headers["X-MMe-Client-Info"], request.headers()["X-MMe-Client-Info"]);
++        let root: Value = plist::from_bytes(request.body().unwrap().as_bytes().unwrap()).unwrap();
++        let body = root.as_dictionary().unwrap()["Request"].as_dictionary().unwrap();
++        let mut keys = body.keys().map(String::as_str).collect::<Vec<_>>();
++        keys.sort_unstable();
++        assert_eq!(keys, ["A2k", "cpd", "o", "ps", "u"]);
++        assert_eq!(body["o"].as_string(), Some("init"));
++        assert_eq!(body["A2k"].as_data(), Some([1, 2, 3].as_slice()));
++        let cpd = body["cpd"].as_dictionary().unwrap();
++        assert_eq!(cpd["X-Apple-I-Request-UUID"].as_string(), Some("synthetic-request-id"));
++        assert_eq!(cpd["X-Apple-I-MD"].as_string(), Some("synthetic-otp"));
++    }
++
++    #[tokio::test]
++    async fn init_probe_is_one_shot_and_sanitizes_preparation_failure() {
++        use std::sync::atomic::{AtomicUsize, Ordering};
++        struct RefusingProvider(Arc<AtomicUsize>);
++        impl AnisetteProvider for RefusingProvider {
++            async fn get_anisette_headers(&mut self) -> Result<HashMap<String, String>, omnisette::AnisetteError> {
++                self.0.fetch_add(1, Ordering::SeqCst);
++                Err(omnisette::AnisetteError::InvalidArgument("private-preparation-marker".into()))
++            }
++            async fn get_2fa_code(&mut self) -> Result<u32, omnisette::AnisetteError> {
++                panic!("init probe must not request a verification code");
++            }
++        }
++        let calls = Arc::new(AtomicUsize::new(0));
++        let anisette = Arc::new(Mutex::new(AnisetteClient::new(RefusingProvider(calls.clone()))));
++        let mut account = AppleAccount::new_with_anisette(LoginClientInfo::default(), anisette).unwrap();
++        let error = account.probe_login_init("synthetic@example.invalid").await.unwrap_err();
++        assert!(matches!(error, Error::GsaTransport { stage: "SRP init preparation" }));
++        assert!(!format!("{error:?} {error}").contains("private-preparation-marker"));
++        assert_eq!(calls.load(Ordering::SeqCst), 1);
++        assert!(account.username.is_none());
++        assert!(account.hashed_password.is_none());
++        assert!(account.spd.is_none());
++        assert!(account.tokens.is_empty());
 +    }
 +
 +    #[test]
@@ -145,13 +237,15 @@
 +    }
 +
 +    #[test]
-+    fn trusted_bad_code_keeps_structured_apple_error_and_sms_keeps_bad_code_error() {
++    fn trusted_bad_code_keeps_sanitized_apple_code_and_sms_keeps_bad_code_error() {
 +        let body = validation_wire(dictionary([
 +            ("ec", Value::Integer((-21669).into())),
 +            ("em", Value::String("Synthetic incorrect code".into())),
 +        ]));
 +        assert!(matches!(decode_gsa_validation_response(400, &body),
-+            Err(Error::AuthSrpWithMessage(-21669, message)) if message == "Synthetic incorrect code"));
++            Err(Error::GsaAppleResponse {
++                stage: "trusted-device verification", http_status: 400, apple_code: -21669,
++            })));
 +        assert!(matches!(check_sms_verification_http(400), Err(Error::Bad2faCode)));
 +        assert!(check_sms_verification_http(200).is_ok());
 +    }
@@ -167,9 +261,7 @@
 +        assert!(!rendered.contains("private-verification-marker"));
 +        assert!(matches!(error, Error::GsaResponse { .. }));
 +    }
-+}
-+
-@@ -414,8 +566,101 @@
+@@ -414,8 +649,145 @@
 -async fn parse_response(res: Result<Response, reqwest::Error>) -> Result<plist::Dictionary, crate::Error> {
 -    let res = res?.text().await?;
 -    let res: plist::Dictionary = plist::from_bytes(res.as_bytes())?;
@@ -195,6 +287,18 @@
 +    Ok(())
 +}
 +
++fn check_gsa_protocol_error(response: &Dictionary, http_status: u16, stage: &'static str) -> Result<(), Error> {
++    check_protocol_error(response).map_err(|error| match error {
++        Error::AuthSrpWithMessage(apple_code, _) => Error::GsaAppleResponse {
++            stage, http_status, apple_code,
++        },
++        Error::Parse => Error::GsaResponse {
++            stage, http_status, kind: "missing or invalid GrandSlam status code",
++        },
++        other => other,
++    })
++}
++
 +fn decode_gsa_plist(http_status: u16, body: &[u8], stage: &'static str) -> Result<Dictionary, Error> {
 +    let failure = |kind| Error::GsaResponse { stage, http_status, kind };
 +    // Deserializer errors can contain response text. Never expose the body through them.
@@ -218,16 +322,13 @@
 +        Some(_) => return Err(failure("invalid GrandSlam response map")),
 +        None => {
 +            // Apple sometimes sends a structured error without the Response wrapper.
-+            if let Err(error @ Error::AuthSrpWithMessage(_, _)) = check_protocol_error(&root) {
++            if let Err(error @ Error::GsaAppleResponse { .. }) = check_gsa_protocol_error(&root, http_status, stage) {
 +                return Err(error);
 +            }
 +            return Err(failure("missing GrandSlam response map"));
 +        }
 +    };
-+    check_protocol_error(response).map_err(|error| match error {
-+        Error::Parse => failure("missing or invalid GrandSlam status code"),
-+        other => other,
-+    })?;
++    check_gsa_protocol_error(response, http_status, stage)?;
 +    if !(200..300).contains(&http_status) {
 +        return Err(failure("unsuccessful GrandSlam HTTP response"));
 +    }
@@ -237,12 +338,7 @@
 +fn decode_gsa_validation_response(http_status: u16, body: &[u8]) -> Result<Dictionary, Error> {
 +    const STAGE: &str = "trusted-device verification";
 +    let response = decode_gsa_plist(http_status, body, STAGE)?;
-+    check_protocol_error(&response).map_err(|error| match error {
-+        Error::Parse => Error::GsaResponse {
-+            stage: STAGE, http_status, kind: "missing or invalid GrandSlam status code",
-+        },
-+        other => other,
-+    })?;
++    check_gsa_protocol_error(&response, http_status, STAGE)?;
 +    if !(200..300).contains(&http_status) {
 +        return Err(Error::GsaResponse {
 +            stage: STAGE, http_status, kind: "unsuccessful GrandSlam HTTP response",
@@ -265,6 +361,46 @@
 +    decode_gsa_response(http_status, &body, stage)
 +}
 +
++struct GsaInitExchange {
++    response: Dictionary,
++    anisette: AnisetteData,
++    headers: HeaderMap,
++    request_id: String,
++}
++
++// Both full authentication and the one-shot init probe construct the same request.
++// The endpoint and operation are fixed here; this cannot construct a password proof.
++fn build_gsa_init_request(
++    client: &Client,
++    username: &str,
++    a_pub: Vec<u8>,
++    anisette: &AnisetteData,
++    request_id: &str,
++) -> Result<(Request, HeaderMap), Error> {
++    let mut headers = HeaderMap::new();
++    headers.insert("Content-Type", HeaderValue::from_static("text/x-xml-plist"));
++    headers.insert("Accept", HeaderValue::from_static("*/*"));
++    headers.extend(anisette.get_gsservice_headers().into_iter().map(|(a, b)| (
++        HeaderName::from_str(&a).unwrap(), HeaderValue::from_str(&b).unwrap(),
++    )));
++    let packet = InitRequest {
++        header: RequestHeader { version: "1.0.1".to_string() },
++        request: InitRequestBody {
++            a_pub: Value::Data(a_pub),
++            cpd: anisette.get_cpd_data(request_id),
++            operation: "init".to_string(),
++            ps: vec!["s2k".to_string(), "s2k_fo".to_string()],
++            username: username.to_string(),
++        },
++    };
++    let mut buffer = Vec::new();
++    plist::to_writer_xml(&mut buffer, &packet)
++        .map_err(|_| Error::GsaTransport { stage: "SRP init" })?;
++    let request = client.post(GSA_ENDPOINT).headers(headers.clone()).body(buffer).build()
++        .map_err(|_| Error::GsaTransport { stage: "SRP init" })?;
++    Ok((request, headers))
++}
++
 +fn completed_login_state(status: &Dictionary) -> LoginState {
 +    if let Some(Value::String(method)) = status.get("au") {
 +        return match method.as_str() {
@@ -279,20 +415,94 @@
 +        return LoginState::Needs2FAVerification;
 +    }
 +    LoginState::LoggedIn
-@@ -429,0 +675,6 @@
+@@ -429,0 +802,6 @@
 +            // Apple's GSA edge can reject later requests on a reused connection.
 +            .pool_max_idle_per_host(0)
 +            .default_headers(HeaderMap::from_iter([(
 +                reqwest::header::CONNECTION,
 +                HeaderValue::from_static("close"),
 +            )]))
-@@ -1054 +1305 @@
+@@ -1000,0 +1379,23 @@
++    async fn request_login_init(&self, username: &str, a_pub: Vec<u8>) -> Result<GsaInitExchange, Error> {
++        let anisette = self.get_anisette().await?;
++        let request_id = Uuid::new_v4().to_string().to_uppercase();
++        let (request, headers) = build_gsa_init_request(
++            &self.client, username, a_pub, &anisette, &request_id,
++        )?;
++        let response = parse_response(self.client.execute(request).await, "SRP init").await?;
++        Ok(GsaInitExchange { response, anisette, headers, request_id })
++    }
++
++    /// Send exactly one SRP init request, without a password or authentication proof.
++    /// A successful result means only that Apple accepted the init request. The
++    /// response is discarded; this does not authenticate or request a 2FA code.
++    pub async fn probe_login_init(&mut self, username: &str) -> Result<(), Error> {
++        let srp_client = SrpClient::<Sha256>::new(&G_2048);
++        let a: Vec<u8> = (0..32).map(|_| rand::random::<u8>()).collect();
++        let a_pub = srp_client.compute_public_ephemeral(&a);
++        self.request_login_init(username, a_pub).await.map(|_| ()).map_err(|error| match error {
++            error @ (Error::GsaAppleResponse { .. } | Error::GsaResponse { .. } | Error::GsaTransport { .. }) => error,
++            _ => Error::GsaTransport { stage: "SRP init preparation" },
++        })
++    }
++
+@@ -1012,43 +1413,6 @@
+-        let valid_anisette = self.get_anisette().await?;
+-
+-        let mut gsa_headers = HeaderMap::new();
+-        gsa_headers.insert(
+-            "Content-Type",
+-            HeaderValue::from_str("text/x-xml-plist").unwrap(),
+-        );
+-        gsa_headers.insert("Accept", HeaderValue::from_str("*/*").unwrap());
+-        gsa_headers.extend(valid_anisette.get_gsservice_headers().into_iter().map(|(a, b)| (HeaderName::from_str(&a).unwrap(), HeaderValue::from_str(&b).unwrap())));
+-
+-        let request_id = Uuid::new_v4().to_string().to_uppercase();
+-
+-        let header = RequestHeader {
+-            version: "1.0.1".to_string(),
+-        };
+-        let body = InitRequestBody {
+-            a_pub: plist::Value::Data(a_pub),
+-            cpd: valid_anisette.get_cpd_data(&request_id),
+-            operation: "init".to_string(),
+-            ps: vec!["s2k".to_string(), "s2k_fo".to_string()],
+-            username: username.to_string(),
+-        };
+-
+-        let packet = InitRequest {
+-            header: header.clone(),
+-            request: body,
+-        };
+-
+-        let mut buffer = Vec::new();
+-        plist::to_writer_xml(&mut buffer, &packet)?;
+-        let buffer = String::from_utf8(buffer).unwrap();
+-
+-        // println!("{:?}", gsa_headers.clone());
+-        // println!("{:?}", buffer);
+-
+-        let res = self
+-            .client
+-            .post(GSA_ENDPOINT)
+-            .headers(gsa_headers.clone())
+-            .body(buffer)
+-            .send().await;
+-
 -        let res = parse_response(res).await?;
-+        let res = parse_response(res, "SRP init").await?;
-@@ -1117 +1368 @@
++        let GsaInitExchange {
++            response: res,
++            anisette: valid_anisette,
++            headers: gsa_headers,
++            request_id,
++        } = self.request_login_init(username, a_pub).await?;
+@@ -1102 +1466 @@
+-            header,
++            header: RequestHeader { version: "1.0.1".to_string() },
+@@ -1117 +1481 @@
 -        let res = parse_response(res).await?;
 +        let res = parse_response(res, "SRP complete").await?;
-@@ -1150,9 +1401 @@
+@@ -1150,9 +1514 @@
 -        if let Some(plist::Value::String(s)) = status.get("au") {
 -            return match s.as_str() {
 -                "trustedDeviceSecondaryAuth" => Ok(LoginState::NeedsDevice2FA),
@@ -303,10 +513,10 @@
 -
 -        Ok(LoginState::LoggedIn)
 +        Ok(completed_login_state(status))
-@@ -1241 +1484 @@
+@@ -1241 +1597 @@
 -            .send().await?;
 +            .send().await.map_err(|_| Error::GsaTransport { stage: "2FA configuration" })?;
-@@ -1247 +1490,7 @@
+@@ -1247 +1603,7 @@
 -        let resp = req.bytes().await?;
 +        if !(200..300).contains(&status) {
 +            return Err(Error::GsaResponse {
@@ -315,13 +525,13 @@
 +            });
 +        }
 +        let resp = req.bytes().await.map_err(|_| Error::GsaTransport { stage: "2FA configuration" })?;
-@@ -1317,2 +1566,3 @@
+@@ -1317,2 +1679,3 @@
 -            .send().await?;
 -
 +            .send().await.map_err(|_| Error::GsaTransport { stage: "trusted-device verification" })?;
 +
 +        let http_status = res.status().as_u16();
-@@ -1320,5 +1570,2 @@
+@@ -1320,5 +1683,2 @@
 -
 -        let res: plist::Dictionary =
 -            plist::from_bytes(res.text().await?.as_bytes())?;
@@ -329,13 +539,13 @@
 -        Self::check_error(&res)?;
 +        let body = res.bytes().await.map_err(|_| Error::GsaTransport { stage: "trusted-device verification" })?;
 +        decode_gsa_validation_response(http_status, &body)?;
-@@ -1377,4 +1624 @@
+@@ -1377,4 +1737 @@
 -        if res.status() != 200 {
 -            error!("Security code failed, response: {}", res.text().await?);
 -            return Err(Error::Bad2faCode);
 -        }
 +        check_sms_verification_http(res.status().as_u16())?;
-@@ -1415,13 +1659 @@
+@@ -1415,13 +1772 @@
 -        let res = match res.get("Status") {
 -            Some(plist::Value::Dictionary(d)) => d,
 -            _ => &res,
