@@ -16,13 +16,24 @@ Hybrid, Traffic, bounded selected trails, close/reopen, origin-only referrer,
 parent/storage isolation and narrow layouts passed offline browser checks with
 a fake SDK, including the deployed HTTPS renderer. Ten projection/configuration
 regressions and three build/deployment checks pass. Nimo reached the renderer;
-signed-in HA browser and actual Google imagery acceptance remain pending.
+Signed-in HA trial-page/native-card and actual restricted-key Google imagery
+acceptance remain pending.
 
-Jeremy selected a **$5/month alert budget**, not a hard spending cap. Google
-Cloud project/billing/key/restrictions/actual editable quotas are still pending
-owner setup; no Google request was made. Do not claim an available daily quota
-or dollar cutoff without console evidence. Existing map is the immediate
-fallback on unsupported browsers, renderer failure or trial closure.
+Live Nimo Chrome verification confirmed the active dedicated **EdSys HA Maps
+Trial Billing** account, existing personal payment profile and **EdSys HA Maps
+Trial as its sole linked project**. Reopened persisted **HA Maps Trial - $5
+monthly alerts** uses calendar Monthly, Specified amount USD 5, **All projects
+(1) / All services** on that account, deliberately broader than a project filter.
+Actual alerts are 50/80/100% ($2.50/$4/$5), forecast 100% ($5); billing
+administrator/user role emails are on, Pub/Sub and Monitoring channels off.
+Promotional credits are excluded; free-tier/other discount credits retained.
+The budget list shows cap status **Not applicable**: these are **alerts only**.
+Nimo Windows app control works; no
+CUA browser is needed. Maps API enablement, restricted key, editable quota
+readback and live imagery remain pending; the HA key is still empty. Do not
+claim an available daily quota or dollar cutoff without console evidence.
+Existing map is the immediate fallback on unsupported browsers, renderer
+failure or trial closure.
 Setup, privacy, limits and narrow recovery:
 [Google Maps trial runbook](../services/home-assistant-google-maps/README.md).
 

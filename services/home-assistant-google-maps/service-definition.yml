@@ -20,7 +20,7 @@ backup:
     - Only the dedicated Tailscale Serve route; source rebuilds static files
 monitoring:
   healthcheck: Trusted renderer HTTPS source hash and native HA readback
-  acceptance: Real restricted-key imagery and Google budget/quota readback pending
+  acceptance: Billing and USD5 monthly alerts read back; restricted key, quotas and real imagery pending
 restore_notes: Remove only recorded trial dashboard/resource and port 8450 handler; preserve original Map and all other routes
 owner: Jeremy
 last_verified: "2026-10-17 (empty-key installation; not live Google acceptance)"

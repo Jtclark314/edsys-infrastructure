@@ -1,8 +1,9 @@
 # Home Assistant Google Maps trial
 
 Status, 2026-10-17: separate admin-only `/google-maps-trial/trial` dashboard
-installed with an **empty key**. Google Cloud billing, the restricted key,
-quotas and real Google imagery acceptance are **pending owner setup**.
+installed with an **empty key**. Dedicated Google Cloud billing and the
+persisted $5 monthly alert budget are verified. Maps JavaScript API enablement,
+the restricted key, quotas and real Google imagery acceptance remain pending.
 The existing `/map` dashboard remains exactly as before this change.
 
 ## Scope and architecture
@@ -44,40 +45,45 @@ access to HA itself may still use its existing LAN or remote route.
 ## Owner Google Cloud setup
 
 Do this in the owner's signed-in [Google Cloud console](https://console.cloud.google.com/).
-Connected browser automation was unavailable during installation. The owner
-must handle sign-in, payment details, billing acceptance and key entry directly.
-Never paste a key/payment detail into chat, Git, screenshots or a document.
+Live Nimo Chrome verification on 2026-10-17 confirmed the active dedicated
+billing account **EdSys HA Maps Trial Billing**, using the existing personal
+payment profile, with **EdSys HA Maps Trial as its sole linked project**.
+The persisted budget **HA Maps Trial - $5 monthly alerts** was reopened and
+verified: calendar Monthly, Specified amount **USD 5**, **All projects (1) / All
+services** across this dedicated account, deliberately broader than a project
+filter. Actual-spend alerts are **50/80/100%** ($2.50/$4/$5), with forecast
+**100%** ($5). Billing administrator/user role emails are on; Pub/Sub and
+Monitoring channels are off. Promotional credits are excluded from budget
+calculations; free-tier and other discount credits are retained. These are
+**alerts only**; the budget list shows cap status **Not applicable**. Nimo's
+Windows app control works;
+no CUA browser is required for the remaining setup.
 
-1. Create/select a **dedicated project**, for example `EdSys HA Maps Trial`.
-   Link the intended billing account; review terms/payment prompts yourself.
-   Other Google subscriptions are not assumed to cover Maps Platform usage.
-2. Enable **Maps JavaScript API only** for this pilot. Do not enable Places,
+The owner handles sign-in, payment details and key entry directly. Never paste
+a key/payment detail into chat, Git, screenshots or a document. Remaining steps:
+
+1. Enable **Maps JavaScript API only** for this pilot. Do not enable Places,
    Routes, Geocoding or Street View APIs just because a setup wizard suggests
    them. No service-account key is needed.
-3. In Billing → Budgets & alerts, create `HA Maps Trial — $5 monthly`, scoped
-   to **this project**, fixed **USD 5 per calendar month**. Set actual-spend
-   alerts at **50%, 80% and 100%** ($2.50/$4/$5), plus forecast 100% if offered.
-   Verify the owner can receive the chosen billing emails. If credits/free-trial
-   adjustments can mask paid usage, review that setting deliberately.
-4. In Maps JavaScript API → Quotas & System Limits, inspect the **actual editable
+2. In Maps JavaScript API → Quotas & System Limits, inspect the **actual editable
    quotas**. Record any applied changes and read them back. If a daily map-load
    quota is offered, 100/day is a conservative trial target; do not assume it
    exists. Current public documentation lists 30,000 loads/min/project and
    300/min/IP and does not promise an adjustable daily quota. A rate quota
    alone does not implement a monthly dollar cap.
-5. Create a dedicated **browser API key**. Set application restriction to
+3. Create a dedicated **browser API key**. Set application restriction to
    **Websites**, and authorize exactly the **renderer origin**, including its
    HTTPS port. Copy that origin from this card's native visual editor, not
    HA's address bar. The loader uses `auth_referrer_policy=origin`; avoid a
    path-specific restriction and broad domain wildcards. Set API restriction
    to **Maps JavaScript API only**. Save and inspect both restrictions before
    entering the key. The renderer's private URL is not a source-file constant.
-6. In HA's Google Maps Trial dashboard, Edit dashboard → Edit card, enter the
+4. In HA's Google Maps Trial dashboard, Edit dashboard → Edit card, enter the
    key in the password field and save. Keep the key in HA's private dashboard
    configuration. The native frontend must use it, so it is a **restricted
    browser credential, not a server-side secret**. Dashboard administrators and
    authorized clients can access it. No key goes in static assets or helpers.
-7. Press **Load Google map**. Check actual imagery and all selected markers,
+5. Press **Load Google map**. Check actual imagery and all selected markers,
    Road/Satellite/Hybrid, Traffic, Fit, two-hour trails where recorder data
    exists, Close and the Existing map link. Check the Google console for
    successful restricted-key traffic, usage attribution and quota settings.
