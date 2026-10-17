@@ -88,3 +88,23 @@ def test_anythingllm_verifier_rejects_extra_workspace_and_drift() -> None:
     assert verifier.validate_inventory([workspace, workspace], stats, manifest) == [
         "expected one AnythingLLM workspace, found 2"
     ]
+
+
+def test_anythingllm_verifier_requires_explicit_local_chat_model() -> None:
+    verifier = load_script("anythingllm-rag-verify.py")
+    workspace = {**verifier.EXPECTED_WORKSPACE, "chatModel": "edsys-chat-local"}
+    stats = {
+        "document_count": 1,
+        "non_managed_document_count": 0,
+        "documents_without_vectors": 0,
+        "vector_count": 1,
+        "orphan_vector_count": 0,
+    }
+    manifest = {"workspaceSlug": "edsys-rag-current", "documents": {"doc": {}}}
+    assert verifier.validate_inventory([workspace], stats, manifest) == []
+
+    for model in ("edsys-chat-cloud", "unknown-model", "", None):
+        workspace["chatModel"] = model
+        failures = verifier.validate_inventory([workspace], stats, manifest)
+        assert len(failures) == 1
+        assert "workspace chatModel expected 'edsys-chat-local'" in failures[0]
