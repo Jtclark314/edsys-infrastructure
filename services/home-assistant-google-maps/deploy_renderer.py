@@ -8,7 +8,7 @@ import subprocess
 from build import build
 
 PORT='8450'
-ROUTE='/v1.0.0/renderer.html'
+ROUTE='/v1.0.3/renderer.html'
 
 def command(*args):
     return subprocess.run(['tailscale',*args],capture_output=True,text=True,check=True,timeout=45).stdout
@@ -22,7 +22,7 @@ def main():
     if PORT in before.get('TCP',{}):raise RuntimeError('Renderer port already in use; inspect rather than replay')
     host=json.loads(command('status','--json'))['Self']['DNSName'].rstrip('.')
     url=f'https://{host}:{PORT}{ROUTE}'
-    target=private.parent/'renderer'/'v1.0.0'/'renderer.html'
+    target=private.parent/'renderer'/'v1.0.3'/'renderer.html'
     content=build();digest=hashlib.sha256(content.encode()).hexdigest()
     if target.exists() and target.read_text()!=content:raise RuntimeError('Immutable renderer differs; use a new version')
     print(json.dumps({'port':PORT,'static_files':1,'sha256':digest,'tailnet_only':True,'google_requests':0}),flush=True)

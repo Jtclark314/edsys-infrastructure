@@ -59,8 +59,26 @@
   await page.getByRole("combobox",{name:"Map style"}).selectOption("satellite");
   await page.getByRole("checkbox",{name:"Traffic",exact:true}).check();
   await frame.waitForFunction(()=>window.__sdkStats.type==="satellite" && window.__sdkStats.traffic===true);
+  await frame.evaluate(()=>{window.__dataMessages=0;addEventListener("message",event=>{if(event.data?.type==="data")window.__dataMessages++;});window.__firstRow=document.querySelector("#locations").firstElementChild;});
+  for(let count=1;count<=5;count++){
+    await page.evaluate(()=>{window.__trial.card.hass=window.__trial.hass;});
+    await frame.waitForFunction(expected=>window.__dataMessages>=expected,count);
+  }
+  if(!(await frame.evaluate(()=>{const s=window.__sdkStats;return s.markers===2 && s.circleItems.length===2 && s.paths===1 && s.markerDetaches===0 && s.layerDetaches===0 && s.positionWrites===2 && s.centerWrites===0 && s.radiusWrites===0 && s.pathWrites===0 && s.fits===1 && document.querySelector("#locations").firstElementChild===window.__firstRow;})))throw Error("Unchanged HA updates replaced/detached overlays or reset the view");
   await page.evaluate(()=>{window.__trial.hass.states["person.synthetic"].attributes.latitude=1.1;window.__trial.card.hass=window.__trial.hass;});
-  await frame.waitForFunction(()=>window.__sdkStats.markers>=6);
+  await frame.waitForFunction(()=>window.__sdkStats.markerItems[0].position.lat===1.1 && window.__sdkStats.circleItems[0].center.lat===1.1);
+  if(!(await frame.evaluate(()=>{const s=window.__sdkStats;return s.markers===2 && s.markerDetaches===0 && s.layerDetaches===0 && s.positionWrites===3 && s.centerWrites===1;})))throw Error("A moving tracker was recreated instead of moved in place");
+  await page.evaluate(()=>{window.__trial.hass.states["person.synthetic"].attributes.gps_accuracy=30;window.__trial.hass.states["person.synthetic"].attributes.friendly_name="Renamed synthetic person";window.__trial.card.hass=window.__trial.hass;});
+  await frame.waitForFunction(()=>window.__sdkStats.circleItems[0].radius===30 && window.__sdkStats.markerItems[0].title==="Renamed synthetic person");
+  await page.evaluate(()=>{window.__trial.card._history=[{ref:0,segments:[[{lat:1,lng:2},{lat:1.2,lng:2.2}]]}];window.__trial.card.hass=window.__trial.hass;});
+  await frame.waitForFunction(()=>window.__sdkStats.pathWrites===1);
+  if((await frame.evaluate(()=>window.__sdkStats.paths))!==1)throw Error("Changed history recreated the trail");
+  await page.evaluate(()=>{window.__trial.card._history=[];window.__trial.hass.states["person.synthetic"].state="unavailable";window.__trial.card.hass=window.__trial.hass;});
+  await frame.waitForFunction(()=>window.__sdkStats.markerItems[0].map===null && window.__sdkStats.circleItems[0].map===null && window.__sdkStats.pathItems[0].map===null);
+  if(!(await frame.evaluate(()=>window.__sdkStats.markerItems[1].map && document.querySelector("#locations").textContent.includes("unavailable"))))throw Error("Unavailable tracker removal disturbed the home marker or hid its status");
+  await page.evaluate(()=>{window.__trial.hass.states["person.synthetic"].state="home";window.__trial.card.hass=window.__trial.hass;});
+  await frame.waitForFunction(()=>window.__sdkStats.markers===3 && window.__sdkStats.markerItems[2].map);
+  if(!(await frame.evaluate(()=>window.__sdkStats.markerItems[1].map && window.__sdkStats.fits===1 && window.__sdkStats.markerItems[2].firstElementChild.textContent==="1")))throw Error("Restored tracker lost its stable number or reset the view");
   if((await frame.evaluate(()=>window.__sdkStats.maps))!==1 || sdkRequests!==1)throw Error("Updates rebuilt/reloaded the map");
   await page.evaluate(()=>{window.__trial.card.hass=window.__trial.hass;window.__trial.card.stop();});
   await page.getByRole("button",{name:"Load Google map",exact:true}).click();
@@ -68,9 +86,11 @@
   frame=page.frames().find(frame=>frame.url().includes("renderer.html"));
   await frame.waitForFunction(()=>window.__sdkStats.type==="satellite" && window.__sdkStats.traffic===true);
   if(await page.getByRole("combobox",{name:"Map style"}).inputValue()!=="satellite")throw Error("Close/reopen reset the selected style");
-  await frame.waitForFunction(()=>window.__sdkStats.markers>=4);
+  await frame.waitForFunction(()=>window.__sdkStats.paths===1 && window.__sdkStats.markers===2);
+  await frame.evaluate(()=>{window.__dataMessages=0;addEventListener("message",event=>{if(event.data?.type==="data")window.__dataMessages++;});});
   await page.evaluate(()=>{window.__trial.card.hass=window.__trial.hass;});
-  await frame.waitForFunction(()=>window.__sdkStats.markers>=6);
+  await frame.waitForFunction(()=>window.__dataMessages>0);
+  if(!(await frame.evaluate(()=>window.__sdkStats.markers===2 && window.__sdkStats.markerDetaches===0)))throw Error("Close/reopen lost stable marker updates");
   if(sdkRequests!==2 || (await frame.evaluate(()=>window.__sdkStats.maps))!==1)throw Error("Reopen/queued update regression");
   if(await page.getByRole("link",{name:"HA Map (Fallback)",exact:true}).getAttribute("href")!=="/map-fallback")throw Error("Configured fallback link changed");
   for(const [width,height] of [[1920,1200],[1280,900],[390,844],[844,390]]) {
@@ -82,5 +102,5 @@
   if(unexpectedRequests!==0)throw Error("Unexpected external service requested");
   await page.getByRole("button",{name:"Close map",exact:true}).click();
   if(await page.locator("iframe").count())throw Error("Google frame persisted after Close");
-  return {offline_browser_checks:"passed",sdk_requests_mocked:sdkRequests,external_requests:0,parent_access:"denied",sdk_referrer:"origin-only",google_live_acceptance:"pending actual restricted key"};
+  return {offline_browser_checks:"passed",stable_overlay_updates:"passed",movement_radius_history_unavailable_recovery:"passed",sdk_requests_mocked:sdkRequests,external_requests:0,parent_access:"denied",sdk_referrer:"origin-only",google_live_acceptance:"pending actual restricted key"};
 })

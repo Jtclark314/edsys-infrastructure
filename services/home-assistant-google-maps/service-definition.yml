@@ -1,13 +1,15 @@
 name: home-assistant-google-maps-trial
 description: On-demand primary Google Map with saved Hybrid default and exact native HA fallback
 host: HA VM300 and 9950x
-runtime: Native HA module resource and one Tailscale Serve static file
+runtime: Native HA module resource and versioned Tailscale Serve static files
 ports:
   - "Existing HA frontend; no new listener"
   - "8450 private tailnet HTTPS; renderer only; no Funnel"
 volumes:
   - "HA /config/www/edsys-google-maps/v1.0.2: two deployed immutable parent files"
-  - "9950x private local-share renderer/v1.0.0: one immutable HTML file"
+  - "9950x private local-share renderer/v1.0.0 and v1.0.1: retained immutable HTML files/routes"
+  - "9950x private local-share renderer/v1.0.2: verified wheel/closer-zoom release; retained for rollback"
+  - "9950x private local-share renderer/v1.0.3: active immutable HTML file; keyed persistent markers/overlays"
 environment:
   configuration: Primary /map and hidden legacy route admin-only; original native /map-fallback retains prior access; saved Hybrid default; exact selected locations and renderer URL stay private
   client: Current Chromium with credentialless support and Tailscale
@@ -17,10 +19,10 @@ backup:
   required: true
   paths:
     - Private deployment checkpoint and native HA dashboard/resource backup
-    - Only the dedicated Tailscale Serve route; source rebuilds static files
+    - Only the dedicated versioned Tailscale Serve renderer routes; source rebuilds static files
 monitoring:
   healthcheck: Trusted renderer HTTPS source hash and native HA readback
-  acceptance: Native primary/legacy/fallback and metadata readback exact; Nimo fresh Hybrid default, real viewport-filling imagery, visible HA controls and native fallback verified; 18 JS/5 Python and layout browser checks pass; GPS truth/email delivery/spend unverified
+  acceptance: Native primary/legacy/fallback and metadata readback exact; Nimo fresh Hybrid default, real viewport-filling imagery, visible HA controls and native fallback verified; 18 JS/5 Python and layout browser checks pass; renderer v1.0.2 hash and URL-only/key-preservation checks exact; owner confirmed wheel without Ctrl and closer zoom; actual zoom 20 observed, ceiling 22 not demonstrated; v1.0.3 HTTPS hash/native URL-only readback exact; 18 JS/5 Python and stable-overlay real Chromium/HTTP suites pass; owner confirmed 1/2/H stay steady after refresh/reload and a 15-second observation; GPS truth/email delivery/spend unverified
 restore_notes: Restore original /map config from verified current /map-fallback and saved original metadata through native API; remove only created fallback if authorized; never restore full HA storage/resource lists or reset Serve
 owner: Jeremy
-last_verified: "2026-10-17 (v1.0.2 deployed; primary Hybrid Map and exact native fallback browser-verified)"
+last_verified: "2026-10-17 (parent v1.0.2, renderer v1.0.3 deployed/tested; owner accepted wheel/closer zoom; owner accepted steady markers)"
