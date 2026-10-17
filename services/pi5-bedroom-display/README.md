@@ -1,5 +1,84 @@
 # Pi5 Master Bedroom display pilot
 
+## YouTube installed and 4K Plex test prepared — October 16 evening
+
+YouTube **7.4.4** from the official Kodi Omega repository is installed and
+enabled. Debian's native ARM64 **inputstream.adaptive 21.5.9** and `libwebm1`
+were added; the existing enabled requests 2.31.0 was retained. Kodi reports
+both new add-ons enabled and not broken. Optional inputstreamhelper/PySocks
+were not needed. YouTube has **not been opened**: its setup wizard, Google
+authorization, playback and Premium behavior remain unaccepted.
+
+The official ZIP and its SHA256 sidecar matched
+`d744e5ba2d2b50924a9fa5624f4d209c2be95b97ef1ad1682cafbed160fb428f`.
+Extraction refused an existing destination and checked all 220 members for
+path traversal/symlinks before publishing only the new owned add-on directory.
+An online Addons33 database backup and affected profile settings were captured
+privately first. No live Kodi database was edited. A temporary **loopback-only**
+native EventServer accepted one `UpdateLocalAddons` command without a HELO
+notification. The installer waited for its client to expire before restoring
+EventServer/TCP 9090 off. Native HTTP/HA access was retained; YouTube's own
+normal HTTP helper listens only at **127.0.0.1:50152**. Kodi's PID, media
+identity/play state/position, GUI, HDMI stereo and 1080p60 settings matched
+before and after. No Kodi/HA/Nimo restart or playback operation occurred.
+
+The 9950x Plex server has one dedicated **Pi Playback Tests** personal-video
+library, using `Plex Video Files` / `tv.plex.agents.none`. Its sole directory is
+`/media/downloads/pi-playback-tests` inside Plex, backed by
+`/mnt/media/downloads/pi-playback-tests` on the host. Global dashboard inclusion,
+cinema trailers and preview-thumbnail generation are disabled for this library.
+Existing libraries and server/transcoder settings were retained.
+
+The test item is **synthetic-4k24-hevc-main-sdr-30s**: 3840×2160, 24 fps,
+720 frames, HEVC Main 8-bit BT.709 limited-range SDR, AAC 48 kHz stereo, with
+quiet tones/fades and visible frame/time counters. Plex indexes it as 4K HEVC
+with AAC stereo; it is unplayed. This synthetic baseline does not establish
+real high-bitrate movie, HDR, 60 fps, HDMI or physical playback acceptance.
+
+### Generate the fixture offline
+
+`tools/prepare_4k_fixture.py` uses only local CPU ffmpeg/ffprobe. It limits
+affinity to at most eight logical CPUs with nice 10 and idle I/O, refuses
+existing output, validates the full software decode and three synthetic review
+frames, and writes measured metadata/hashes in a private manifest. It never
+contacts the Pi/Plex, creates a library or plays media. Generated media, frames,
+manifests, account data and recovery copies stay outside Git/RAG.
+
+```bash
+python3 services/pi5-bedroom-display/tools/prepare_4k_fixture.py \
+  --output-dir /private/runtime/pi-4k-fixture
+python3 -m unittest discover -s services/pi5-bedroom-display/tests -q
+```
+
+### Held test sequence
+
+**Wait for Jeremy to say his show is over.** No automatic post-show task exists.
+
+1. Capture the current media identity/progress and TV source before any switch.
+   Open YouTube from Kodi's video add-ons, complete its setup/sign-in privately,
+   and then check basic browsing/playback. Keep Google codes and credentials on
+   the owner's devices. Account linking and Premium/paid-content behavior need
+   their own verification; installation alone proves neither.
+2. In PM4K, select **Pi Playback Tests** and the synthetic item. Start with the
+   existing **1080p60 HDMI output** and Original quality/Direct Play enabled.
+   Confirm the server delivers the 4K HEVC video without video transcoding and
+   Kodi uses the Pi's hardware decoder. A 4K source decoded and scaled to 1080p
+   is a useful test even on a 1080p panel. Record decoder, frame drops/skips,
+   buffering, audio, temperature/throttling and sustained behavior.
+3. After the baseline passes, qualify Phil/camera composition separately, then
+   suitable owner-selected real content. Treat server video transcoding as a
+   different result from Pi 4K decoding. No silent fallback may count as pass.
+4. Only then consider a separately agreed 4K HDMI output trial. The connected LG
+   EDID advertises 2160p input modes; this does **not** prove its physical panel
+   resolution. Confirm the model/panel first and retain a 1080p rollback. HDR,
+   10-bit and 4K60 are later separate qualification cases.
+
+Rollback removes only the newly owned YouTube add-on/data, optional newly added
+native dependency packages if no longer used, and this test library/file. Disable
+the add-on through Kodi before removing its directory. Do not restore an old
+whole Kodi/Plex database over later account or viewing progress; compare current
+ownership and use the narrow native controls first.
+
 ## Deployment checkpoint — October 16 evening
 
 Add-on 0.7.1 is installed with 602 exact file hashes, including 576 unchanged
