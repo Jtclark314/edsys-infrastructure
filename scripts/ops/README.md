@@ -21,7 +21,7 @@ Status: helper scripts for local EdSys operations. Prefer report-only behavior u
 - `edsys-rag-watch-sync.py` - debounced user-service watcher for reviewed `*RAG Summary.md` changes. It triggers the existing `edsys-rag-sync.service`; the five-minute timer remains the fallback.
 - `edsys-rag-enrich-metadata.py` - local-only metadata enrichment builder for `/mnt/ai-store/rag/enrichment/metadata.sqlite`; it reads the clean mirror and never rewrites Obsidian notes.
 - `anythingllm-upload-edsys-rag` - hash-aware uploader for the sole managed AnythingLLM workspace, `EdSys-RAG-Current`. It rejects alternate workspace slugs, removes stale managed attachments, and verifies vectors after every changed upload.
-- `anythingllm-rag-verify.py` - read-only integrity and retrieval gate for `EdSys-RAG-Current`. Quick mode checks the single-workspace contract, settings, manifest parity, vectors, two positive sentinels, and one unrelated negative control; the default full mode evaluates all sanitized golden queries.
+- `anythingllm-rag-verify.py` - read-only integrity and retrieval gate for `EdSys-RAG-Current`. It requires the explicit `litellm` / `edsys-chat-local` Query-mode default and rejects cloud, unknown or inherited model settings. Quick mode checks the single-workspace contract, settings, manifest parity, vectors, two positive sentinels, and one unrelated negative control; the default full mode evaluates all sanitized golden queries.
 - `install-anythingllm-rag-sync.sh` - user-scoped installer for the tracked uploader, verifier, RAG sync service, and five-minute timer. Replaced files are backed up beneath `~/.local/state/edsys-rag-sync/backups/`.
 - `sync-edsys-repos.sh` - non-destructive five-minute fast-forward sync for the three authoritative `/srv/edsys` checkouts. It requires clean trees, tracks `origin/main`, refuses divergence, and never resets, cleans, commits, pushes, or deletes files.
 - `edsys-code-intelligence-index.py` - explicit-allowlist Zoekt builder for committed `HEAD` content. It runs the pinned indexer without network access, preserves the last usable index on refresh failure, and supports five-minute incremental plus weekly clean rebuild units.
@@ -42,6 +42,26 @@ Scheduled task is presentation/delivery only and must not be the sole scheduler.
 Runtime reports and raw eval results stay outside Git under
 `/var/lib/edsys-codex-reports/`, `/var/lib/edsys-rag-eval/`, and
 `/mnt/ai-store/rag/evals/`.
+
+### AnythingLLM local-model policy repair — 2026-10-17
+
+The workspace already selected `edsys-chat-local`; the verifier still expected
+the older cloud default. The verifier now requires the explicit local setting.
+A regression accepts local and rejects cloud, unknown, empty and inherited
+models; all five focused RAG-ops tests pass. The installed full gate passes
+14 positive and 10 negative retrieval cases. The existing sync service also
+completed successfully, including its quick verifier; its timer remains active.
+These checks verify configuration and vector retrieval, not generated answers.
+
+The checker was replaced atomically after a matching-baseline guard and private
+backup. A native workspace API update replaced only the prompt's obsolete cloud
+generator claim with model-neutral wording. All other workspace fields were
+preserved apart from the normal update timestamp. No model route, HA voice
+setting, credential, container or timer definition changed. Private recovery
+copies remain outside Git. Roll back only the checker file and, if needed,
+the recorded prompt field through the native API after comparing current
+state; do not restore the database or change the workspace model to satisfy an
+old checker.
 
 The two report units explicitly put `/home/jeremy/.local/bin` first in `PATH`
 so scheduled checks use the active standalone Codex installation rather than a

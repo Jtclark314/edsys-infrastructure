@@ -8,6 +8,13 @@ AnythingLLM-only model. Individual AnythingLLM workspaces may still have their
 own saved provider/model selection; verify those settings before assuming the
 Compose default controls an existing workspace.
 
+The managed `EdSys-RAG-Current` workspace explicitly uses native LiteLLM with
+`edsys-chat-local` in strict Query mode. The read-only RAG verifier requires
+that exact local model; it does not accept a cloud alias or inherited default.
+Its workspace prompt describes the selected chat model separately from the
+embedding model and vector store. HA conversational voice has its own OpenAI
+backend and is independent of this setting.
+
 - Docker publishes host UI port `3002` only on loopback and the `9950x` LAN address. The exact Tailnet address is provided by the reviewed FreeBind socket proxy in `../../scripts/network/README.md`.
 - Persistent application state and the read-only reviewed RAG source live under `/mnt/ai-store`.
 - Runtime provider and broker settings are read from root-managed files under `/etc/edsys-secrets`; their contents never belong in Git.

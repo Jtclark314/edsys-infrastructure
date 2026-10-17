@@ -19,7 +19,8 @@ EXPECTED_WORKSPACE = {
     "name": "EdSys-RAG-Current",
     "slug": "edsys-rag-current",
     "chatProvider": "litellm",
-    "chatModel": "edsys-chat-cloud",
+    # Preserve the selected local default; reject silent cloud/default drift.
+    "chatModel": "edsys-chat-local",
     "chatMode": "query",
     "topN": 6,
     "similarityThreshold": 0.65,
