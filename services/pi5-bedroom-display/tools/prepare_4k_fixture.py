@@ -52,16 +52,23 @@ def decode_args(source,frame_dir):
     # Both outputs share one software decode: null output consumes every video
     # and audio frame; the other writes only three synthetic review PNGs.
     graph="[0:v:0]split[decoded][sample];[sample]select='eq(n,0)+eq(n,360)+eq(n,719)'[stills]"
-    return ['ffmpeg','-hide_banner','-loglevel','error','-nostdin','-n',
+    return ['ffmpeg','-hide_banner','-loglevel','error','-nostdin','-n','-xerror',
             '-progress','pipe:1','-nostats','-protocol_whitelist','file,pipe',
-            '-hwaccel','none','-threads:v','8','-i',str(source),
+            '-hwaccel','none','-err_detect','explode','-threads:v','8','-i',str(source),
             '-filter_complex_threads','1','-filter_complex',graph,
             '-map','[decoded]','-map','0:a:0','-c:v','wrapped_avframe','-c:a','pcm_s16le',
-            '-f','null',os.devnull,'-map','[stills]','-c:v','png','-threads:v','1',
+            # Preserve source timestamps in the null branch. A guessed output
+            # frame-rate timebase can round distinct MKV timestamps to one DTS.
+            '-fps_mode','passthrough','-enc_time_base:v','-1','-f','null',os.devnull,
+            '-map','[stills]','-c:v','png','-threads:v','1',
             '-fps_mode','vfr',str(frame_dir/'frame-%03d.png')]
 
 
-def validate_probe(probe,decode_progress):
+def validate_probe(probe,decode_progress,decode_stderr):
+    # ffmpeg progress belongs on stdout. At error loglevel any stderr makes
+    # qualification fail, even if a decoder concealed errors and reached EOF.
+    if not isinstance(decode_stderr,str) or decode_stderr.strip():
+        raise ValueError('Software decode reported errors')
     streams=probe.get('streams',[])
     if len(streams)!=2:raise ValueError('Fixture must contain exactly video and audio')
     video=next((x for x in streams if x.get('codec_type')=='video'),{})
@@ -123,7 +130,7 @@ def prepare(output):
         decoded=local_run(decode_args(media,frames),cores)
         probed=local_run(['ffprobe','-v','error','-protocol_whitelist','file,pipe',
                           '-show_streams','-show_format','-of','json',str(media)],cores,timeout=60)
-        probe=json.loads(probed.stdout);video,audio,duration=validate_probe(probe,decoded.stdout)
+        probe=json.loads(probed.stdout);video,audio,duration=validate_probe(probe,decoded.stdout,decoded.stderr)
         pngs=sorted(frames.glob('*.png'))
         if len(pngs)!=3:raise ValueError('Expected three synthetic review frames')
         for p in pngs:
@@ -138,7 +145,8 @@ def prepare(output):
                                'io_class':'idle','x265_params':X265,'preset':'fast','crf':24},
                   'tools':{name:local_run([name,'-version'],cores,60).stdout.splitlines()[0] for name in ['ffmpeg','ffprobe']},
                   'video_stream':video,'audio_stream':audio,'container_seconds':duration,
-                  'software_decode':{'completed':True,'decoded_frames':FRAMES,'audio_decoded':True,'hardware_acceleration':'none'},
+                  'software_decode':{'completed':True,'decoded_frames':FRAMES,'audio_decoded':True,'hardware_acceleration':'none',
+                                     'fail_on_error':True,'error_detection':'explode','error_log_empty':True},
                   'files':{NAME:file_record(media),**{'frames/'+p.name:file_record(p) for p in pngs}},
                   'sample_frame_numbers':[0,360,719],
                   'source_sha256':file_record(Path(__file__))['sha256']}
