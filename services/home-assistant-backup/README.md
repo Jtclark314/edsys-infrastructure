@@ -73,7 +73,13 @@ second backoff and a four-minute total per-call budget. Changed/unsafe content,
 guest semantic failures, incomplete responses and truncation fail immediately.
 Chunks remain one MiB. The export has the existing 30-minute deadline and
 35-minute service timeout; retries do not establish a diagnosis for transient
-QGA failures. Serialize this export with other guest-agent operations.
+QGA failures. Each fixed read takes the remote node3 lock
+`/run/lock/edsys-ha-qga-300.lock` with a ten-second bounded wait. The existing
+knowledge refresh uses the same lock with a two-second wait; lock contention
+returns code 75 without invoking QGA and is eligible only for the collector's
+bounded transport retries. This coordinates these two workers, not every
+possible guest-agent client. Operators must avoid concurrent manual QGA work
+or take that same remote lock. No global host wrapper is installed.
 
 Outer tar validation rejects links, special members, duplicate names and path
 traversal. It never extracts archive members. It checks encrypted component

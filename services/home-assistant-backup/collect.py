@@ -154,7 +154,9 @@ class Transport:
     def __call__(self, payload):
         if not isinstance(payload, dict) or payload.get('action') not in {'inventory', 'describe', 'chunk', 'verify-key'}:
             raise BackupError('invalid_guest_request')
-        args = ['qm', 'guest', 'exec', '300', '--pass-stdin', '1', '--timeout', '90',
+        args = ['flock', '--exclusive', '--wait', '10', '--conflict-exit-code', '75',
+                '/run/lock/edsys-ha-qga-300.lock',
+                'qm', 'guest', 'exec', '300', '--pass-stdin', '1', '--timeout', '90',
                 '--', 'docker', 'exec', '-i', 'hassio_supervisor', 'python3', '-c', self.code]
         command = ['runuser', '-u', 'jeremy', '--', 'ssh', '-o', 'BatchMode=yes',
                    '-o', 'ClearAllForwardings=yes', '-o', 'ConnectTimeout=10',

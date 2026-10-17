@@ -176,6 +176,17 @@ No listener, new network credential or immediate hub call is added to a voice
 turn. If the hub stops refreshing, knowledge fails closed after its freshness
 window; general chat and native home intents remain separate.
 
+The scheduled refresh and HA backup collector serialize their fixed VM300
+commands through remote node3 `/run/lock/edsys-ha-qga-300.lock`. Refresh waits
+at most two seconds for the lock, then exits unsuccessfully with no receiver
+invocation and leaves the prior catalog intact. Its transport timeout is 60
+seconds inside the existing 65-second unit timeout. The next existing timer
+run can refresh normally; catalog freshness still fails closed after 30
+minutes. The collector waits at most ten seconds per attempt and retains its
+bounded read-only retries. This is limited to these two workers: operators
+must avoid concurrent manual QGA work or take the same remote lock. No global
+wrapper, additional credential or unrelated service dependency is added.
+
 ## Installation and configuration
 
 Before change, preserve the existing pipeline and a recovery checkpoint. On

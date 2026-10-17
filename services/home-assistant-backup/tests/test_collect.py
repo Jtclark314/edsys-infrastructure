@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shlex
 import stat
 import subprocess
 from types import SimpleNamespace
@@ -584,6 +585,20 @@ def test_key_never_enters_transport_command(environment):
     environment.args['transport'] = collector.Transport(runner, clock, clock.sleep)
     collector.collect(**environment.args)
     assert 'private-test-recovery-key' not in json.dumps(commands)
+
+
+def test_collector_uses_bounded_shared_remote_lock():
+    calls = []
+    def runner(command, **kwargs):
+        calls.append((command, kwargs))
+        return response([])
+    assert collector.Transport(runner)({'action': 'inventory'}) == []
+    command, options = calls[0]
+    remote = shlex.split(command[-1])
+    assert remote[:7] == ['flock', '--exclusive', '--wait', '10', '--conflict-exit-code',
+                          '75', '/run/lock/edsys-ha-qga-300.lock']
+    assert remote[7:11] == ['qm', 'guest', 'exec', '300']
+    assert options['timeout'] <= 110
 
 
 def test_securetar_unavailable_refuses_key_proof(environment, monkeypatch):

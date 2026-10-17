@@ -49,8 +49,8 @@ def main():
         summary = export(path)
         raw = path.read_bytes()
         payload = {"sha256": hashlib.sha256(raw).hexdigest(), "data": base64.b64encode(zlib.compress(raw, 6)).decode()}
-        command = shlex.join(["qm", "guest", "exec", "300", "--pass-stdin", "1", "--timeout", "45", "--", "docker", "exec", "-i", "homeassistant", "python3", "-c", RECEIVER])
-        process = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ClearAllForwardings=yes", "-o", "ConnectTimeout=10", "pve-node3", command], input=json.dumps(payload), capture_output=True, text=True, timeout=55)
+        command = shlex.join(["flock", "--exclusive", "--wait", "2", "--conflict-exit-code", "75", "/run/lock/edsys-ha-qga-300.lock", "qm", "guest", "exec", "300", "--pass-stdin", "1", "--timeout", "45", "--", "docker", "exec", "-i", "homeassistant", "python3", "-c", RECEIVER])
+        process = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ClearAllForwardings=yes", "-o", "ConnectTimeout=10", "pve-node3", command], input=json.dumps(payload), capture_output=True, text=True, timeout=60)
         if process.returncode:
             raise RuntimeError("Existing hub-to-HA catalog transport failed; no credential fallback")
         result = json.loads(process.stdout)
