@@ -1,0 +1,101 @@
+--- a/omnisette/src/remote_anisette_v3.rs
++++ b/omnisette/src/remote_anisette_v3.rs
+@@ -118,0 +119,17 @@
++// The HTTP client uses http(s); the provisioning socket must use ws(s).
++fn provisioning_websocket_url(base: &str) -> Result<String, AnisetteError> {
++    let mut url = reqwest::Url::parse(base)
++        .map_err(|_| AnisetteError::InvalidArgument("Invalid anisette helper URL".into()))?;
++    let scheme = match url.scheme() {
++        "http" => "ws",
++        "https" => "wss",
++        _ => return Err(AnisetteError::InvalidArgument("Anisette helper must use HTTP or HTTPS".into())),
++    };
++    url.set_scheme(scheme)
++        .map_err(|_| AnisetteError::InvalidArgument("Invalid anisette WebSocket scheme".into()))?;
++    let path = format!("{}/v3/provisioning_session", url.path().trim_end_matches('/'));
++    url.set_path(&path);
++    url.set_fragment(None);
++    Ok(url.into())
++}
++
+@@ -198,0 +216,9 @@
++    }
++
++    fn build_lookup_request(&self, state: &AnisetteState, builder: RequestBuilder) -> RequestBuilder {
++        // Replace the existing header; RequestBuilder.header would append a duplicate.
++        let mut headers = reqwest::header::HeaderMap::new();
++        headers.insert("X-Mme-Client-Info", reqwest::header::HeaderValue::from_static(
++            "<Mac15,7> <macOS;27.0;26A5378j> <com.apple.AuthKit/1 (com.apple.akd/1.0)>",
++        ));
++        self.build_apple_request(state, builder).headers(headers)
+@@ -259 +285 @@
+-        let resp = self.build_apple_request(&state, http_client.get("https://gsa.apple.com/grandslam/GsService2/lookup"))
++        let resp = self.build_lookup_request(&state, http_client.get("https://gsa.apple.com/grandslam/GsService2/lookup"))
+@@ -270 +296 @@
+-        let provision_ws_url = format!("{}/v3/provisioning_session", self.url).replace("https://", "wss://");
++        let provision_ws_url = provisioning_websocket_url(&self.url)?;
+@@ -425,0 +452,64 @@
++
++#[cfg(test)]
++mod transport_tests {
++    use super::provisioning_websocket_url;
++
++    #[test]
++    fn lookup_has_one_desktop_header_and_provisioning_has_one_android_header() {
++        let info = super::LoginClientInfo {
++            ak_context_type: "synthetic-context".into(), client_app_name: "test".into(),
++            client_bundle_id: "synthetic-bundle".into(), mme_client_info: "synthetic-Android".into(),
++            mme_client_info_akd: "synthetic-Android".into(), akd_user_agent: "test-agent".into(),
++            browser_user_agent: "test-agent".into(), hardware_headers: std::collections::HashMap::new(),
++            push_token: None, update_account_bundle_id: "synthetic-update".into(),
++        };
++        let client = super::AnisetteClient { login_info: info, url: "http://helper.invalid".into() };
++        let http = super::make_reqwest().unwrap();
++        let state = super::AnisetteState::new();
++        let lookup = client.build_lookup_request(&state, http.get("https://gsa.apple.com/lookup")).build().unwrap();
++        let provision = client.build_apple_request(&state, http.post("https://gsa.apple.com/provision")).build().unwrap();
++        for request in [&lookup, &provision] {
++            assert_eq!(request.headers().get_all("X-Mme-Client-Info").iter().count(), 1);
++        }
++        assert!(lookup.headers()["X-Mme-Client-Info"].to_str().unwrap().starts_with("<Mac15,7>"));
++        assert_eq!(provision.headers()["X-Mme-Client-Info"], "synthetic-Android");
++    }
++
++    #[test]
++    fn maps_http_and_https_without_duplicate_slashes() {
++        for (input, expected) in [
++            ("http://anisette:6969", "ws://anisette:6969/v3/provisioning_session"),
++            ("http://anisette:6969/", "ws://anisette:6969/v3/provisioning_session"),
++            ("https://example.invalid", "wss://example.invalid/v3/provisioning_session"),
++            ("https://example.invalid/proxy/", "wss://example.invalid/proxy/v3/provisioning_session"),
++        ] {
++            assert_eq!(provisioning_websocket_url(input).unwrap(), expected);
++        }
++    }
++
++    #[test]
++    fn rejects_non_http_schemes() {
++        assert!(provisioning_websocket_url("file:///tmp/helper").is_err());
++        assert!(provisioning_websocket_url("not a url").is_err());
++    }
++
++    #[tokio::test]
++    async fn generated_http_url_completes_local_websocket_handshake() {
++        use futures_util::{SinkExt, StreamExt};
++        use tokio_tungstenite::{accept_async, connect_async, tungstenite::Message};
++        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
++        let address = listener.local_addr().unwrap();
++        let server = tokio::spawn(async move {
++            let (stream, _) = listener.accept().await.unwrap();
++            let mut socket = accept_async(stream).await.unwrap();
++            socket.send(Message::Text("local transport fixture".into())).await.unwrap();
++        });
++        let url = provisioning_websocket_url(&format!("http://{address}")).unwrap();
++        let (mut client, _) = tokio::time::timeout(
++            std::time::Duration::from_secs(3), connect_async(url)
++        ).await.unwrap().unwrap();
++        let message = client.next().await.unwrap().unwrap();
++        assert_eq!(message.into_text().unwrap(), "local transport fixture");
++        server.await.unwrap();
++    }
++}

@@ -8,7 +8,11 @@
   "compiler": "rustc 1.99.1",
   "build_jobs": 4,
   "build_memory_gib": 8,
-  "runtime_image": "sha256:6727a5460db694b4b88bf765e2e13abec4deb73230e1adf88d84a1dcd5182725",
-  "binary_sha256": "f52096a1a5ae9af6acf87832b05e107a81aef69ea1b14d97c8b0f1f65f98747d",
-  "anisette_image": "dadoum/anisette-v3-server@sha256:8577c27cb7592900947960799bf03c79a53bf857ed951e4c48ef6e06c6e0f488"
+  "runtime_image": "sha256:f0dc47553ca150070065000441ca3e0c323df379a29a3d5aac1c1edc50cab731",
+  "binary_sha256": "c1be4bb4da7677a086488282794dc72d34588dbd94bddbf4563fc003b44a8f5e",
+  "anisette_image": "dadoum/anisette-v3-server@sha256:8577c27cb7592900947960799bf03c79a53bf857ed951e4c48ef6e06c6e0f488",
+  "omnisette_transport_patch_sha256": "ed1407f3c019efbc254f40c187675bfd4190f2cd8cc9d22d12d11c3deac04dc3",
+  "exporter_offline_tests": 18,
+  "transport_offline_tests": 4,
+  "exporter_linux_identity_patch_sha256": "23e7e1852ee486ea02c2f51d4f5a61e35a63ade16d74ae6cd8374fe7f5cd18bc"
 }

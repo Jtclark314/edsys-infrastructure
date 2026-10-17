@@ -364,6 +364,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "clearadi"
+version = "1.0.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "cloudkit-derive"
 version = "0.1.0"
 source = "git+https://github.com/stek29/rustpush.git?branch=local%2Fexport-findmy-changes#82dc6f8342176e4f9171b62354cbdd13eaa18b38"
@@ -1950,6 +1957,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "num_threads"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cabcc654086861f9e1bc5115258de62ef92c79b20f4615a1b0cc57c4e82027d4"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "objc"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1981,13 +1997,13 @@ dependencies = [
 [[package]]
 name = "omnisette"
 version = "0.1.0"
-source = "git+https://github.com/stek29/rustpush.git?branch=local%2Fexport-findmy-changes#82dc6f8342176e4f9171b62354cbdd13eaa18b38"
 dependencies = [
  "android-loader",
  "anyhow",
  "async-trait",
  "base64 0.21.7",
  "chrono",
+ "clearadi",
  "dlopen2",
  "futures-util",
  "hex",
@@ -2002,6 +2018,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "simplelog",
  "thiserror",
  "tokio",
  "tokio-tungstenite",
@@ -2952,6 +2969,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
+name = "simplelog"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16257adbfaef1ee58b1363bdc0664c9b8e1e30aed86049635fb5f147d065a9c0"
+dependencies = [
+ "log",
+ "termcolor",
+ "time",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3201,7 +3229,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb87b95ec50ddfa440816d227a17b2ccbdda963a316a727fda0fc4334f7d134"
 dependencies = [
  "deranged",
+ "libc",
  "num-conv",
+ "num_threads",
  "powerfmt",
  "serde_core",
  "time-core",

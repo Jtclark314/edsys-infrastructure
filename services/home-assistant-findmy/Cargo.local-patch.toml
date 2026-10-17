@@ -1,0 +1,5 @@
+[patch."https://github.com/stek29/rustpush.git"]
+omnisette = { path = "vendor/apple-private-apis/omnisette" }
+
+[workspace]
+members = ["vendor/apple-private-apis/omnisette"]

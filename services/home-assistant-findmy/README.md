@@ -1,15 +1,17 @@
 # Find My Linux pilot
 
 Prepared on 9950x, October 17, 2026. Linux exporter build and isolated checks
-pass. Apple authentication, real key export, HA installation and tracker
-freshness remain pending. The owner could not recall the Apple password;
-the current exporter has no QR/passkey sign-in flow. No HA files, integrations,
+pass. A subsequent private sign-in exposed a local helper URL defect before
+Apple password verification; that fix exposed Apple SRP error -80045. A
+matching Linux sign-in identity candidate is installed; owner retry is pending. Real key export, HA installation and tracker freshness remain pending.
+The current exporter has no QR/passkey sign-in flow. No HA files, integrations,
 automations, media or voice settings have been changed by this pilot.
 
 ## Sources and ownership
 
 - Exporter: `stek29/export-findmy`, commit in `pins.json`, with
-  `exporter-privacy.patch`. The checked-in Cargo lock pins transitive sources.
+  `exporter-privacy.patch`, then `exporter-linux-identity.patch`. The checked-in
+  Cargo lock pins transitive sources.
 - HA candidate: `malmeloo/hass-FindMy`, commit in `pins.json`, with
   `hass-findmy-privacy.patch`; its Python dependency is FindMy 0.10.2.
 - Build definitions, patches, launcher and checks belong here. All downloaded
@@ -33,14 +35,24 @@ To reconstruct in a new private build directory:
 
 1. Clone the exporter and HA repositories and check out the full commits in
    `pins.json`. Verify each `git rev-parse HEAD` before applying its patch.
-2. Apply the matching patches using `git apply --unidiff-zero`; copy this `Cargo.lock` into the
-   exporter checkout. Do not generate a new dependency lock during a rebuild.
+2. Apply `exporter-privacy.patch` then `exporter-linux-identity.patch` to the
+   exporter using `git apply --unidiff-zero`; apply the HA privacy patch to its
+   matching checkout. Copy this `Cargo.lock` into the
+   exporter checkout. Copy `apple-private-apis` from the exact recursively checked
+   out RustPush commit in `pins.json` to `vendor/apple-private-apis` under the
+   exporter. Apply `omnisette-transport.patch` there with `--unidiff-zero`, and
+   append `Cargo.local-patch.toml` to the root exporter `Cargo.toml`. This local
+   override keeps the reviewed dependency source patched without mutating a
+   shared/global Cargo cache. Do not generate a new dependency lock in a rebuild.
 3. Build `Dockerfile.builder`. Mount only a private build directory at `/build`
    and public source read-only at `/source`, with user 1000:1000 and the limits
    above. Copy source to `/build/export-findmy`. Run `cargo fetch --locked` in
    a network-enabled fetch container; then use a new network-denied container
-   for `cargo build --release --offline --locked` and
-   `cargo test --release --offline --locked`.
+   for `cargo build -p export-findmy --release --offline --locked`,
+   `cargo test -p export-findmy --release --offline --locked`, and
+   `cargo test -p omnisette --features remote-anisette-v3 --release --offline
+   --locked transport_tests`. The upstream `test_adi` requires live Apple
+   provisioning and is intentionally excluded from credential-free checks.
 4. Make a small image context containing `Dockerfile.runtime` as `Dockerfile`
    and the resulting binary as `export-findmy`; build the runtime image. Never
    use a credentialed directory as a Docker build context.
@@ -68,7 +80,11 @@ password, verification code and device passcode. Non-TTY secret input fails.
 
 The wrapper serializes export attempts with a lock, sets umask 077, uses only
 the private export directory, and stops its local anisette helper when done.
-There are no scheduled runs or automatic login retries.
+There are no scheduled runs or automatic login retries. Helper startup waits
+for local `/v3/client_info` readiness before asking for credentials: 20 attempts,
+each with a one-second curl limit and 0.25-second pause (roughly 25 seconds max).
+`--check-helper` performs only that local readiness check, discards the response
+body and stops the helper afterward; it never starts the Apple account flow.
 
 The self-hosted, digest-pinned Dadoum anisette-v3 helper is named
 `edsys-findmy-anisette` on the dedicated `edsys-findmy-pilot` Docker network,
@@ -83,6 +99,65 @@ root, a 128 MiB `/tmp` tmpfs, `XDG_RUNTIME_DIR=/tmp`, the private anisette direc
 mounted at `/home/Alcoholic/.config/anisette-v3`, one CPU, 768 MiB, pids 128 and
 `--log-driver none`. Start with no port publication. Verify
 `/v3/client_info` inside the container before sign-in.
+
+## Local helper transport repair — October 17, 2026
+
+The owner observed `ErrorGettingAnisette(WsError(Url(UnsupportedUrlScheme)))`
+immediately after the password prompt. Dependency source confirms anisette
+provisioning precedes Apple SRP password verification. It mapped only HTTPS to
+WSS, leaving our local HTTP helper address as an invalid HTTP WebSocket URL.
+
+The pinned local dependency patch maps HTTP→WS and HTTPS→WSS using parsed URLs,
+preserves base paths/trailing slashes, and rejects malformed/non-HTTP schemes
+with sanitized errors. Three offline tests include a real loopback WebSocket
+handshake using the exact generated URL. All 15 exporter tests also pass. The
+built binary hash inside the new pinned image matches the checked release
+artifact. Independent review and installed launcher hash comparison pass.
+
+A full workspace test attempt also included upstream `test_adi`; its external
+Apple lookup was blocked by the network-denied container. No credentials were
+used. The focused offline suite excludes that external test. Lock changes are
+limited to the local Omnisette/ClearADI identities and two test dependencies;
+previous registry/Git dependency versions are unchanged. Existing private
+profile, provisioning and keychain state were preserved, with no account retry
+performed by Codex. The owner was given the same command for one private retry.
+Successful account authentication/export remains unverified.
+
+## Apple SRP identity candidate — October 17, 2026
+
+The next owner screenshot showed `AuthSrpWithMessage(-80045, "This action cannot
+be completed at this time.")`, confirming progress beyond the URL-scheme bug.
+This error does not establish an incorrect password. The merged upstream
+[xtool identity fix](https://github.com/xtool-org/xtool/pull/337) associates this
+error with Android ADI data presented under an Apple-device identity. Its
+[lookup refinement](https://github.com/xtool-org/xtool/pull/348) remains open;
+our adaptation is a tested local candidate, not verified account acceptance.
+
+`exporter-linux-identity.patch` uses the matching Pixel 7/Android 14 AuthKit
+identity for GSA sign-in and helper provisioning, retaining existing service
+capabilities. Only URL-bag discovery uses a desktop identity. Real request
+builder tests prove that this is one replaced header, not two appended values.
+The provider adapter restores the original iPhone base client-info for existing
+delegate/CloudKit/escrow paths; real GSA composers explicitly choose Android.
+Opaque authentication fields are preserved. Existing private profile, trust,
+recovery and prior anisette state are not reset; new helper state uses the
+separate `anisette_state_android_v1` directory.
+
+The launcher prints `20261017-android1` and pins the exact new image/binary in
+`pins.json`. All 18 exporter checks (15 upstream plus 3 identity regressions)
+and 4 transport/header checks pass with networking denied. Image digest/binary
+hash, offline help and local readiness pass. The same binary's
+`--check-anisette` completed provisioning and header retrieval with a disposable
+synthetic profile and no Apple account credentials, then exited before login.
+The wrapper does not expose that diagnostic or alter normal 2FA retries.
+
+Synthetic GSA init and actual-runtime dummy-account probes returned an HTML
+error page rather than a usable Apple authentication result. They are
+inconclusive for account acceptance. Only generated dummy identity/credentials
+were used; no owner account was signed in by these checks, and no diagnostic
+state entered Git. A single private owner retry remains necessary. Do not
+claim password, 2FA, Keychain, real export or HA acceptance from software tests.
+No automatic account retry, identity reset, escrow deletion or HA write occurs.
 
 ## Account effects and sensitive state
 
@@ -132,7 +207,9 @@ opens HA reauthentication rather than retaining the raw Apple password. Tokens
 and tag private keys still live in HA configuration and protected backups.
 Do not enable dependency debug logs or auto-update over these patches.
 
-Use the native FindMy account flow with the integrated anisette provider
+Separately verify current HA authentication compatibility; this exporter-only
+identity repair does not patch FindMy.py. Use the native FindMy account flow
+with the integrated anisette provider
 (leave its optional URL blank). The exporter's V3 helper URL must not simply
 be copied into HA's different remote-anisette protocol. Use native file upload
 for the selected JSON and choose rolling-derived device type. Keep the original
@@ -147,7 +224,8 @@ or physical acceptance is claimed. Keep automations disabled until those tests.
 
 ## Verification and recovery
 
-- Exporter:15 upstream tests; offline runtime help; exact patched input functions
+- Exporter:18 checks (15 upstream plus 3 identity), 4 transport/header checks;
+  offline runtime help; exact patched input functions
   exercised with synthetic PTY input (hidden) and non-TTY input (refused).
 - HA patch:7 offline checks using real FindMy 0.10.2/CPython 3.14.6, exact modified
   methods with small HA framework fakes, and socket connections denied.

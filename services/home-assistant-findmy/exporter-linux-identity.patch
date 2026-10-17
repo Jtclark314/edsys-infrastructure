@@ -1,0 +1,162 @@
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -13 +13 @@
+-use omnisette::{AnisetteClient, ArcAnisetteClient, LoginClientInfo};
++use omnisette::{AnisetteClient, AnisetteError, AnisetteProvider, ArcAnisetteClient, LoginClientInfo};
+@@ -35,0 +36,36 @@
++
++// Linux ADI libraries mint Android data. Keep GSA identity consistent with it,
++// while retaining the existing device profile for delegates/CloudKit/Keychain.
++const LINUX_CLIENT_INFO: &str = "<Pixel 7> <Android;14;UQ1A.240205.002> <com.apple.AuthKit/1 (com.apple.akd/1.0)>";
++
++fn linux_login_info(mut info: LoginClientInfo) -> LoginClientInfo {
++    info.mme_client_info = LINUX_CLIENT_INFO.into();
++    info.mme_client_info_akd = LINUX_CLIENT_INFO.into();
++    info.akd_user_agent = "akd/1.0 CFNetwork/808.1.4".into();
++    info.browser_user_agent = info.akd_user_agent.clone();
++    info.hardware_headers.clear();
++    info
++}
++
++struct LinuxAnisetteProvider {
++    inner: RemoteAnisetteProviderV3,
++    keychain_client_info: String,
++}
++
++impl LinuxAnisetteProvider {
++    fn new(url: String, login_info: LoginClientInfo, path: PathBuf, keychain_client_info: String) -> Self {
++        Self { inner: RemoteAnisetteProviderV3::new(url, login_info, path), keychain_client_info }
++    }
++
++    fn keychain_headers(&self, mut headers: HashMap<String, String>) -> HashMap<String, String> {
++        headers.insert("X-Mme-Client-Info".into(), self.keychain_client_info.clone());
++        headers
++    }
++}
++
++impl AnisetteProvider for LinuxAnisetteProvider {
++    async fn get_anisette_headers(&mut self) -> Result<HashMap<String, String>, AnisetteError> {
++        let headers = self.inner.get_anisette_headers().await?;
++        Ok(self.keychain_headers(headers))
++    }
++}
+@@ -726 +762 @@
+-    account: &AppleAccount<RemoteAnisetteProviderV3>,
++    account: &AppleAccount<LinuxAnisetteProvider>,
+@@ -820,2 +856,2 @@
+-    anisette_client: ArcAnisetteClient<RemoteAnisetteProviderV3>,
+-) -> Result<AppleAccount<RemoteAnisetteProviderV3>, icloud_auth::Error> {
++    anisette_client: ArcAnisetteClient<LinuxAnisetteProvider>,
++) -> Result<AppleAccount<LinuxAnisetteProvider>, icloud_auth::Error> {
+@@ -871 +907 @@
+-    keychain: &KeychainClient<RemoteAnisetteProviderV3>,
++    keychain: &KeychainClient<LinuxAnisetteProvider>,
+@@ -985,0 +1022 @@
++    let mut check_anisette = false;
+@@ -1011,0 +1049,3 @@
++            }
++            "--check-anisette" => {
++                check_anisette = true;
+@@ -1045,0 +1086 @@
++                eprintln!("  --check-anisette        Check helper provisioning without Apple account sign-in");
+@@ -1076 +1117 @@
+-    let anisette_config_path = profile_dir.join("anisette_state");
++    let anisette_config_path = profile_dir.join("anisette_state_android_v1");
+@@ -1079,0 +1121,19 @@
++
++    if check_anisette {
++        // Use the same provider as login, but never prompt for account credentials,
++        // initialize a keystore, sign in, or join a Keychain trust circle.
++        let original_info = loaded_device_profile.profile.get_gsa_config(&APSState::default(), false);
++        let keychain_client_info = original_info.mme_client_info.clone();
++        let login_info = linux_login_info(original_info);
++        let mut client = AnisetteClient::new(LinuxAnisetteProvider::new(
++            anisette_url, login_info, anisette_config_path, keychain_client_info,
++        ));
++        let headers = tokio::time::timeout(
++            std::time::Duration::from_secs(45), client.get_headers(),
++        ).await??;
++        if headers.is_empty() {
++            return Err("Helper returned no authentication headers".into());
++        }
++        eprintln!("Helper provisioning and header retrieval passed; no Apple account sign-in attempted.");
++        return Ok(());
++    }
+@@ -1128,4 +1188,6 @@
+-    let login_info = config.get_gsa_config(&APSState::default(), false);
+-
+-    let anisette_client: ArcAnisetteClient<RemoteAnisetteProviderV3> = Arc::new(Mutex::new(
+-        AnisetteClient::new(RemoteAnisetteProviderV3::new(
++    let original_info = config.get_gsa_config(&APSState::default(), false);
++    let keychain_client_info = original_info.mme_client_info.clone();
++    let login_info = linux_login_info(original_info);
++
++    let anisette_client: ArcAnisetteClient<LinuxAnisetteProvider> = Arc::new(Mutex::new(
++        AnisetteClient::new(LinuxAnisetteProvider::new(
+@@ -1134,0 +1197 @@
++            keychain_client_info,
+@@ -1582,0 +1646,64 @@
++
++    fn synthetic_login_info() -> omnisette::LoginClientInfo {
++        omnisette::LoginClientInfo {
++            ak_context_type: "imessage".into(), client_app_name: "Messages".into(),
++            client_bundle_id: "com.apple.MobileSMS".into(),
++            mme_client_info: "synthetic-iPhone-context".into(),
++            mme_client_info_akd: "synthetic-iPhone-akd".into(),
++            akd_user_agent: "synthetic-old-agent".into(), browser_user_agent: "old-browser".into(),
++            hardware_headers: std::collections::HashMap::from([("synthetic-hardware".into(), "private-placeholder".into())]),
++            push_token: None, update_account_bundle_id: "unchanged-update-context".into(),
++        }
++    }
++
++    #[test]
++    fn linux_identity_matches_adi_without_changing_service_capabilities() {
++        let info = super::linux_login_info(synthetic_login_info());
++        assert_eq!(info.mme_client_info_akd, super::LINUX_CLIENT_INFO);
++        assert_eq!(info.mme_client_info, super::LINUX_CLIENT_INFO);
++        assert_eq!(info.akd_user_agent, "akd/1.0 CFNetwork/808.1.4");
++        assert_eq!(info.browser_user_agent, info.akd_user_agent);
++        assert!(info.hardware_headers.is_empty());
++        assert_eq!(info.client_bundle_id, "com.apple.MobileSMS");
++        assert_eq!(info.update_account_bundle_id, "unchanged-update-context");
++    }
++
++    #[test]
++    fn keychain_adapter_preserves_every_opaque_authentication_field() {
++        let info = super::linux_login_info(synthetic_login_info());
++        let provider = super::LinuxAnisetteProvider::new(
++            "http://helper.invalid".into(), info, "unused-synthetic-state".into(), "synthetic-iPhone-context".into(),
++        );
++        let base = std::collections::HashMap::from([
++            ("X-Mme-Client-Info".into(), super::LINUX_CLIENT_INFO.into()),
++            ("X-Apple-I-MD-M".into(), "synthetic-machine".into()),
++            ("X-Apple-I-MD".into(), "synthetic-otp".into()),
++            ("X-Mme-Device-Id".into(), "synthetic-device".into()),
++        ]);
++        let actual = provider.keychain_headers(base.clone());
++        assert_eq!(actual.len(), base.len());
++        for (key, value) in base {
++            assert_eq!(actual[&key], if key == "X-Mme-Client-Info" { "synthetic-iPhone-context" } else { &value });
++        }
++    }
++
++    #[test]
++    fn gsa_real_header_composer_overrides_keychain_context_with_android() {
++        let info = super::linux_login_info(synthetic_login_info());
++        let data = icloud_auth::anisette::AnisetteData {
++            base_headers: std::collections::HashMap::from([
++                ("X-Mme-Client-Info".into(), "synthetic-iPhone-context".into()),
++                ("X-Apple-I-MD-M".into(), "synthetic-machine".into()),
++                ("X-Apple-I-MD".into(), "synthetic-otp".into()),
++            ]),
++            client_info: info,
++        };
++        for headers in [data.get_gsservice_headers(), data.get_extra_headers(), data.get_circle_headers()] {
++            assert_eq!(headers["X-MMe-Client-Info"], super::LINUX_CLIENT_INFO);
++            assert_eq!(headers["X-Apple-I-MD-M"], "synthetic-machine");
++            assert_eq!(headers["X-Apple-I-MD"], "synthetic-otp");
++        }
++        let cpd = data.get_cpd_data("synthetic-request");
++        assert!(!cpd.contains_key("synthetic-hardware"));
++        assert_eq!(cpd["cbid"].as_string(), Some("com.apple.MobileSMS"));
++    }
