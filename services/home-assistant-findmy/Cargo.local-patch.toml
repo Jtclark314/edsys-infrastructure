@@ -1,5 +1,7 @@
 [patch."https://github.com/stek29/rustpush.git"]
 omnisette = { path = "vendor/apple-private-apis/omnisette" }
+icloud_auth = { path = "vendor/apple-private-apis/icloud-auth" }
 
 [workspace]
-members = ["vendor/apple-private-apis/omnisette"]
+members = ["vendor/apple-private-apis/omnisette", "vendor/apple-private-apis/icloud-auth"]
+exclude = ["vendor/apple-private-apis/icloud-auth/rustcrypto-srp"]

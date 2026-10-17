@@ -1348,7 +1348,6 @@ dependencies = [
 [[package]]
 name = "icloud_auth"
 version = "0.1.0"
-source = "git+https://github.com/stek29/rustpush.git?branch=local%2Fexport-findmy-changes#82dc6f8342176e4f9171b62354cbdd13eaa18b38"
 dependencies = [
  "aes",
  "base64 0.13.1",

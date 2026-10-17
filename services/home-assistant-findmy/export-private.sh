@@ -4,7 +4,7 @@ set -euo pipefail
 umask 077
 ulimit -c 0
 task_root=/home/jeremy/.local/share/edsys-findmy/2026-10-17
-image=sha256:f0dc47553ca150070065000441ca3e0c323df379a29a3d5aac1c1edc50cab731
+image=sha256:9d9bfbd255324eee1b7f9268fce4a4ff469019f4ce208d995e3947980c6e2147
 helper=edsys-findmy-anisette
 if [[ ${1:-} == --check ]]; then
   docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
@@ -47,8 +47,8 @@ if [[ ${1:-} == --check-helper ]]; then
   exit 0
 fi
 echo 'Find My Linux trial — private Apple sign-in'
-echo 'Exporter build: 20261017-android1 (Linux sign-in identity fix)'
-echo 'Apple sign-in identifies the Android helper; Keychain keeps its existing iPhone profile.'
+echo 'Exporter build: 20261017-windows1 (Apple sign-in compatibility fix)'
+echo 'Apple sign-in uses Windows compatibility metadata; the existing CloudKit peer profile is preserved.'
 echo 'This registers an exporter peer with iCloud Keychain and can export all paired tags.'
 echo 'Its local state can contain broader Keychain secrets; it stays private on this host.'
 echo 'Password, verification code and device passcode are hidden. No Docker logs are retained.'

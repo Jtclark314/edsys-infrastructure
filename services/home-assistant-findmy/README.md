@@ -3,7 +3,9 @@
 Prepared on 9950x, October 17, 2026. Linux exporter build and isolated checks
 pass. A subsequent private sign-in exposed a local helper URL defect before
 Apple password verification; that fix exposed Apple SRP error -80045. A
-matching Linux sign-in identity candidate is installed; owner retry is pending. Real key export, HA installation and tracker freshness remain pending.
+Windows compatibility candidate is installed after the Android candidate
+returned HTML. A nonexistent-account negative check reaches Apple's structured
+-20970 rejection; real owner authentication remains pending. Real key export, HA installation and tracker freshness remain pending.
 The current exporter has no QR/passkey sign-in flow. No HA files, integrations,
 automations, media or voice settings have been changed by this pilot.
 
@@ -41,7 +43,8 @@ To reconstruct in a new private build directory:
    exporter checkout. Copy `apple-private-apis` from the exact recursively checked
    out RustPush commit in `pins.json` to `vendor/apple-private-apis` under the
    exporter. Apply `omnisette-transport.patch` there with `--unidiff-zero`, and
-   append `Cargo.local-patch.toml` to the root exporter `Cargo.toml`. This local
+   apply `icloud-auth-response.patch` there too, and append
+   `Cargo.local-patch.toml` to the root exporter `Cargo.toml`. This local
    override keeps the reviewed dependency source patched without mutating a
    shared/global Cargo cache. Do not generate a new dependency lock in a rebuild.
 3. Build `Dockerfile.builder`. Mount only a private build directory at `/build`
@@ -51,7 +54,8 @@ To reconstruct in a new private build directory:
    for `cargo build -p export-findmy --release --offline --locked`,
    `cargo test -p export-findmy --release --offline --locked`, and
    `cargo test -p omnisette --features remote-anisette-v3 --release --offline
-   --locked transport_tests`. The upstream `test_adi` requires live Apple
+   --locked transport_tests`, plus `cargo test -p icloud_auth --lib
+   --features remote-anisette-v3 --release --offline --locked`. The upstream `test_adi` requires live Apple
    provisioning and is intentionally excluded from credential-free checks.
 4. Make a small image context containing `Dockerfile.runtime` as `Dockerfile`
    and the resulting binary as `export-findmy`; build the runtime image. Never
@@ -143,7 +147,7 @@ Opaque authentication fields are preserved. Existing private profile, trust,
 recovery and prior anisette state are not reset; new helper state uses the
 separate `anisette_state_android_v1` directory.
 
-The launcher prints `20261017-android1` and pins the exact new image/binary in
+That first candidate printed `20261017-android1` and pins the exact new image/binary in
 `pins.json`. All 18 exporter checks (15 upstream plus 3 identity regressions)
 and 4 transport/header checks pass with networking denied. Image digest/binary
 hash, offline help and local readiness pass. The same binary's
@@ -158,6 +162,52 @@ were used; no owner account was signed in by these checks, and no diagnostic
 state entered Git. A single private owner retry remains necessary. Do not
 claim password, 2FA, Keychain, real export or HA acceptance from software tests.
 No automatic account retry, identity reset, escrow deletion or HA write occurs.
+
+## Current Windows compatibility build — October 17, 2026
+
+The owner confirmed the Android candidate failed with an HTML/plist decoding
+error. A credential-free control reproduced HTTP503/HTML for Android metadata;
+Windows metadata reached the service. Current primary reports in
+[anisette issue61](https://github.com/Dadoum/anisette-v3-server/issues/61) and
+[iPASide1.2.8](https://github.com/pwnapplehat/iPASide/blob/main/CHANGELOG.md)
+describe the same changing Apple behavior and Windows compatibility route.
+
+Build `20261017-windows1` now uses Windows/AuthKit metadata for GSA and helper
+provisioning, Windows/AOSKit for account delegates, and Windows/sbd for escrow.
+A separate same-type provider preserves the original iPhone CloudKit context;
+both providers read the same stable `anisette_state_windows_v1` identity. The
+existing device profile/peer, old provisioning and recovery files are preserved.
+No get_account_settings call exists in this pinned exporter path. No generic
+RustPush override or cryptographic implementation change was needed.
+
+The local `icloud_auth` patch reports fixed stage/status/response-kind errors
+for HTML or malformed GSA/verification replies, preserving structured Apple
+errors. Successful SRP completion with `hsc=409` goes directly to private code
+entry without requesting a second code. Existing explicit repair/2FA handling
+remains authoritative. GSA connections close after each request; there is no
+automatic account retry. Raw SMS response logging is removed.
+
+All 20 exporter, 22 auth library and 4 transport/header tests pass offline with
+network denied. The auth library suite includes 12 new HTTP/2FA regressions.
+Its old live `gsa_auth` integration example is excluded: it has an outdated
+closure signature and requires an account. No such live account test ran.
+The local auth manifest points SRP back to the exact locked Git source, avoiding
+unrelated nested-workspace dev dependencies. No package versions changed;
+only `icloud_auth` changed from the pinned Git source to its reviewed local copy.
+
+The exact runtime image/binary hashes in `pins.json` match. Fresh anonymous
+helper provisioning/header retrieval passes. A synthetic SRP-init probe gets
+HTTP200 and structured Apple -20970; the actual new binary, with a generated
+nonexistent account and dummy input only, gets the expected "Your account
+information was entered incorrectly" rejection. This proves progress beyond
+HTML/-80045 for the synthetic case; it does not prove owner password, 2FA,
+delegate, escrow, real export or HA acceptance. No real account was used in
+diagnostics. The installed launcher help and local readiness checks pass.
+
+Owner was given the unchanged private terminal command for one retry, with
+`20261017-windows1` required in its opening text. No HA file/restart/device
+change or scheduled continuation occurred. A later real export still needs
+one-tag validation, protected HA backup and independent HA auth qualification.
 
 ## Account effects and sensitive state
 
@@ -224,7 +274,8 @@ or physical acceptance is claimed. Keep automations disabled until those tests.
 
 ## Verification and recovery
 
-- Exporter:18 checks (15 upstream plus 3 identity), 4 transport/header checks;
+- Exporter:20 checks (15 upstream plus 5 identity), 22 auth library checks,
+  4 transport/header checks;
   offline runtime help; exact patched input functions
   exercised with synthetic PTY input (hidden) and non-TTY input (refused).
 - HA patch:7 offline checks using real FindMy 0.10.2/CPython 3.14.6, exact modified

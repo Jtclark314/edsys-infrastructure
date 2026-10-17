@@ -3,16 +3,16 @@
 @@ -13 +13 @@
 -use omnisette::{AnisetteClient, ArcAnisetteClient, LoginClientInfo};
 +use omnisette::{AnisetteClient, AnisetteError, AnisetteProvider, ArcAnisetteClient, LoginClientInfo};
-@@ -35,0 +36,36 @@
-+
-+// Linux ADI libraries mint Android data. Keep GSA identity consistent with it,
-+// while retaining the existing device profile for delegates/CloudKit/Keychain.
-+const LINUX_CLIENT_INFO: &str = "<Pixel 7> <Android;14;UQ1A.240205.002> <com.apple.AuthKit/1 (com.apple.akd/1.0)>";
+@@ -36,0 +37,37 @@
++// Apple currently accepts Windows client-info for Linux-generated ADI data.
++// Keep account/delegate and CloudKit contexts separate; private peer identity stays intact.
++const LINUX_CLIENT_INFO: &str = "<PC> <Windows;6.2(0,0);9200> <com.apple.AuthKit/1 (com.apple.akd/1.0)>";
++const WINDOWS_DELEGATE_INFO: &str = "<PC> <Windows;6.2(0,0);9200> <com.apple.AOSKit/282 (com.apple.accountsd/113)>";
 +
 +fn linux_login_info(mut info: LoginClientInfo) -> LoginClientInfo {
 +    info.mme_client_info = LINUX_CLIENT_INFO.into();
 +    info.mme_client_info_akd = LINUX_CLIENT_INFO.into();
-+    info.akd_user_agent = "akd/1.0 CFNetwork/808.1.4".into();
++    info.akd_user_agent = "akd/1.0 CFNetwork/978.0.7 Darwin/18.7.0".into();
 +    info.browser_user_agent = info.akd_user_agent.clone();
 +    info.hardware_headers.clear();
 +    info
@@ -40,38 +40,47 @@
 +        Ok(self.keychain_headers(headers))
 +    }
 +}
-@@ -726 +762 @@
++
+@@ -196,0 +234,8 @@
++    }
++
++    fn get_adi_mme_info(&self, for_item: &str, _require_mac: bool) -> String {
++        if for_item.starts_with("com.apple.AuthKit/1 (com.apple.sbd/") {
++            format!("<PC> <Windows;6.2(0,0);9200> <{for_item}>")
++        } else {
++            self.get_mme_clientinfo(for_item)
++        }
+@@ -726 +771 @@
 -    account: &AppleAccount<RemoteAnisetteProviderV3>,
 +    account: &AppleAccount<LinuxAnisetteProvider>,
-@@ -820,2 +856,2 @@
+@@ -820,2 +865,2 @@
 -    anisette_client: ArcAnisetteClient<RemoteAnisetteProviderV3>,
 -) -> Result<AppleAccount<RemoteAnisetteProviderV3>, icloud_auth::Error> {
 +    anisette_client: ArcAnisetteClient<LinuxAnisetteProvider>,
 +) -> Result<AppleAccount<LinuxAnisetteProvider>, icloud_auth::Error> {
-@@ -871 +907 @@
+@@ -871 +916 @@
 -    keychain: &KeychainClient<RemoteAnisetteProviderV3>,
 +    keychain: &KeychainClient<LinuxAnisetteProvider>,
-@@ -985,0 +1022 @@
+@@ -985,0 +1031 @@
 +    let mut check_anisette = false;
-@@ -1011,0 +1049,3 @@
+@@ -1011,0 +1058,3 @@
 +            }
 +            "--check-anisette" => {
 +                check_anisette = true;
-@@ -1045,0 +1086 @@
+@@ -1045,0 +1095 @@
 +                eprintln!("  --check-anisette        Check helper provisioning without Apple account sign-in");
-@@ -1076 +1117 @@
+@@ -1076 +1126 @@
 -    let anisette_config_path = profile_dir.join("anisette_state");
-+    let anisette_config_path = profile_dir.join("anisette_state_android_v1");
-@@ -1079,0 +1121,19 @@
++    let anisette_config_path = profile_dir.join("anisette_state_windows_v1");
+@@ -1079,0 +1130,18 @@
 +
 +    if check_anisette {
 +        // Use the same provider as login, but never prompt for account credentials,
 +        // initialize a keystore, sign in, or join a Keychain trust circle.
 +        let original_info = loaded_device_profile.profile.get_gsa_config(&APSState::default(), false);
-+        let keychain_client_info = original_info.mme_client_info.clone();
 +        let login_info = linux_login_info(original_info);
 +        let mut client = AnisetteClient::new(LinuxAnisetteProvider::new(
-+            anisette_url, login_info, anisette_config_path, keychain_client_info,
++            anisette_url, login_info, anisette_config_path, WINDOWS_DELEGATE_INFO.into(),
 +        ));
 +        let headers = tokio::time::timeout(
 +            std::time::Duration::from_secs(45), client.get_headers(),
@@ -82,7 +91,7 @@
 +        eprintln!("Helper provisioning and header retrieval passed; no Apple account sign-in attempted.");
 +        return Ok(());
 +    }
-@@ -1128,4 +1188,6 @@
+@@ -1128,4 +1196,6 @@
 -    let login_info = config.get_gsa_config(&APSState::default(), false);
 -
 -    let anisette_client: ArcAnisetteClient<RemoteAnisetteProviderV3> = Arc::new(Mutex::new(
@@ -93,9 +102,32 @@
 +
 +    let anisette_client: ArcAnisetteClient<LinuxAnisetteProvider> = Arc::new(Mutex::new(
 +        AnisetteClient::new(LinuxAnisetteProvider::new(
-@@ -1134,0 +1197 @@
-+            keychain_client_info,
-@@ -1582,0 +1646,64 @@
+@@ -1134 +1204,2 @@
+-            anisette_config_path,
++            anisette_config_path.clone(),
++            WINDOWS_DELEGATE_INFO.into(),
+@@ -1181,0 +1253,8 @@
++    // Account refresh/delegates keep the Windows PET context. CloudKit retains
++    // the original profile context and reads the same already-provisioned ADI identity.
++    let keychain_anisette_client: ArcAnisetteClient<LinuxAnisetteProvider> = Arc::new(Mutex::new(
++        AnisetteClient::new(LinuxAnisetteProvider::new(
++            anisette_url.clone(), login_info.clone(), anisette_config_path, keychain_client_info,
++        )),
++    ));
++
+@@ -1211 +1290 @@
+-            anisette: anisette_client.clone(),
++            anisette: keychain_anisette_client.clone(),
+@@ -1217 +1296 @@
+-            anisette: anisette_client.clone(),
++            anisette: keychain_anisette_client.clone(),
+@@ -1300 +1379 @@
+-        anisette: anisette_client.clone(),
++        anisette: keychain_anisette_client.clone(),
+@@ -1307 +1386 @@
+-        anisette: anisette_client.clone(),
++        anisette: keychain_anisette_client.clone(),
+@@ -1582,0 +1662,104 @@
 +
 +    fn synthetic_login_info() -> omnisette::LoginClientInfo {
 +        omnisette::LoginClientInfo {
@@ -110,11 +142,11 @@
 +    }
 +
 +    #[test]
-+    fn linux_identity_matches_adi_without_changing_service_capabilities() {
++    fn windows_login_identity_preserves_service_capabilities() {
 +        let info = super::linux_login_info(synthetic_login_info());
 +        assert_eq!(info.mme_client_info_akd, super::LINUX_CLIENT_INFO);
 +        assert_eq!(info.mme_client_info, super::LINUX_CLIENT_INFO);
-+        assert_eq!(info.akd_user_agent, "akd/1.0 CFNetwork/808.1.4");
++        assert_eq!(info.akd_user_agent, "akd/1.0 CFNetwork/978.0.7 Darwin/18.7.0");
 +        assert_eq!(info.browser_user_agent, info.akd_user_agent);
 +        assert!(info.hardware_headers.is_empty());
 +        assert_eq!(info.client_bundle_id, "com.apple.MobileSMS");
@@ -141,7 +173,7 @@
 +    }
 +
 +    #[test]
-+    fn gsa_real_header_composer_overrides_keychain_context_with_android() {
++    fn gsa_real_header_composer_uses_windows_account_context() {
 +        let info = super::linux_login_info(synthetic_login_info());
 +        let data = icloud_auth::anisette::AnisetteData {
 +            base_headers: std::collections::HashMap::from([
@@ -159,4 +191,44 @@
 +        let cpd = data.get_cpd_data("synthetic-request");
 +        assert!(!cpd.contains_key("synthetic-hardware"));
 +        assert_eq!(cpd["cbid"].as_string(), Some("com.apple.MobileSMS"));
++    }
++
++    #[test]
++    fn account_and_cloudkit_adapters_keep_distinct_contexts_and_same_opaque_fields() {
++        let info = super::linux_login_info(synthetic_login_info());
++        let delegate = super::LinuxAnisetteProvider::new(
++            "http://helper.invalid".into(), info.clone(), "same-synthetic-state".into(), super::WINDOWS_DELEGATE_INFO.into(),
++        );
++        let cloudkit = super::LinuxAnisetteProvider::new(
++            "http://helper.invalid".into(), info, "same-synthetic-state".into(), "original-iPhone-context".into(),
++        );
++        let base = std::collections::HashMap::from([
++            ("X-Mme-Client-Info".into(), super::LINUX_CLIENT_INFO.into()),
++            ("X-Apple-I-MD-M".into(), "synthetic-machine".into()),
++            ("X-Apple-I-MD".into(), "synthetic-otp".into()),
++        ]);
++        let account = delegate.keychain_headers(base.clone());
++        let ck = cloudkit.keychain_headers(base);
++        assert_eq!(account["X-Mme-Client-Info"], super::WINDOWS_DELEGATE_INFO);
++        assert_eq!(ck["X-Mme-Client-Info"], "original-iPhone-context");
++        for key in ["X-Apple-I-MD-M", "X-Apple-I-MD"] { assert_eq!(account[key], ck[key]); }
++    }
++
++    #[test]
++    fn escrow_windows_override_preserves_cloudkit_and_peer_identity() {
++        use rustpush::OSConfig;
++        let profile = super::DeviceProfile {
++            name: "synthetic-peer".into(), serial: "synthetic-serial".into(),
++            model: "iPhone15,2".into(), model_class: "iPhone".into(),
++            device_uuid: "synthetic-device".into(), udid: "synthetic-udid".into(),
++            os_version: "17.4".into(), build: "21E219".into(),
++            cfnetwork_version: "1494.0.7".into(), darwin_version: "23.4.0".into(),
++        };
++        let token="com.apple.AuthKit/1 (com.apple.sbd/638.100.48)";
++        assert_eq!(profile.get_adi_mme_info(token, false), format!("<PC> <Windows;6.2(0,0);9200> <{token}>"));
++        let cloudkit="com.apple.cloudkit.CloudKitDaemon/1970 (com.apple.cloudd/1970)";
++        assert_eq!(profile.get_adi_mme_info(cloudkit, false), profile.get_mme_clientinfo(cloudkit));
++        assert!(profile.get_mme_clientinfo(cloudkit).starts_with("<iPhone15,2> <iPhone OS;17.4;21E219>"));
++        assert_eq!(profile.get_device_uuid(), "synthetic-device");
++        assert_eq!(profile.get_udid(), "synthetic-udid");
 +    }

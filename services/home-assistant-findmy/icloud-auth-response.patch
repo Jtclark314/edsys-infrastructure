@@ -1,0 +1,352 @@
+--- a/icloud-auth/Cargo.toml
++++ b/icloud-auth/Cargo.toml
+@@ -16 +16 @@
+-srp = { version = "0.6.0", path = "./rustcrypto-srp" }
++srp = { version = "0.6.0", git = "https://github.com/stek29/rustpush.git", branch = "local/export-findmy-changes" }
+--- a/icloud-auth/src/lib.rs
++++ b/icloud-auth/src/lib.rs
+@@ -14,0 +15,8 @@
++    #[error("Apple sign-in {stage}: HTTP {http_status}, {kind}")]
++    GsaResponse {
++        stage: &'static str,
++        http_status: u16,
++        kind: &'static str,
++    },
++    #[error("Apple sign-in {stage}: transport request failed")]
++    GsaTransport { stage: &'static str },
+--- a/icloud-auth/src/client.rs
++++ b/icloud-auth/src/client.rs
+@@ -38,0 +39,152 @@
++#[cfg(test)]
++mod gsa_response_tests {
++    use super::*;
++
++    fn dictionary(entries: impl IntoIterator<Item = (&'static str, Value)>) -> Dictionary {
++        entries.into_iter().map(|(key, value)| (key.to_owned(), value)).collect()
++    }
++
++    fn wire_response(status: Dictionary) -> Vec<u8> {
++        let root = dictionary([("Response", Value::Dictionary(dictionary([
++            ("Status", Value::Dictionary(status)),
++            ("synthetic-payload", Value::String("private-response-marker".into())),
++        ])))]);
++        let mut bytes = Vec::new();
++        plist::to_writer_xml(&mut bytes, &root).unwrap();
++        bytes
++    }
++
++    #[test]
++    fn html_200_and_503_produce_sanitized_stage_and_status_errors() {
++        for status in [200, 503] {
++            let error = decode_gsa_response(
++                status, b"<html>private-response-marker</html>", "SRP init",
++            ).unwrap_err();
++            let rendered = format!("{error:?} {error}");
++            assert!(rendered.contains("SRP init"));
++            assert!(rendered.contains(&status.to_string()));
++            assert!(!rendered.contains("private-response-marker"));
++            assert!(matches!(error, Error::GsaResponse { .. }));
++        }
++    }
++
++    #[test]
++    fn malformed_plist_cannot_echo_response_text() {
++        let error = decode_gsa_response(
++            200, b"<?xml version=\"1.0\"?><plist><dict><key>private-response-marker</key>", "SRP complete",
++        ).unwrap_err();
++        assert!(matches!(error, Error::GsaResponse { kind: "invalid GrandSlam plist", .. }));
++        assert!(!format!("{error:?} {error}").contains("private-response-marker"));
++    }
++
++    #[test]
++    fn structured_apple_error_survives_http_401() {
++        let status = dictionary([
++            ("ec", Value::Integer((-20101).into())),
++            ("em", Value::String("Synthetic Apple rejection".into())),
++        ]);
++        let error = decode_gsa_response(401, &wire_response(status.clone()), "SRP complete").unwrap_err();
++        assert!(matches!(error, Error::AuthSrpWithMessage(-20101, message)
++            if message == "Synthetic Apple rejection"));
++
++        let mut unwrapped = Vec::new();
++        plist::to_writer_xml(&mut unwrapped, &dictionary([("Status", Value::Dictionary(status))])).unwrap();
++        assert!(matches!(decode_gsa_response(401, &unwrapped, "SRP complete"),
++            Err(Error::AuthSrpWithMessage(-20101, _))));
++    }
++
++    #[test]
++    fn missing_or_invalid_protocol_code_cannot_authenticate() {
++        for status in [Dictionary::new(), dictionary([("ec", Value::String("0".into()))])] {
++            assert!(matches!(decode_gsa_response(200, &wire_response(status), "SRP init"),
++                Err(Error::GsaResponse { kind: "missing or invalid GrandSlam status code", .. })));
++        }
++        assert!(matches!(check_protocol_error(&Dictionary::new()), Err(Error::Parse)));
++    }
++
++    #[test]
++    fn unsuccessful_http_with_zero_protocol_code_cannot_authenticate() {
++        let bytes = wire_response(dictionary([("ec", Value::Integer(0.into()))]));
++        assert!(matches!(decode_gsa_response(503, &bytes, "SRP init"),
++            Err(Error::GsaResponse { kind: "unsuccessful GrandSlam HTTP response", .. })));
++        assert!(decode_gsa_response(200, &bytes, "SRP init").is_ok());
++    }
++
++    #[test]
++    fn missing_response_wrapper_cannot_authenticate() {
++        let mut bytes = Vec::new();
++        plist::to_writer_xml(&mut bytes, &dictionary([("ec", Value::Integer(0.into()))])).unwrap();
++        assert!(matches!(decode_gsa_response(200, &bytes, "SRP init"),
++            Err(Error::GsaResponse { kind: "missing GrandSlam response map", .. })));
++    }
++
++    #[test]
++    fn hsc_409_enters_existing_code_verification_without_trigger() {
++        let status = dictionary([("ec", Value::Integer(0.into())), ("hsc", Value::Integer(409.into()))]);
++        assert!(matches!(completed_login_state(&status), LoginState::Needs2FAVerification));
++    }
++
++    #[test]
++    fn explicit_second_factor_and_repair_preserve_existing_behavior() {
++        for (method, expected) in [
++            ("trustedDeviceSecondaryAuth", "device"),
++            ("secondaryAuth", "sms"),
++            ("repair", "repair"),
++        ] {
++            let status = dictionary([
++                ("au", Value::String(method.into())), ("hsc", Value::Integer(409.into())),
++            ]);
++            match (completed_login_state(&status), expected) {
++                (LoginState::NeedsDevice2FA, "device") | (LoginState::NeedsSMS2FA, "sms") => {},
++                (LoginState::NeedsExtraStep(step), "repair") if step == "repair" => {},
++                (state, _) => panic!("unexpected state {state:?}"),
++            }
++        }
++    }
++
++    #[test]
++    fn ordinary_success_is_not_misclassified_as_an_already_sent_code() {
++        for status in [Dictionary::new(), dictionary([("hsc", Value::Integer(200.into()))])] {
++            assert!(matches!(completed_login_state(&status), LoginState::LoggedIn));
++        }
++    }
++
++    fn validation_wire(status: Dictionary) -> Vec<u8> {
++        let mut bytes = Vec::new();
++        plist::to_writer_xml(&mut bytes, &dictionary([("Status", Value::Dictionary(status))])).unwrap();
++        bytes
++    }
++
++    #[test]
++    fn trusted_verification_accepts_existing_top_level_status_format() {
++        let body = validation_wire(dictionary([("ec", Value::Integer(0.into()))]));
++        assert!(decode_gsa_validation_response(200, &body).is_ok());
++        assert!(matches!(decode_gsa_validation_response(503, &body),
++            Err(Error::GsaResponse { http_status: 503, .. })));
++    }
++
++    #[test]
++    fn trusted_bad_code_keeps_structured_apple_error_and_sms_keeps_bad_code_error() {
++        let body = validation_wire(dictionary([
++            ("ec", Value::Integer((-21669).into())),
++            ("em", Value::String("Synthetic incorrect code".into())),
++        ]));
++        assert!(matches!(decode_gsa_validation_response(400, &body),
++            Err(Error::AuthSrpWithMessage(-21669, message)) if message == "Synthetic incorrect code"));
++        assert!(matches!(check_sms_verification_http(400), Err(Error::Bad2faCode)));
++        assert!(check_sms_verification_http(200).is_ok());
++    }
++
++    #[test]
++    fn trusted_verification_html_503_cannot_echo_response_text() {
++        let error = decode_gsa_validation_response(
++            503, b"<html>private-verification-marker</html>",
++        ).unwrap_err();
++        let rendered = format!("{error:?} {error}");
++        assert!(rendered.contains("trusted-device verification"));
++        assert!(rendered.contains("503"));
++        assert!(!rendered.contains("private-verification-marker"));
++        assert!(matches!(error, Error::GsaResponse { .. }));
++    }
++}
++
+@@ -414,8 +566,101 @@
+-async fn parse_response(res: Result<Response, reqwest::Error>) -> Result<plist::Dictionary, crate::Error> {
+-    let res = res?.text().await?;
+-    let res: plist::Dictionary = plist::from_bytes(res.as_bytes())?;
+-    let res: plist::Value = res.get("Response").unwrap().to_owned();
+-    match res {
+-        plist::Value::Dictionary(dict) => Ok(dict),
+-        _ => Err(crate::Error::Parse),
+-    }
++fn check_protocol_error(response: &Dictionary) -> Result<(), Error> {
++    let status = match response.get("Status") {
++        Some(Value::Dictionary(status)) => status,
++        Some(_) => return Err(Error::Parse),
++        None => response,
++    };
++    let code = status.get("ec").and_then(Value::as_signed_integer).ok_or(Error::Parse)?;
++    if code != 0 {
++        return Err(Error::AuthSrpWithMessage(
++            code,
++            status.get("em").and_then(Value::as_string)
++                .unwrap_or("Apple authentication failed").to_owned(),
++        ));
++    }
++    Ok(())
++}
++
++fn decode_gsa_plist(http_status: u16, body: &[u8], stage: &'static str) -> Result<Dictionary, Error> {
++    let failure = |kind| Error::GsaResponse { stage, http_status, kind };
++    // Deserializer errors can contain response text. Never expose the body through them.
++    let root: Value = plist::from_bytes(body).map_err(|_| {
++        let prefix = body.iter().copied().skip_while(u8::is_ascii_whitespace)
++            .take(16).map(|byte| byte.to_ascii_lowercase()).collect::<Vec<_>>();
++        failure(if prefix.starts_with(b"<html") || prefix.starts_with(b"<!doctype html") {
++            "HTML response instead of a GrandSlam plist"
++        } else {
++            "invalid GrandSlam plist"
++        })
++    })?;
++    root.into_dictionary().ok_or_else(|| failure("invalid GrandSlam response map"))
++}
++
++fn decode_gsa_response(http_status: u16, body: &[u8], stage: &'static str) -> Result<Dictionary, Error> {
++    let failure = |kind| Error::GsaResponse { stage, http_status, kind };
++    let root = decode_gsa_plist(http_status, body, stage)?;
++    let response = match root.get("Response") {
++        Some(Value::Dictionary(response)) => response,
++        Some(_) => return Err(failure("invalid GrandSlam response map")),
++        None => {
++            // Apple sometimes sends a structured error without the Response wrapper.
++            if let Err(error @ Error::AuthSrpWithMessage(_, _)) = check_protocol_error(&root) {
++                return Err(error);
++            }
++            return Err(failure("missing GrandSlam response map"));
++        }
++    };
++    check_protocol_error(response).map_err(|error| match error {
++        Error::Parse => failure("missing or invalid GrandSlam status code"),
++        other => other,
++    })?;
++    if !(200..300).contains(&http_status) {
++        return Err(failure("unsuccessful GrandSlam HTTP response"));
++    }
++    Ok(response.clone())
++}
++
++fn decode_gsa_validation_response(http_status: u16, body: &[u8]) -> Result<Dictionary, Error> {
++    const STAGE: &str = "trusted-device verification";
++    let response = decode_gsa_plist(http_status, body, STAGE)?;
++    check_protocol_error(&response).map_err(|error| match error {
++        Error::Parse => Error::GsaResponse {
++            stage: STAGE, http_status, kind: "missing or invalid GrandSlam status code",
++        },
++        other => other,
++    })?;
++    if !(200..300).contains(&http_status) {
++        return Err(Error::GsaResponse {
++            stage: STAGE, http_status, kind: "unsuccessful GrandSlam HTTP response",
++        });
++    }
++    Ok(response)
++}
++
++fn check_sms_verification_http(http_status: u16) -> Result<(), Error> {
++    if http_status != 200 {
++        return Err(Error::Bad2faCode);
++    }
++    Ok(())
++}
++
++async fn parse_response(res: Result<Response, reqwest::Error>, stage: &'static str) -> Result<Dictionary, Error> {
++    let res = res.map_err(|_| Error::GsaTransport { stage })?;
++    let http_status = res.status().as_u16();
++    let body = res.bytes().await.map_err(|_| Error::GsaTransport { stage })?;
++    decode_gsa_response(http_status, &body, stage)
++}
++
++fn completed_login_state(status: &Dictionary) -> LoginState {
++    if let Some(Value::String(method)) = status.get("au") {
++        return match method.as_str() {
++            "trustedDeviceSecondaryAuth" => LoginState::NeedsDevice2FA,
++            "secondaryAuth" => LoginState::NeedsSMS2FA,
++            other => LoginState::NeedsExtraStep(other.to_owned()),
++        };
++    }
++    // A successful SRP complete may itself push the trusted-device code. Do not
++    // trigger another code or proceed as authenticated before that code is entered.
++    if status.get("hsc").and_then(Value::as_signed_integer) == Some(409) {
++        return LoginState::Needs2FAVerification;
++    }
++    LoginState::LoggedIn
+@@ -429,0 +675,6 @@
++            // Apple's GSA edge can reject later requests on a reused connection.
++            .pool_max_idle_per_host(0)
++            .default_headers(HeaderMap::from_iter([(
++                reqwest::header::CONNECTION,
++                HeaderValue::from_static("close"),
++            )]))
+@@ -1054 +1305 @@
+-        let res = parse_response(res).await?;
++        let res = parse_response(res, "SRP init").await?;
+@@ -1117 +1368 @@
+-        let res = parse_response(res).await?;
++        let res = parse_response(res, "SRP complete").await?;
+@@ -1150,9 +1401 @@
+-        if let Some(plist::Value::String(s)) = status.get("au") {
+-            return match s.as_str() {
+-                "trustedDeviceSecondaryAuth" => Ok(LoginState::NeedsDevice2FA),
+-                "secondaryAuth" => Ok(LoginState::NeedsSMS2FA),
+-                _unk => Ok(LoginState::NeedsExtraStep(_unk.to_string()))
+-            }
+-        }
+-
+-        Ok(LoginState::LoggedIn)
++        Ok(completed_login_state(status))
+@@ -1241 +1484 @@
+-            .send().await?;
++            .send().await.map_err(|_| Error::GsaTransport { stage: "2FA configuration" })?;
+@@ -1247 +1490,7 @@
+-        let resp = req.bytes().await?;
++        if !(200..300).contains(&status) {
++            return Err(Error::GsaResponse {
++                stage: "2FA configuration", http_status: status,
++                kind: "unsuccessful authentication HTTP response",
++            });
++        }
++        let resp = req.bytes().await.map_err(|_| Error::GsaTransport { stage: "2FA configuration" })?;
+@@ -1317,2 +1566,3 @@
+-            .send().await?;
+-
++            .send().await.map_err(|_| Error::GsaTransport { stage: "trusted-device verification" })?;
++
++        let http_status = res.status().as_u16();
+@@ -1320,5 +1570,2 @@
+-
+-        let res: plist::Dictionary =
+-            plist::from_bytes(res.text().await?.as_bytes())?;
+-
+-        Self::check_error(&res)?;
++        let body = res.bytes().await.map_err(|_| Error::GsaTransport { stage: "trusted-device verification" })?;
++        decode_gsa_validation_response(http_status, &body)?;
+@@ -1377,4 +1624 @@
+-        if res.status() != 200 {
+-            error!("Security code failed, response: {}", res.text().await?);
+-            return Err(Error::Bad2faCode);
+-        }
++        check_sms_verification_http(res.status().as_u16())?;
+@@ -1415,13 +1659 @@
+-        let res = match res.get("Status") {
+-            Some(plist::Value::Dictionary(d)) => d,
+-            _ => &res,
+-        };
+-
+-        if res.get("ec").unwrap().as_signed_integer().unwrap() != 0 {
+-            return Err(Error::AuthSrpWithMessage(
+-                res.get("ec").unwrap().as_signed_integer().unwrap(),
+-                res.get("em").unwrap().as_string().unwrap().to_owned(),
+-            ));
+-        }
+-
+-        Ok(())
++        check_protocol_error(res)
