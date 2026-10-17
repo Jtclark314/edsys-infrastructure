@@ -29,8 +29,12 @@ export function validateConfig(config) {
   const key = (config.api_key || "").trim();
   if (key && !KEY_PATTERN.test(key)) throw Error("Check the Google browser key format");
   if (config.hours_to_show !== undefined && config.hours_to_show !== 2) throw Error("This trial is limited to two hours of history");
+  const mapType = config.default_map_type === undefined ? "roadmap" : config.default_map_type;
+  if (!["roadmap","satellite","hybrid"].includes(mapType)) throw Error("Choose Road, Satellite or Hybrid as the default map style");
+  const fallback = config.fallback_path === undefined ? "/map" : config.fallback_path;
+  if (!["/map","/map-fallback"].includes(fallback)) throw Error("Use /map or /map-fallback as the HA map fallback");
   const renderer = config.renderer_url ? rendererURL(config.renderer_url).href : "";
-  return {type: config.type, title: String(config.title || "Google Maps Trial").slice(0,80), entities: entities.map(item => ({entity: item.entity, ...(item.name ? {name:item.name} : {})})), hours_to_show: 2, api_key: key, renderer_url: renderer};
+  return {type: config.type, title: String(config.title || "Google Maps Trial").slice(0,80), entities: entities.map(item => ({entity: item.entity, ...(item.name ? {name:item.name} : {})})), hours_to_show: 2, api_key: key, renderer_url: renderer, default_map_type: mapType, fallback_path: fallback};
 }
 
 export function coordinates(attributes) {

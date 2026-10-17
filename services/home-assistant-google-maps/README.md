@@ -1,10 +1,18 @@
-# Home Assistant Google Maps trial
+# Home Assistant Google Maps
 
-Status, 2026-10-17: separate admin-only `/google-maps-trial/trial` dashboard
-installed; dedicated billing, the persisted $5 alert budget, restricted browser
-key, quotas and native HA key save are verified. Parent assets **v1.0.1 are
-deployed**, and the actual Google Maps trial is **browser-verified on Nimo**.
-The original `/map` configuration is unchanged and its live map still works.
+Status, 2026-10-17: Google Maps is now the primary **Map** entry at `/map`,
+with **Hybrid** saved and selected on fresh navigation. Native promotion and
+real Nimo Chrome imagery are verified. The original native map is retained
+exactly at `/map-fallback`, titled **HA Map (Fallback)** in the sidebar and
+linked from the Google card. Google keeps the trial's admin-only access; the
+native fallback keeps the original native map's access policy. The hidden
+legacy `/google-maps-trial/trial` route remains compatible. This changes the
+Map entry, not the system-wide EdSys Home landing dashboard.
+
+Dedicated billing, the persisted $5 alert budget, restricted browser key,
+quotas and native HA key save were verified in the preceding trial. Live Nimo
+trial imagery was verified before this primary-map promotion. Loading Google
+remains manual through **Load Google map**; Hybrid is its saved initial style.
 
 ## Scope and architecture
 
@@ -20,15 +28,24 @@ included additional coordinate lookups. It was not installed. This own-source
 trial instead uses the official Google Maps JavaScript SDK, quarterly channel,
 modern Advanced Markers, raster imagery and the official test `DEMO_MAP_ID`.
 
-HA serves the two immutable parent assets at
-`/local/edsys-google-maps/v1.0.1/`: `core.js` and
+HA serves the two deployed immutable v1.0.2 parent assets at
+`/local/edsys-google-maps/v1.0.2/`: `core.js` and
 `edsys-google-maps-trial.js`. Only the latter is a Lovelace module resource.
-The v1.0.1 fix replaces secure-context-only `crypto.randomUUID()` with a
-128-bit `crypto.getRandomValues()` nonce encoded as hexadecimal, so the
-existing HTTP LAN HA route can start the trial. Nonce generation precedes
+The v1.0.1 fix retained in v1.0.2 replaces secure-context-only
+`crypto.randomUUID()` with a 128-bit `crypto.getRandomValues()` nonce encoded
+as hexadecimal, so the existing HTTP LAN HA route can start the trial. Nonce generation precedes
 browser load reservation and fails closed with a useful status if unavailable;
 no weak randomness or isolation fallback is allowed. The renderer stays at
-v1.0.0 unchanged.
+v1.0.0 unchanged. Version v1.0.2 adds validated `default_map_type` and
+`fallback_path` configuration: the promoted Map and legacy route save
+`hybrid` and `/map-fallback`. A style change applies to the current instance;
+a fresh card starts from the saved Hybrid default. The responsive parent uses
+the available viewport height instead of leaving a large empty lower panel;
+HA navigation/header and map controls remain accessible, without fullscreen.
+Desktop, tall, phone and landscape synthetic browser checks passed; short
+screens scroll rather than clipping controls/footer. Real Nimo Chrome
+verified the promoted view in narrow and maximized windows: Hybrid imagery
+fills the viewport to the footer with HA header/sidebar and toolbar visible.
 Google's SDK runs on a **different HTTPS origin**, served by the existing 9950x
 Tailscale daemon at dedicated port **8450**, path `/v1.0.0/renderer.html`.
 It is one static file; no new daemon, container, HA API proxy or CORS grant.
@@ -83,7 +100,8 @@ Google Cloud configuration is now saved and reopened for verification:
   credential, not a server-side secret; dashboard administrators and authorized
   clients can access it.
 
-In the signed-in Nimo HA trial, **Load Google map** displayed actual Road,
+During the preceding trial, signed-in Nimo HA **Load Google map** displayed
+actual Road,
 Satellite and Hybrid imagery, **three available markers** (two people and Home),
 **three unavailable trackers honestly listed**, and visible two-hour trails.
 Traffic and Fit were invoked; Close removed the renderer. Existing map opened
@@ -113,10 +131,13 @@ account pricing; do not infer guaranteed free use or an automatic $5 stop.
 
 Owning control route: [HA privileged operator route](../../docs/HOME_ASSISTANT_CONTROL.md).
 Review current HA/Tailscale state before any change. Deployment scripts refuse
-existing trial metadata, occupied port or altered immutable files; an uncertain
-write is inspected rather than replayed. The owner-private checkpoint contains
+unexpected trial metadata, an occupied port or altered immutable files; an
+uncertain write is inspected rather than replayed. The owner-private checkpoint contains
 the selected entity IDs, before-configurations, created IDs and renderer URL.
-Never publish those full configurations or recovery files.
+Never publish those full configurations or recovery files. The initial-creation
+commands below refuse an existing trial; they are not an update procedure for
+the promoted instance. Parent updates install a new immutable version and
+change only this resource's URL after checking current metadata.
 
 ```bash
 python3 build.py
@@ -134,9 +155,9 @@ Tailscale Serve, with no Funnel. Its runtime file is private outside Git under
 the checkpoint's sibling `renderer/v1.0.0/`. Port 8450 is a dedicated origin;
 never host HA or another authenticated application on it.
 
-Fourteen JavaScript projection/isolation/load-guard/nonce regressions and three
-Python configuration/build checks pass. The nonce checks cover a crypto object
-without `randomUUID` and prove missing/throwing CSPRNGs reserve no load and
+Eighteen JavaScript projection/isolation/load-guard/nonce/style/layout
+regressions and five Python configuration/build/promotion checks pass. The
+nonce checks cover a crypto object without `randomUUID` and prove missing/throwing CSPRNGs reserve no load and
 create no iframe. A real **non-loopback HTTP** synthetic browser check also
 passed CSPRNG startup and credentialless parent/storage isolation; localhost
 alone would not detect the secure-context regression.
@@ -144,21 +165,64 @@ CLI-based browser checks (`tests/browser-check.js`) use only
 synthetic locations and an intercepted fake SDK: no Google request or charge.
 They verify parent access denial, no regular cookies/storage, origin-only SDK
 referrer, bounded history rendering, one Map across updates, controls,
-close/reopen, fallback and 390/1280-pixel layouts. The same checks also passed
-with the **deployed HTTPS renderer**. Nimo's native HTTP client reached that
+close/reopen, saved Hybrid/fallback settings and desktop/tall/phone/landscape
+layouts. The viewport-fill checks allow a 16px outer margin, retain controls,
+permit short-screen scrolling and confirm resizing reuses one Map/SDK.
+Earlier renderer isolation/referrer checks also passed with the **deployed
+HTTPS renderer**. Nimo's native HTTP client reached that
 renderer with expected content; this does not prove its signed-in HA browser
 or live Google imagery. Initial native resource/dashboard/configuration readback
 matched the empty-key installation baseline. Subsequent native key save and the
 live Nimo browser workflow above were verified with native UI and screenshots.
-Activation deployed v1.0.1 to a new immutable parent path and changed only its
-module resource URL; exact expected-resource readback and comparison confirmed
-original Map configuration, dashboard metadata, trial configuration and private
+The earlier activation deployed v1.0.1 to a new immutable parent path and
+changed only its module resource URL; exact expected-resource readback and
+comparison confirmed original Map configuration, dashboard metadata, trial configuration and private
 key/configuration digest unchanged. Renderer v1.0.0 was not modified. The
 operator API masks `api_key` fields; protected comparisons stay inside the
 guest and export no credential.
 
-Owner preference acceptance, physical GPS accuracy, alert-email delivery and
-final billed spend were not verified.
+### Primary Map promotion
+
+Parent v1.0.2 and `promote.py` implement the owner-authorized primary-map change.
+The verified deployment used a new immutable parent path and changed only the
+existing module resource URL; renderer v1.0.0 and other resources were unchanged.
+After installing the new immutable parent files and updating only the existing
+module resource URL, run a fresh native preflight and inspect its private
+receipt before applying:
+
+The private checkpoint must already contain current `native-before.json`
+(the original `/map` configuration) and `dashboards-before.json` (native
+dashboard metadata), obtained through the protected operator route. Do not
+include the Google configuration or key in those recovery snapshots.
+
+```bash
+python3 promote.py --private-state /PRIVATE/PROMOTION_CHECKPOINT
+python3 promote.py --private-state /PRIVATE/PROMOTION_CHECKPOINT --apply
+```
+
+The promotion requires the expected native/Google card types, matching selected
+locations (six in this deployment) and two-hour history, a configured key and the new parent
+resource. It requires the private native/dashboard recovery snapshots to
+hash-match the preflight, and refuses an existing fallback or changed
+preflight. It creates and verifies the exact native fallback before changing `/map`; the key stays
+inside HA. The expected metadata changes are confined to the primary Map,
+the hidden legacy trial and the new native fallback. An uncertain attempt is
+inspected without replay. Dry-run/apply succeeded. Native readback confirmed
+exact primary/legacy configurations, exact native fallback, intended dashboard
+metadata and unchanged resources. Protected persisted checks confirmed the
+same valid key, saved Hybrid default and `/map-fallback` link without exporting
+the key.
+
+Nimo full navigation to `/map/0` showed Hybrid selected before loading. Real
+Hybrid imagery filled the viewport while HA navigation/header and the toolbar
+remained visible in narrow and maximized windows. The in-card fallback opened
+the original native map at `/map-fallback/0`; sidebar Map returned to the new
+Google card with Hybrid still the saved default. A fresh real Hybrid load
+worked and was left open. No Cloud/key restriction change, HA/Pi restart,
+household-device action or voice change was needed.
+
+Physical GPS accuracy, alert-email delivery and final billed spend remain
+unverified.
 
 ## Backup and narrow recovery
 
@@ -167,18 +231,26 @@ dashboard/resource configuration, and this single Serve route through the
 existing protected backup process. No separate runtime database or volume.
 Fresh offsite/export/restore acceptance is not established by this trial.
 
-To remove an authorized trial, read `deployment.json` and the current trial
-configuration first. Delete only the recorded Google Maps Trial dashboard and
-the matching trial module resource through native APIs/UI. Retain or remove
-only the active version's two HA assets after confirming no remaining resource
-references; keep older immutable assets available for narrow rollback.
-If the port 8450 Serve handler still exactly matches the recorded one-file
-route, run `tailscale serve --https=8450 off`; verify every other route matches
-its before-state. **Never run `tailscale serve reset` or restore entire HA
-storage/old dashboard inventories.** Retaining the static file is harmless.
-The original map requires no restoration. Disable/delete the dedicated Google
-key and review usage/billing in the owner's console separately; removing a
-dashboard does not revoke a Google key or cancel an account.
+To reverse the primary-map promotion, first inspect the current `/map`,
+`/map-fallback`, hidden legacy configuration, module resource and the private
+promotion receipt. Restore the original native configuration from the verified
+current fallback to `/map` through the native API, together with only the saved
+original Map metadata. Use the native API path `map-fallback`; do not infer
+its storage filename from the path (the observed storage ID is `map_fallback`).
+Confirm exact readback before removing anything. Remove
+only the fallback created by this promotion if that removal is authorized and
+no link still needs it. Restore only this card's earlier module URL if a
+parent-version rollback is needed; do not restore the entire resource list.
+
+If authorized to retire Google entirely, remove only the recorded Google
+dashboard/resource references after the native `/map` is restored. Retain or
+remove the versioned HA files only after checking references. If the port 8450
+Serve handler still exactly matches the recorded one-file route, run
+`tailscale serve --https=8450 off`; verify every other route matches its
+before-state. **Never run `tailscale serve reset` or restore entire HA storage
+or old dashboard inventories.** Retaining static files is harmless.
+Disable/delete the dedicated Google key and review usage/billing separately;
+removing a dashboard does not revoke a Google key or cancel an account.
 
 ## Primary references
 
