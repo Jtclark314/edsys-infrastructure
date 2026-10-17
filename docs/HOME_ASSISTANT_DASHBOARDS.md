@@ -1,5 +1,51 @@
 # Home Assistant Dashboard Design
 
+## Family Hub: 2026-10-17
+
+The new sidebar **Family Hub** at `/edsys-family/home` has Home, Calendar,
+Shopping and Help views for phones and the 11-inch Tab A9+. Navigation-only
+buttons are added to EdSys Home's Household (`plans`) and Bedroom Pi's
+Household views. All other fields in those dashboards, fourteen pre-existing
+dashboard metadata rows and six original resources are preserved by exact
+native readback. The system default stays EdSys Home.
+
+The new native Local Calendar is named Family. It is explicitly unexposed
+from conversation/Alexa/Google, and event contents are not sent to cloud AI.
+The add form pins one calendar, supports timed/all-day events and finite
+daily/weekly/monthly/yearly repeats using home time. Existing dates open the
+native event editor for editing/deleting. One-attempt mutations distinguish
+acceptance from readback, retain drafts on uncertainty, and never replay on
+reconnect. Drafts and write locks are RAM-only and do not survive reload.
+
+Six native calendar cases passed, including CRUD, exclusive all-day end,
+four recurrence frequencies and weekly DST preservation. A signed-in Nimo
+browser saved a marked event through the new form, saw it in the week view,
+edited it through the native editor and deleted it; UID readback confirmed
+each step. Every owned fixture is removed. Twenty-six Node and four builder
+checks plus synthetic tablet/phone/landscape browser checks passed. Physical
+phone/Tab A9+ acceptance remains to be confirmed.
+
+Pinned unofficial AnyList 0.8.0 is installed and its native credential flow
+is available. Account authentication, dedicated-list roundtrip and final
+household list binding remain **pending Jeremy's sign-in and selection**.
+Shopping honestly displays setup pending; it does not substitute the old
+shopping list. Keep meal-calendar export off. Selected entity lists constrain
+the frontend, not account-wide upstream reads or the user's broader HA access.
+Keep account/list/event state and recovery evidence outside Git/RAG.
+
+The Core configuration check and authorized restart succeeded. Voice 0.6.0's
+seventeen files and all four app processes are unchanged; 0.6.1 stays staged.
+Live voice/playback/TV testing remains held. Native auth storage changed during
+authenticated use; byte equality is not claimed for that file. Original entry
+metadata is preserved; an existing iCloud entry recovered from setup_error
+to loaded after restart. No repair was applied to it. Source and narrow
+recovery: [Family Hub](../services/home-assistant-family-hub/README.md).
+
+Protected native pre/post backups `e26287b6` / `5dbf67bb` completed with HA,
+database and all four apps, with no reported failures. The final backup follows
+fixture cleanup. Export/offsite coverage and restore of this generation remain
+unverified; HA backups do not back up the upstream AnyList account.
+
 ## Google Map marker stability: 2026-10-17
 
 The owner reported the 1/2/H markers blinking roughly once per second. The

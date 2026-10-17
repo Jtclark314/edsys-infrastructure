@@ -1,0 +1,30 @@
+{
+  "asset_sha256": "99d65432900a2e8ef26fc5bc2dd772d093208cbe3e1fd8c5cecd12862597348b",
+  "asset_url": "https://github.com/moryoav/ha-anylist/releases/download/v0.8.0/anylist.zip",
+  "commit": "80aec613d47a5e8873ae7e2322d357c1a912667a",
+  "files": {
+    "__init__.py": "6c677562a64a66801042bb325aec160e235c3f1457af7f5c04959bcef8608c8c",
+    "brand/dark_icon.png": "30992b67bed14a939acb397c6a4c395e9a01c4d06ccf316629814d893831c250",
+    "brand/dark_logo.png": "fa996841d164a2b4b04392ad697d9a1cb4764c08293f817b8e5d7e0ca11fd35c",
+    "brand/icon.png": "30992b67bed14a939acb397c6a4c395e9a01c4d06ccf316629814d893831c250",
+    "brand/logo.png": "926797235328548a32b622038280e1dceef85caf4b538ecdafeaac0242e1900a",
+    "category.py": "55f563602b88ea73932b081837ea6def398b3b1b3627672ad9950b44374f3ec1",
+    "client.py": "cf5d7c899abf67b5e0ce85d18c7cfc8676bfd5baaf07326752deaf5e86f81e34",
+    "config_flow.py": "f05b40d5ede5b961f15ccd1c9d6f18c787d08fd432ae570bbe99230402e382c4",
+    "const.py": "f95ebdc9c6e55ae51310a572b77b5b7efcb332e1855831b13b01e6b66c4315be",
+    "diagnostics.py": "bb65a34470c0b565eeaf3e66f6453ada87db999c69d179c5a9918d7991fcf9ca",
+    "entity.py": "cf2d63030b88ed0415f13a643502b3506706285851aca7cedf068d0df2f7f5d5",
+    "icons.json": "da787528f0af7cb674c6de52bd314e4c775d60e054f4e5da7c56b2e55d110938",
+    "manifest.json": "6f2c89bc0a722ea40c4454ab59b2caefd602b0d638cce20ad8b2540366148e38",
+    "quality_scale.yaml": "dd131987921873e087f561f02c5e0cc14807fd7e9467d285a982f2409461489b",
+    "recipe_search.py": "37a7bb71eeea6e49a869851ee5a44347b2f3464430f2796117e5902980823960",
+    "select.py": "4d8dc734142177c67c45c95418db43d68a90444721367bc8078b4481b85f92d5",
+    "sensor.py": "ff0c1ebb5de14471fa45d5f786629d4ff764fe05b4cf47c1249d563e26a000b7",
+    "services.yaml": "770524f0959966b206b1fd683ba193a2e8edc132777dfb5b66b6fb433fe7f1be",
+    "strings.json": "64af2f90336fd15c06b51369db62e66fd38d52f5a2d53a56dc775e0f70e9b310",
+    "todo.py": "f3ac0207044302786dfbac231ec596565187c02e29a74e9503c7d3daaca0095e",
+    "translations/en.json": "e42425b6fc7d8292098f31ce750fb5eeaf89711ac7c4eaab9596118b2bf5426f"
+  },
+  "repository": "https://github.com/moryoav/ha-anylist",
+  "version": "0.8.0"
+}

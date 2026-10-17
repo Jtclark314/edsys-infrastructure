@@ -1,0 +1,41 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Synthetic Family Hub fixture</title>
+<style>
+:root{--primary-color:#087f8c;--primary-text-color:#202b32;--secondary-text-color:#56656d;--card-background-color:#fff;--divider-color:#cbd5dc;--text-primary-color:#fff;--error-color:#a51d2d;font-family:system-ui;background:#eff5f6}body{margin:0;padding:16px}main{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;max-width:1180px;margin:auto}h1{font-size:20px;max-width:1180px;margin:0 auto 16px}@media(max-width:700px){main{grid-template-columns:minmax(0,1fr)}body{padding:10px}}
+</style>
+<h1>Synthetic Family Hub — no HA connection</h1><main id="cards"></main>
+<script type="module">
+import '../family-hub-card.js';
+const calls=[];
+const data={events:[],items:[{uid:'initial',summary:'<img src=x onerror="window.xss=true">',status:'needs_action',description:'<script>window.xss=true<\/script>',quantity:2,quantity_unit:'packs'}],failAdd:null,uncertainEvent:false,holdUpdate:false,releaseUpdate:null,staleStatusReads:false,omitStatusUid:null};
+const clone=value=>JSON.parse(JSON.stringify(value));
+const hass={connected:true,connection:{connected:true},config:{time_zone:'America/New_York'},states:{
+ 'calendar.synthetic_family':{state:'off',attributes:{friendly_name:'Family <b>calendar</b>',supported_features:7}},
+ 'todo.synthetic_family':{state:'1',last_updated:'synthetic-1',attributes:{friendly_name:'Family shopping',supported_features:15}}
+},async callWS(payload){
+ calls.push(clone(payload));
+ if(payload.type==='calendar/event/create'){
+  if(payload.entity_id!=='calendar.synthetic_family')throw Error('Unexpected synthetic calendar target');
+  const event={...clone(payload.event),uid:'synthetic-'+data.events.length};event.start=event.dtstart;event.end=event.dtend;data.events.push(event);
+  if(data.uncertainEvent)throw Error('Synthetic uncertain persistence');return;
+ }
+ if(payload.type!=='call_service'||payload.domain!=='todo'||payload.target.entity_id!=='todo.synthetic_family')throw Error('Unexpected synthetic API');
+ if(payload.service==='get_items'){let rows=clone(data.items);if(data.staleStatusReads)rows=rows.map(item=>item.uid==='initial'?{...item,status:'needs_action'}:item);if(data.omitStatusUid)rows=rows.filter(item=>item.uid!==data.omitStatusUid);return {context:{id:'synthetic'},response:{'todo.synthetic_family':{items:rows}}};}
+ if(payload.service==='add_item'){
+  if(payload.service_data.item===data.failAdd)throw Error('Synthetic addition failure');
+  data.items.push({uid:'item-'+data.items.length,summary:payload.service_data.item,status:'needs_action'});return;
+ }
+ if(payload.service==='update_item'){
+  if(data.holdUpdate)await new Promise(resolve=>{data.releaseUpdate=resolve;});
+  const item=data.items.find(item=>item.uid===payload.service_data.item);if(!item)throw Error('Unknown synthetic item');item.status=payload.service_data.status;return;
+ }
+ throw Error('Unsupported synthetic service');
+},async callApi(method,path){if(method!=='GET'||!path.startsWith('calendars/calendar.synthetic_family?'))throw Error('Unexpected synthetic read');return clone(data.events);}};
+const make=(name,config)=>{const card=document.createElement(name);card.setConfig(config);document.querySelector('#cards').append(card);card.hass=hass;return card;};
+const event=make('edsys-family-event-card',{entity:'calendar.synthetic_family',allow_recurrence:true,title:'Add a family event'});
+const shopping=make('edsys-family-shopping-card',{entity:'todo.synthetic_family'});
+const otherEvent=make('edsys-family-event-card',{entity:'calendar.synthetic_family',title:'Independent second draft'});
+const pending=make('edsys-family-shopping-card',{});
+window.fixture={event,shopping,otherEvent,pending,hass,data,calls};
+</script></html>
