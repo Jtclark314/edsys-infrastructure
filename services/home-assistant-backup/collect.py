@@ -281,6 +281,10 @@ def collect(transport, stage=STAGE, incoming=INCOMING, key_path=KEY, now=None,
         reused = target.exists() or target.is_symlink()
         if reused:
             manifest = verify_generation(target, description, key, uid, floor)
+            choose([description], now + timedelta(seconds=time.monotonic() - started),
+                   maximum_age, backup_id)
+            if read_private(key_path, uid) != key:
+                raise BackupError('recovery_key_changed')
         else:
             temporary = Path(tempfile.mkdtemp(prefix='incomplete-', dir=incoming))
             output = temporary / 'native-backup.tar'

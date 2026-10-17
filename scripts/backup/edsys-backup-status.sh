@@ -38,6 +38,17 @@ else
 fi
 echo
 
+echo "## Home Assistant Export Health"
+HA_EXPORT_HEALTH_HELPER=/srv/edsys/edsys-infrastructure/services/home-assistant-backup/health.py
+if [[ -r "${HA_EXPORT_HEALTH_HELPER}" ]]; then
+  # Export health is independent of local/offsite snapshot health. An unhealthy
+  # HA export must remain visible without preventing the other status sections.
+  /usr/bin/python3 "${HA_EXPORT_HEALTH_HELPER}" || true
+else
+  echo '{"export_health":"unhealthy","reasons":["export_health_helper_unavailable"]}'
+fi
+echo
+
 echo "## Recent Backup Logs"
 ls -lt "${REPORT_DIR}"/backup-* 2>/dev/null | head -10 || true
 echo

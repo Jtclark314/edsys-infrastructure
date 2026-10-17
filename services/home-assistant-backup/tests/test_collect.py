@@ -552,6 +552,29 @@ def test_pre_key_proof_generation_reused_only_after_fresh_key_proof(environment)
     assert path.read_bytes() == before
 
 
+def test_key_rotation_after_reuse_proof_refuses_success(environment):
+    collector.collect(**environment.args)
+    success = (environment.args['stage'] / 'last-success.json').read_bytes()
+    def rotate(payload, result):
+        if payload['action'] == 'verify-key':
+            environment.key.write_bytes(b'rotated-after-proof')
+        return result
+    environment.transport.modify = rotate
+    with pytest.raises(guest.BackupError, match='recovery_key_changed'):
+        collector.collect(**environment.args)
+    assert (environment.args['stage'] / 'last-success.json').read_bytes() == success
+
+
+def test_reuse_rechecks_freshness_before_success(environment, monkeypatch):
+    collector.collect(**environment.args)
+    backup_date = datetime.fromisoformat(metadata()['date'])
+    environment.args['now'] = backup_date + timedelta(hours=26) - timedelta(seconds=60)
+    clock = iter([0, 130])
+    monkeypatch.setattr(collector.time, 'monotonic', lambda: next(clock))
+    with pytest.raises(guest.BackupError, match='no_fresh_eligible_backup'):
+        collector.collect(**environment.args)
+
+
 def test_key_never_enters_transport_command(environment):
     clock, commands = FakeClock(), []
     def runner(command, **kwargs):

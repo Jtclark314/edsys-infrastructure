@@ -131,8 +131,13 @@ sudo cat /srv/edsys-backup/staging/home-assistant/last-success.json
 The two JSON status files contain only aggregate status/IDs/times. Treat a
 failed service, a failed current status, a stale check or a last-good backup
 older than 26 hours as an export problem; a preserved archive is not proof that
-the latest schedule succeeded. Wire these conditions into the existing private
-backup-health process during deployment. Missing/insecure configuration can
+the latest schedule succeeded. The existing `edsys-backup-status.sh` now calls
+the bounded `health.py` projection: failed/missing service or status, unverified
+key, invalid IDs/times and backup/check age over 26 hours report `unhealthy`.
+It reports current collector status separately from the last good export and
+does not claim that either has reached Restic or Google Drive. It reads only
+the two status files and bounded systemd metadata, never manifests or keys;
+an unhealthy export does not stop other backup status sections. Missing/insecure configuration can
 prevent a status write; the systemd result still fails explicitly.
 
 After export, run the existing local backup and separate mirror through their
