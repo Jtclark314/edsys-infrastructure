@@ -19,8 +19,8 @@ EXPECTED_WORKSPACE = {
     "name": "EdSys-RAG-Current",
     "slug": "edsys-rag-current",
     "chatProvider": "litellm",
-    # Preserve the selected local default; reject silent cloud/default drift.
-    "chatModel": "edsys-chat-local",
+    # This app-local alias always attempts local before bounded OpenAI help.
+    "chatModel": "edsys-knowledge-local-first",
     "chatMode": "query",
     "topN": 6,
     "similarityThreshold": 0.65,

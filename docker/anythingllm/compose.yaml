@@ -10,6 +10,9 @@ services:
     volumes:
       - /mnt/ai-store/anythingllm:/app/server/storage
       - /mnt/ai-store/rag/docs/EdSysVault_RAG:/obsidian:ro
+      - /opt/edsys-rag-assist/releases/v1.0.0/provider.cjs:/app/server/utils/AiProviders/liteLLM/index.js:ro
+      - /opt/edsys-rag-assist/releases/v1.0.0/assist.cjs:/app/server/utils/AiProviders/liteLLM/edsys-rag-assist.cjs:ro
+      - /opt/edsys-rag-assist/releases/v1.0.0/upstream.cjs:/app/server/utils/AiProviders/liteLLM/edsys-upstream-litellm.cjs:ro
     env_file:
       - /etc/edsys-secrets/openai.env
       - /etc/edsys-secrets/anythingllm-litellm.env

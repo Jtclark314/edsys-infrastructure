@@ -1,0 +1,42 @@
+name: anythingllm-rag-assist
+description: Explicit local-first document answers with one bounded OpenAI assistance attempt
+status: deployed; native local API, controlled real cloud handoff and retrieval qualified
+host: 9950x
+runtime: Read-only extension of the pinned AnythingLLM 1.15.0 native LiteLLM connector
+ports:
+  - Existing AnythingLLM and broker endpoints only; no new listener
+volumes:
+  - /opt/edsys-rag-assist/releases/v1.0.0/provider.cjs mounted read-only over native LiteLLM index.js
+  - /opt/edsys-rag-assist/releases/v1.0.0/assist.cjs mounted read-only as edsys-rag-assist.cjs
+  - /opt/edsys-rag-assist/releases/v1.0.0/upstream.cjs mounted read-only as edsys-upstream-litellm.cjs
+  - Existing application storage; private edsys-rag-assist ledger persists there
+environment:
+  workspace: edsys-rag-current
+  provider: litellm
+  model: edsys-knowledge-local-first
+  mode: query
+  router_id: null
+  local_model: edsys-chat-local
+  cloud_broker_model: edsys-knowledge-openai
+  cloud_backend: openai/gpt-6.1-sol
+  upstream_sha256: 3208973be792e4b616c2048945fa6541c836c7acd97025081c34f43858b86305
+  limits: 32000 assembled characters; 1200 cloud completion tokens; 20 cloud attempts per UTC day
+secrets_required:
+  - Existing AnythingLLM LiteLLM service credential; native private configuration only
+  - Existing OpenAI provider connection reused inside broker; never exported
+backup:
+  required: true
+  paths:
+    - Private application storage including edsys-rag-assist budget ledger
+    - Exact prior workspace settings, Compose metadata and matching strict verifier
+    - Immutable release files and private broker/allowlist recovery metadata
+monitoring:
+  offline: 31 isolated Node and five focused Python verifier checks pass
+  runtime: Exact mounted hashes and workspace settings preserved; full 14-positive/10-negative retrieval gate and real native local answer with six sources passed
+  cloud: Installed connector controlled-help signal produced the correct synthetic fact through exactly one real OpenAI call, prefix and model metrics
+  qualification_limits: No exhaustive semantic uncertainty evaluation, browser/owner acceptance or rollback drill
+  privacy: No background cloud generation; no prompts, credentials or raw private state in Git
+  attachment_limit: Only connector-visible image/non-text attachments are blocked; parsed document uploads become source context and may reach cloud unless a retained explicit local-only instruction blocks handoff; no document-attachment privacy certification
+restore_notes: Restore prior explicit litellm/edsys-chat-local Query selection, prior Compose mounts and matching strict verifier atomically from private verifier-before.py, then recreate only AnythingLLM using the unchanged image pin. Preserve documents, vectors, application data and ledger; do not restore the whole database. Rollback drill pending.
+owner: Jeremy
+last_verified: Deployment, source preservation, retrieval, native local answer and controlled real cloud handoff verified 2026-10-17
