@@ -23,6 +23,9 @@ from guest_program import BackupError
 STAGE = Path('/srv/edsys-backup/staging/home-assistant')
 INCOMING = Path('/srv/edsys-backup/.home-assistant-incoming')
 KEY = Path('/etc/edsys-backup/home-assistant-recovery-key')
+# Verified 9950x deployment boundary: /srv is owned by Jeremy (UID 1000).
+# This trusts only that existing ancestor, not operator-owned backup children.
+TRUSTED_ANCESTOR_UIDS = {Path('/srv'): 1000}
 
 
 def secure_directory(path, uid=0, floor=Path('/'), private=True, create=True):
@@ -41,7 +44,10 @@ def secure_directory(path, uid=0, floor=Path('/'), private=True, create=True):
                 raise BackupError('private_parent_unavailable') from None
             current.mkdir(mode=0o700)
             info = current.lstat()
-        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != uid
+        allowed_uids = {uid}
+        if uid == 0 and floor == Path('/') and current != path:
+            allowed_uids.add(TRUSTED_ANCESTOR_UIDS.get(current, uid))
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid not in allowed_uids
                 or info.st_mode & 0o022):
             raise BackupError('unsafe_local_directory')
     if private and path.stat().st_mode & 0o077:

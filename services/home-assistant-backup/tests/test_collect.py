@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import stat
 from types import SimpleNamespace
 import sys
 import tarfile
@@ -289,3 +290,53 @@ def test_service_is_independent_of_main_backup():
     assert 'Requires=edsys-backup' not in unit
     assert 'ExecStartPre=' not in '\n'.join(l for l in unit.splitlines() if not l.startswith('#'))
     assert '01:40:00 America/New_York' in (root / 'edsys-home-assistant-backup.timer').read_text()
+
+
+def deployment_paths(monkeypatch, changes=None):
+    """Model verified ownership without changing any real host path/owner."""
+    layout = {
+        '/': (0, stat.S_IFDIR | 0o755),
+        '/srv': (1000, stat.S_IFDIR | 0o755),
+        '/srv/edsys-backup': (0, stat.S_IFDIR | 0o755),
+        '/srv/edsys-backup/staging': (0, stat.S_IFDIR | 0o750),
+        '/srv/edsys-backup/staging/home-assistant': (0, stat.S_IFDIR | 0o700),
+        '/srv/other': (1000, stat.S_IFDIR | 0o700),
+    }
+    layout.update(changes or {})
+    def inspect(path):
+        uid, mode = layout[str(path)]
+        return SimpleNamespace(st_uid=uid, st_mode=mode)
+    monkeypatch.setattr(Path, 'lstat', inspect)
+    monkeypatch.setattr(Path, 'stat', inspect)
+
+
+def test_verified_operator_owned_srv_ancestor_allowed(monkeypatch):
+    deployment_paths(monkeypatch)
+    collector.secure_directory(Path('/srv/edsys-backup/staging/home-assistant'), create=False)
+
+
+def test_root_owned_srv_remains_allowed(monkeypatch):
+    deployment_paths(monkeypatch, {'/srv': (0, stat.S_IFDIR | 0o755)})
+    collector.secure_directory(Path('/srv/edsys-backup/staging/home-assistant'), create=False)
+
+
+@pytest.mark.parametrize('changes', [
+    {'/srv': (1001, stat.S_IFDIR | 0o755)},
+    {'/srv': (1000, stat.S_IFDIR | 0o775)},
+    {'/srv': (1000, stat.S_IFLNK | 0o777)},
+    {'/srv/edsys-backup': (1000, stat.S_IFDIR | 0o755)},
+    {'/srv/edsys-backup/staging': (1000, stat.S_IFDIR | 0o750)},
+    {'/srv/edsys-backup/staging/home-assistant': (1000, stat.S_IFDIR | 0o700)},
+    {'/srv/edsys-backup/staging/home-assistant': (0, stat.S_IFDIR | 0o750)},
+])
+def test_srv_exception_does_not_weaken_private_children(monkeypatch, changes):
+    deployment_paths(monkeypatch, changes)
+    with pytest.raises(guest.BackupError):
+        collector.secure_directory(Path('/srv/edsys-backup/staging/home-assistant'), create=False)
+
+
+@pytest.mark.parametrize('path', ['/srv', '/srv/other'])
+def test_operator_exception_is_not_a_general_stage_owner(monkeypatch, path):
+    deployment_paths(monkeypatch)
+    with pytest.raises(guest.BackupError):
+        collector.secure_directory(Path(path), private=False, create=False)
