@@ -8,9 +8,15 @@ AnythingLLM-only model. Individual AnythingLLM workspaces may still have their
 own saved provider/model selection; verify those settings before assuming the
 Compose default controls an existing workspace.
 
-The managed `EdSys-RAG-Current` workspace explicitly uses native LiteLLM with
-`edsys-chat-local` in strict Query mode. The read-only RAG verifier requires
-that exact local model; it does not accept a cloud alias or inherited default.
+The managed `EdSys-RAG-Current` workspace explicitly uses LiteLLM with
+the application alias `edsys-knowledge-local-first` in strict Query mode and
+`router_id=null`. Its pinned connector attempts `edsys-chat-local` first and
+allows at most one bounded `edsys-knowledge-openai` handoff when needed.
+The read-only RAG verifier requires that exact application alias; it rejects
+direct local/cloud aliases and inherited defaults. Three immutable read-only
+provider mounts opt only this alias into the extension and retain upstream
+behavior for other models and configured embedding engines. See the
+[connector policy and recovery guide](../../services/anythingllm-rag-assist/README.md).
 Its workspace prompt describes the selected chat model separately from the
 embedding model and vector store. HA conversational voice has its own OpenAI
 backend and is independent of this setting.

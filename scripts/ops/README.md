@@ -21,7 +21,7 @@ Status: helper scripts for local EdSys operations. Prefer report-only behavior u
 - `edsys-rag-watch-sync.py` - debounced user-service watcher for reviewed `*RAG Summary.md` changes. It triggers the existing `edsys-rag-sync.service`; the five-minute timer remains the fallback.
 - `edsys-rag-enrich-metadata.py` - local-only metadata enrichment builder for `/mnt/ai-store/rag/enrichment/metadata.sqlite`; it reads the clean mirror and never rewrites Obsidian notes.
 - `anythingllm-upload-edsys-rag` - hash-aware uploader for the sole managed AnythingLLM workspace, `EdSys-RAG-Current`. It rejects alternate workspace slugs, removes stale managed attachments, and verifies vectors after every changed upload.
-- `anythingllm-rag-verify.py` - read-only integrity and retrieval gate for `EdSys-RAG-Current`. It requires the explicit `litellm` / `edsys-chat-local` Query-mode default and rejects cloud, unknown or inherited model settings. Quick mode checks the single-workspace contract, settings, manifest parity, vectors, two positive sentinels, and one unrelated negative control; the default full mode evaluates all sanitized golden queries.
+- `anythingllm-rag-verify.py` - read-only integrity and retrieval gate for `EdSys-RAG-Current`. It requires explicit `litellm` / `edsys-knowledge-local-first`, Query mode and no native router. The scoped connector attempts local answers first and permits bounded OpenAI assistance; direct local/cloud aliases, unknown or inherited model settings are rejected. Quick mode checks the single-workspace contract, settings, manifest parity, vectors, two positive sentinels, and one unrelated negative control; full mode evaluates all sanitized golden queries without generating answers.
 - `install-anythingllm-rag-sync.sh` - user-scoped installer for the tracked uploader, verifier, RAG sync service, and five-minute timer. Replaced files are backed up beneath `~/.local/state/edsys-rag-sync/backups/`.
 - `sync-edsys-repos.sh` - non-destructive five-minute fast-forward sync for the three authoritative `/srv/edsys` checkouts. It requires clean trees, tracks `origin/main`, refuses divergence, and never resets, cleans, commits, pushes, or deletes files.
 - `edsys-code-intelligence-index.py` - explicit-allowlist Zoekt builder for committed `HEAD` content. It runs the pinned indexer without network access, preserves the last usable index on refresh failure, and supports five-minute incremental plus weekly clean rebuild units.
@@ -43,10 +43,18 @@ Runtime reports and raw eval results stay outside Git under
 `/var/lib/edsys-codex-reports/`, `/var/lib/edsys-rag-eval/`, and
 `/mnt/ai-store/rag/evals/`.
 
-### AnythingLLM local-model policy repair — 2026-10-17
+### AnythingLLM local-first assistance — 2026-10-17
+
+The current contract selects `edsys-knowledge-local-first` through the pinned
+[scoped connector](../../services/anythingllm-rag-assist/README.md). This is an
+application alias, not a direct broker route. The verifier requires that exact
+selection and preserves Query mode, router-null and retrieval checks. Generated
+answer handoff is qualified separately from this read-only retrieval gate.
+
+### Earlier local-model policy repair — 2026-10-17, before assistance
 
 The workspace already selected `edsys-chat-local`; the verifier still expected
-the older cloud default. The verifier now requires the explicit local setting.
+the older cloud default. At that checkpoint the verifier required the explicit local setting.
 A regression accepts local and rejects cloud, unknown, empty and inherited
 models; all five focused RAG-ops tests pass. The installed full gate passes
 14 positive and 10 negative retrieval cases. The existing sync service also
