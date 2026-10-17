@@ -1,0 +1,17 @@
+{
+  "version": "2.3.0",
+  "repository": "https://github.com/cytech/Home-Assistant-wundergroundpws",
+  "commit": "d89e850bf171e65467b299a8193fd0de63c399f7",
+  "archive_url": "https://codeload.github.com/cytech/Home-Assistant-wundergroundpws/zip/d89e850bf171e65467b299a8193fd0de63c399f7",
+  "archive_sha256": "67174fe3f64fce62400f2771587b95e1734b1d60b8c6844af33c0917be07a0db",
+  "component_tree_sha256": "39c96634b191d2fb79b6bc9d185430db1facb88c88321f2036f7719c57fe8381",
+  "patch": "patches/wundergroundpws-2.3.0-safe-errors.patch",
+  "patch_sha256": "d4b4d90fc69cbf68c7aaa47482f29e7ca7c016131aeea4b048ec06bcee25cefb",
+  "upstream_files": {
+    "config_flow.py": "ccaca2a8f17c8c60a0c557fdf74252fef235d22adad0966d2576e0fc3f71487e",
+    "coordinator.py": "a364902ea3218c93a2f2aa17fbecefc8bb33d8d3ce6fdfa540134c58ff2847dd",
+    "sensor.py": "57166534474f16a2ab29abb2ef891ae157ab55c449f326f269d0e3df0eff9582",
+    "wupws_obs_sensors.py": "3d6b66f2edc40085681a096c41081c2406662242ddec60df9113ba07108303d5",
+    "manifest.json": "14654f3f654b0802879d7e7203c5c4d630dd21b6c02f4236a232d16ad712294e"
+  }
+}

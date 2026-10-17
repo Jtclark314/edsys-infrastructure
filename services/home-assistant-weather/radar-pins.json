@@ -1,0 +1,107 @@
+{
+  "repository": "jpettitt/weather-radar-card",
+  "version": "v3.13.0",
+  "commit": "d440882ac817a8edecad759ac804d4f6f11ebb64",
+  "release_url": "https://github.com/jpettitt/weather-radar-card/releases/tag/v3.13.0",
+  "published_at": "2026-10-13T15:34:04Z",
+  "prerelease": false,
+  "artifacts": {
+    "weather-radar-card-d440882ac817a8edecad759ac804d4f6f11ebb64.zip": {
+      "url": "https://codeload.github.com/jpettitt/weather-radar-card/zip/d440882ac817a8edecad759ac804d4f6f11ebb64",
+      "sha256": "29870ed3bf44ccc79e27814ad920447420a5c1d1ee8a439348a4f9f808cd22cc",
+      "bytes": 8549900
+    },
+    "assets/home-circle-dark.svg": {
+      "url": "https://github.com/jpettitt/weather-radar-card/releases/download/v3.13.0/home-circle-dark.svg",
+      "sha256": "70528d6f2135b684715c476c4a1757d1fcbf037c2709ad4571e5351d02b5f5f7",
+      "bytes": 1925,
+      "github_digest_verified": true
+    },
+    "assets/home-circle-light.svg": {
+      "url": "https://github.com/jpettitt/weather-radar-card/releases/download/v3.13.0/home-circle-light.svg",
+      "sha256": "298061888d3f2efa941888d537f5aced7c0dacd81371a8fd755a72cd4539276e",
+      "bytes": 1996,
+      "github_digest_verified": true
+    },
+    "assets/pause.png": {
+      "url": "https://github.com/jpettitt/weather-radar-card/releases/download/v3.13.0/pause.png",
+      "sha256": "f22dd15cc5f8d053408d4a9334f67eb6e4863cf96cf9b9fa909fa8d0dea595a7",
+      "bytes": 338,
+      "github_digest_verified": true
+    },
+    "assets/play.png": {
+      "url": "https://github.com/jpettitt/weather-radar-card/releases/download/v3.13.0/play.png",
+      "sha256": "2fb885f122f5d864ec7cf17124f7e295e4c0e526cd07b430558de96aa67d48f6",
+      "bytes": 429,
+      "github_digest_verified": true
+    },
+    "assets/radar-colour-bar-dwd.png": {
+      "url": "https://github.com/jpettitt/weather-radar-card/releases/download/v3.13.0/radar-colour-bar-dwd.png",
+      "sha256": "4c5dc4f13917ca7d3f7297ddaa8ae8d4dc7022a3ec8f9bd46c2b3fd30c891689",
+      "bytes": 161,
+      "github_digest_verified": true
+    },
+    "assets/radar-colour-bar-nws.png": {
+      "url": "https://github.com/jpettitt/weather-radar-card/releases/download/v3.13.0/radar-colour-bar-nws.png",
+      "sha256": "07faf8b7c529bd13e11512705aa678dc3c6845112e199a05c23c0eb2638a19b8",
+      "bytes": 559,
+      "github_digest_verified": true
+    },
+    "assets/radar-colour-bar-universalblue.png": {
+      "url": "https://github.com/jpettitt/weather-radar-card/releases/download/v3.13.0/radar-colour-bar-universalblue.png",
+      "sha256": "e50fb19dc5c3fe2d19264473c41830c8f577f32034bf34a929c3b4b579663629",
+      "bytes": 243,
+      "github_digest_verified": true
+    },
+    "assets/recenter.png": {
+      "url": "https://github.com/jpettitt/weather-radar-card/releases/download/v3.13.0/recenter.png",
+      "sha256": "a228a8447710a114309336f9bad555260f8e7217eb7f4926aa356e43ad06720b",
+      "bytes": 435,
+      "github_digest_verified": true
+    },
+    "assets/skip-back.png": {
+      "url": "https://github.com/jpettitt/weather-radar-card/releases/download/v3.13.0/skip-back.png",
+      "sha256": "a05a3957ab4b5a27d4fe5232672769841873c8a6e3a459b5e6dd39a8b5b332b5",
+      "bytes": 409,
+      "github_digest_verified": true
+    },
+    "assets/skip-next.png": {
+      "url": "https://github.com/jpettitt/weather-radar-card/releases/download/v3.13.0/skip-next.png",
+      "sha256": "cead2f7cf0083af10a3fbbd20d533f9563c69f5cb86f96a7c289066cc68785d1",
+      "bytes": 400,
+      "github_digest_verified": true
+    },
+    "assets/weather-radar-card.js": {
+      "url": "https://github.com/jpettitt/weather-radar-card/releases/download/v3.13.0/weather-radar-card.js",
+      "sha256": "ef08834c179032d44165344144bf0b12c6d93855d544e606a830ced226528d89",
+      "bytes": 604368,
+      "github_digest_verified": true
+    },
+    "assets/preview.jpg": {
+      "url": "https://github.com/jpettitt/weather-radar-card/releases/download/v3.13.0/preview.jpg",
+      "sha256": "6483666236e40819fa308aa51195c37b755416df4c638236b98c4a72589b54df",
+      "bytes": 103573,
+      "github_digest_verified": true
+    }
+  },
+  "ha_minimum": "2024.1.0",
+  "maptiles_minimum": "2026.10.0",
+  "resource_url": "/local/community/weather-radar-card/weather-radar-card.js?v=3.13.0",
+  "resource_type": "module",
+  "recommended_config": {
+    "type": "custom:weather-radar-card",
+    "data_source": "NOAA",
+    "map_style": "MapTiles",
+    "past_minutes": 60,
+    "frame_stride_minutes": 5,
+    "zoom_level": 7,
+    "markers": [
+      {
+        "entity": "zone.home"
+      }
+    ],
+    "motion_compensation": false,
+    "preload_while_hidden": false
+  },
+  "scope_note": "Browser-fetched observed radar only, not a forecast or an alert authority. NOAA fallback may be older; retain visible timestamps."
+}

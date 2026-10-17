@@ -1,1 +1,4 @@
 ﻿* text=auto eol=lf
+
+# Unified patch context represents blank source lines with a single space.
+services/home-assistant-weather/patches/*.patch whitespace=-blank-at-eol

@@ -1,0 +1,30 @@
+{
+  "version": "6.7.3",
+  "local_revision": "safe-errors-1",
+  "repository": "https://github.com/finity69x2/nws_alerts",
+  "release_url": "https://github.com/finity69x2/nws_alerts/releases/tag/6.7.3",
+  "commit": "f51aaafe6e4ed0b340cfa27027edb62c8a3dedac",
+  "archive_url": "https://codeload.github.com/finity69x2/nws_alerts/zip/f51aaafe6e4ed0b340cfa27027edb62c8a3dedac",
+  "archive_sha256": "addaf745ee3020eb081b669d296ff43c70bcdb86eb2237fb79bef03d2f64f9fd",
+  "component_tree_sha256": "13babb2d5173e05c26013f9725dd2b7f7a846f79b5c830538a21cabf8534add6",
+  "patched_component_tree_sha256": "3e54c439d5b6ce2f011f3b610be04fc282b8f27fb6d13425958ba151344d7f21",
+  "patch": "patches/nws-alerts-6.7.3-safe-errors.patch",
+  "patch_sha256": "780b948e74c6fbad627270208c2b9204d2dbea4a13741214649db95d1f293497",
+  "upstream_files": {
+    "coordinator.py": "fcae356dbbab3ed3b59b1a3318b24f860302571e67e529d94af328d6483e316a"
+  },
+  "config_flow": {
+    "version": 2,
+    "route": [
+      "gps",
+      "gps_loc"
+    ],
+    "fields": {
+      "gps_loc": "<LAT>,<LON>",
+      "name": "NWS Alerts",
+      "interval": 1,
+      "timeout": 120
+    }
+  },
+  "scope_note": "Point query delegates geography to NWS; this component performs no local storm-polygon containment."
+}

@@ -1,0 +1,75 @@
+--- a/custom_components/nws_alerts/coordinator.py
++++ b/custom_components/nws_alerts/coordinator.py
+@@ -56,20 +56,19 @@
+ 
+     async def _async_update_data(self):
+         """Fetch data."""
+-        coords = None
+-        if CONF_TRACKER in self._config.data:
+-            coords = await self._get_tracker_gps()
+-        async with timeout(self.timeout):
+-            try:
++        try:
++            coords = None
++            if CONF_TRACKER in self._config.data:
++                coords = await self._get_tracker_gps()
++            async with timeout(self.timeout):
+                 data = await self.update_alerts(coords)
+-            except AttributeError as error:
+-                _LOGGER.warning("AttributeError fetching NWS Alerts data: %s. Will retry.", error)
+-                # Return valid structure instead of None
+-                return {"state": 0, "alerts": [], "last_updated": datetime.now().isoformat()}
+-            except Exception as error:
+-                raise UpdateFailed(error) from error
+-            _LOGGER.debug("Data: %s", data)
+-            return data
++        except UpdateFailed:
++            raise
++        except Exception as error:
++            # A failed feed must never publish a fresh, empty alert result.
++            raise UpdateFailed("Unable to update NWS alerts") from error
++        _LOGGER.debug("Data: %s", data)
++        return data
+ 
+     async def _get_tracker_gps(self):
+         """Return device tracker GPS data."""
+@@ -108,11 +107,12 @@
+             elif CONF_GPS_LOC in self._config.data:
+                 gps_loc = self._config.data[CONF_GPS_LOC].replace(" ", "")
+             else:
+-                _LOGGER.warning("Tracker configured but no GPS coordinates available")
+-                return values
++                raise UpdateFailed("Tracker has no GPS coordinates")
+ 
+             _LOGGER.debug("Fetching alerts for GPS location: %s", gps_loc)
+             values = await self.async_get_alerts(gps_loc=gps_loc)
++        else:
++            raise UpdateFailed("NWS alert location is not configured")
+ 
+         return values
+ 
+@@ -143,7 +143,10 @@
+                 _LOGGER.warning(msg)
+                 raise UpdateFailed(msg)
+ 
+-        if data is not None and "features" in data:
++        if not isinstance(data, dict) or not isinstance(data.get("features"), list):
++            raise UpdateFailed("Invalid NWS alerts response: expected a feature list")
++
++        if "features" in data:
+             features = data["features"]
+             alert_list: list[Any] = []
+             for alert in features:
+@@ -179,9 +182,9 @@
+                     tmp_dict["Instruction"] = alert["properties"]["instruction"]
+ 
+                     alert_list.append(tmp_dict)
+-                except (KeyError, TypeError) as error:
+-                    _LOGGER.warning("Error parsing alert data: %s. Skipping this alert.", error)
+-                    continue
++                except (KeyError, TypeError, IndexError, AttributeError) as error:
++                    # Publishing only the parseable subset could hide an alert.
++                    raise UpdateFailed("Invalid NWS alert data") from error
+ 
+             alerts["state"] = len(alert_list)
+             alerts["alerts"] = sorted(alert_list, key=lambda x: x["ID"])

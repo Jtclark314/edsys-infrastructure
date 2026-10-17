@@ -1,0 +1,277 @@
+--- a/custom_components/wundergroundpws/config_flow.py
++++ b/custom_components/wundergroundpws/config_flow.py
+@@ -6,6 +6,7 @@
+ import logging
+ from typing import Any
+ 
++import aiohttp
+ import voluptuous as vol
+ 
+ from homeassistant.config_entries import ConfigFlowResult
+@@ -113,36 +114,36 @@
+             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36",
+         }
+ 
+-        async with timeout(DEFAULT_TIMEOUT):
+-            url = (
+-                f"https://api.weather.com/v2/pws/observations/current?stationId={pws_id}&format=json&units=e"
+-                f"&apiKey={api_key}"
+-            )
+-            response = await session.get(url, headers=headers)
+-
+-        if response.status != HTTPStatus.OK:
+-            if response.status == HTTPStatus.UNAUTHORIZED:
+-                _LOGGER.error(
+-                    "WundergroundPWS config responded with HTTP error %s: %s",
+-                    response.status,
+-                    response.reason,
++        try:
++            async with timeout(DEFAULT_TIMEOUT):
++                url = (
++                    f"https://api.weather.com/v2/pws/observations/current?stationId={pws_id}&format=json&units=e"
++                    f"&apiKey={api_key}"
+                 )
+-                raise InvalidApiKeyError("Invalid API key")
+-            if response.status == HTTPStatus.NO_CONTENT:
+-                _LOGGER.error(
+-                    "WundergroundPWS config responded with HTTP error %s: %s",
+-                    response.status,
+-                    response.reason,
+-                )
+-                raise InvalidStationIdError("Invalid Station ID")
+-            _LOGGER.error(
+-                "WundergroundPWS config responded with HTTP error %s: %s",
+-                response.status,
+-                response.reason,
+-            )
+-            raise InvalidApiResponseError("Unknown API Error")
+-
+-        return await response.json()
++                async with session.get(url, headers=headers) as response:
++                    if response.status == HTTPStatus.UNAUTHORIZED:
++                        raise InvalidApiKeyError("Invalid API key (HTTP 401)") from None
++                    if response.status == HTTPStatus.NO_CONTENT:
++                        raise InvalidStationIdError("Invalid Station ID (HTTP 204)") from None
++                    if response.status != HTTPStatus.OK:
++                        raise InvalidApiResponseError(
++                            f"Weather Underground HTTP {response.status}"
++                        ) from None
++                    result = await response.json()
++            if not isinstance(result, dict) or result.get("errors"):
++                raise InvalidApiResponseError("Invalid Weather Underground response")
++            observations = result.get(FIELD_OBSERVATIONS)
++            if not isinstance(observations, list) or not observations or not isinstance(observations[0], dict):
++                raise InvalidApiResponseError("No station observation returned")
++            for field in ("stationID", FIELD_LATITUDE, FIELD_LONGITUDE):
++                if field not in observations[0]:
++                    raise InvalidApiResponseError("Incomplete station observation returned")
++            return result
++        except (TimeoutError, aiohttp.ClientError, ValueError, KeyError, IndexError, TypeError) as err:
++            # Never propagate aiohttp/JSON messages: they can echo the key or URL.
++            raise InvalidApiResponseError(
++                f"Weather Underground request failed ({type(err).__name__})"
++            ) from None
+ 
+     async def async_step_user(self, user_input=None):
+         """Handle a flow initiated by the user."""
+--- a/custom_components/wundergroundpws/coordinator.py
++++ b/custom_components/wundergroundpws/coordinator.py
+@@ -143,48 +143,45 @@
+             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36",
+         }
+         try:
+-            async with timeout(DEFAULT_TIMEOUT):
+-                url = self._build_url(_RESOURCECURRENT)
+-                response = await self._session.get(url, headers=headers)
+-                result_current = await response.json()
+-                if result_current is None:
+-                    _LOGGER.error("Check WUnderground API - NO CURRENT RESULT RETURNED FROM API")
+-                    return None
+-                self._check_errors(url, result_current)
+-
+-                if not self._longitude:
+-                    self._longitude = result_current[FIELD_OBSERVATIONS][0][
+-                        FIELD_LONGITUDE
+-                    ]
+-                if not self._latitude:
+-                    self._latitude = result_current[FIELD_OBSERVATIONS][0][
+-                        FIELD_LATITUDE
+-                    ]
+-
+-            async with timeout(DEFAULT_TIMEOUT):
+-                url = self._build_url(_RESOURCEFORECAST)
+-                response = await self._session.get(url, headers=headers)
+-                result_forecast = await response.json()
+-
+-                if result_forecast is None:
+-                    _LOGGER.error("Check WUnderground API NO FORECAST RESULT")
+-                    return None
+-                self._check_errors(url, result_forecast)
+-
+-            result = {**result_current, **result_forecast}
+-
+-            self.data = result
+-
++            result_current = await self._async_request_json(
++                self._build_url(_RESOURCECURRENT), headers
++            )
++            observations = result_current.get(FIELD_OBSERVATIONS)
++            if not isinstance(observations, list) or not observations or not isinstance(observations[0], dict):
++                raise UpdateFailed("Weather Underground returned no station observation")
++            if not self._longitude:
++                self._longitude = observations[0][FIELD_LONGITUDE]
++            if not self._latitude:
++                self._latitude = observations[0][FIELD_LATITUDE]
++            result_forecast = await self._async_request_json(
++                self._build_url(_RESOURCEFORECAST), headers
++            )
+         except ClientResponseError as err:
++            # aiohttp exception strings and their causes can contain credential URLs.
+             if err.status == 401:
+-                raise ConfigEntryAuthFailed(err) from err
+-            raise UpdateFailed(f"Update failed: {err}") from err
+-        except (TimeoutError, aiohttp.ClientError) as err:
+-            _LOGGER.error("Error fetching WUnderground data: %s", repr(err))
+-            return None
+-        else:
+-            return result
+-        # _LOGGER.debug(f'WUnderground data {self.data}')
++                raise ConfigEntryAuthFailed("Weather Underground HTTP 401") from None
++            raise UpdateFailed(
++                f"Weather Underground HTTP {err.status} ({type(err).__name__})"
++            ) from None
++        except (TimeoutError, aiohttp.ClientError, ValueError, KeyError, IndexError, TypeError) as err:
++            raise UpdateFailed(
++                f"Weather Underground request failed ({type(err).__name__})"
++            ) from None
++        result = {**result_current, **result_forecast}
++        self.data = result
++        return result
++
++    async def _async_request_json(self, url, headers):
++        """Read one response without putting credentials or provider text in errors."""
++        async with timeout(DEFAULT_TIMEOUT):
++            async with self._session.get(url, headers=headers) as response:
++                if response.status == 401:
++                    raise ConfigEntryAuthFailed("Weather Underground HTTP 401") from None
++                if response.status != 200:
++                    raise UpdateFailed(f"Weather Underground HTTP {response.status}") from None
++                result = await response.json()
++        self._check_errors(result)
++        return result
+ 
+     def _build_url(self, baseurl):
+         """Build a URL for API requests with appropriate parameters."""
+@@ -206,15 +203,12 @@
+             units=self._unit_system_api,
+         )
+ 
+-    def _check_errors(self, url: str, response: dict):
+-        """Check for errors in the API response and raise if found."""
+-        # _LOGGER.debug(f'Checking errors from {url} in {response}')
+-        if "errors" not in response:
+-            return
+-        if errors := response["errors"]:
+-            raise ValueError(
+-                f"Error from {url}: ; ".join([e["message"] for e in errors])
+-            )
++    def _check_errors(self, response):
++        """Reject malformed/provider errors without echoing URLs or response text."""
++        if not isinstance(response, dict):
++            raise UpdateFailed("Weather Underground returned an invalid JSON object")
++        if response.get("errors"):
++            raise UpdateFailed("Weather Underground reported an API error")
+ 
+     def request_feature(self, feature):
+         """Register a feature to be fetched from the WU API."""
+--- a/custom_components/wundergroundpws/sensor.py
++++ b/custom_components/wundergroundpws/sensor.py
+@@ -166,7 +166,7 @@
+     @property
+     def available(self) -> bool:
+         """Return if weather data is available."""
+-        return self.coordinator.data is not None
++        return super().available and self.coordinator.data is not None
+ 
+     @property
+     def name(self):
+--- a/custom_components/wundergroundpws/wupws_obs_sensors.py
++++ b/custom_components/wundergroundpws/wupws_obs_sensors.py
+@@ -2,6 +2,7 @@
+ 
+ from collections.abc import Callable
+ from dataclasses import dataclass
++from datetime import datetime, timezone
+ from typing import Any, cast
+ 
+ from homeassistant.components.sensor import (
+@@ -69,6 +70,19 @@
+     return "None"
+ 
+ 
++def utc_observation_time(value):
++    """Parse the provider's UTC observation time, independently of HA poll time."""
++    if not isinstance(value, str):
++        return None
++    try:
++        observed = datetime.fromisoformat(value)
++    except ValueError:
++        return None
++    if observed.tzinfo is None:
++        observed = observed.replace(tzinfo=timezone.utc)
++    return observed.astimezone(timezone.utc)
++
++
+ obs_sensor_descriptions = [
+     # observations
+     # *'stationID': 'obsTimeUtc': *'obsTimeLocal': *'neighborhood': 'softwareType': 'country': *'solarRadiation': 'lon':
+@@ -89,6 +103,13 @@
+         # value_fn=lambda data, _: cast(str, datetime.strptime(data,  '%Y-%m-%d %H:%M:%S').strftime('%m/%d/%Y %H:%M:%S')),
+     ),
+     WundergroundPWSSensorEntityDescription(
++        key="obsTimeUtc",
++        name="UTC Observation Time",
++        feature=FEATURE_OBSERVATIONS,
++        device_class=SensorDeviceClass.TIMESTAMP,
++        value_fn=lambda data, _: utc_observation_time(data),
++    ),
++    WundergroundPWSSensorEntityDescription(
+         key="humidity",
+         name="Relative Humidity",
+         feature=FEATURE_OBSERVATIONS,
+@@ -96,7 +117,7 @@
+         device_class=SensorDeviceClass.HUMIDITY,
+         state_class=SensorStateClass.MEASUREMENT,
+         unit_fn=lambda _: PERCENTAGE,
+-        value_fn=lambda data, _: cast(int, data) or 0,
++        value_fn=lambda data, _: cast(int, data) if data is not None else None,
+     ),
+     WundergroundPWSSensorEntityDescription(
+         key="stationID",
+@@ -113,7 +134,7 @@
+         device_class=SensorDeviceClass.IRRADIANCE,
+         state_class=SensorStateClass.MEASUREMENT,
+         unit_fn=lambda _: UnitOfIrradiance.WATTS_PER_SQUARE_METER,
+-        value_fn=lambda data, _: cast(int, data) or 0,
++        value_fn=lambda data, _: cast(int, data) if data is not None else None,
+     ),
+     WundergroundPWSSensorEntityDescription(
+         key="uv",
+@@ -122,7 +143,7 @@
+         icon="mdi:sunglasses",
+         state_class=SensorStateClass.MEASUREMENT,
+         unit_fn=lambda _: UV_INDEX,
+-        value_fn=lambda data, _: cast(int, data) or 0,
++        value_fn=lambda data, _: cast(int, data) if data is not None else None,
+     ),
+     WundergroundPWSSensorEntityDescription(
+         key="winddir",
+@@ -131,7 +152,7 @@
+         icon="mdi:weather-windy",
+         state_class=SensorStateClass.MEASUREMENT,
+         unit_fn=lambda _: DEGREE,
+-        value_fn=lambda data, _: cast(int, data) or 0,
++        value_fn=lambda data, _: cast(int, data) if data is not None else None,
+     ),
+     # computed observations
+     WundergroundPWSSensorEntityDescription(

@@ -75,3 +75,6 @@ Use this repo for deployable definitions and repeatable commands. Do not store r
   authenticated ingress, native device onboarding, Nimo USB flow and backup limits.
 - `../services/esphome-workbench/README.md` - isolated pinned 9950x ESPHome,
   Device Builder, esptool and PlatformIO tools; no automatic device operations.
+
+- `../services/home-assistant-weather/README.md` - pinned station observations,
+  independent NWS forecast/alerts, NOAA radar, source freshness and narrow recovery.
