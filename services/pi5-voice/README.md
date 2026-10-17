@@ -58,8 +58,9 @@ a new installation stays at `commissioned: false`.
 
 The startup gate requires the exact physical USB microphone and reply sink on
 the same device. It rejects output monitors, absent devices and a separate
-reply DAC. A presence watchdog stops the process on unplug; restart stays held
-until the device is attached. It never chooses a default/HDMI output.
+reply DAC. A polling presence watchdog stops the process when audio loss is
+observed; an unplug/replug entirely between polls can be missed. It never
+chooses a default/HDMI output. Detected-loss recovery hardening is described below.
 Conversation logging is suppressed. Keep debug logging and household-audio
 recording off.
 
@@ -146,9 +147,12 @@ rejected, and no default device or name-only substitute is selected. An older
 commissioned config without the identity remains held until deliberately
 commissioned; do not manufacture an identity or set `commissioned` to pass it.
 
-The five-second presence watchdog exits with status 78 on device loss or
-inventory uncertainty. `RestartPreventExitStatus=78` keeps that unit stopped
-after unplug even if the device quickly returns. Replug is an explicit recovery:
+The five-second presence watchdog exits with status 78 when it detects device
+loss or inventory uncertainty. `RestartPreventExitStatus=78` keeps that unit
+stopped after detected loss even if the device then quickly returns. Polling can
+miss an entire unplug/replug between observations; detecting all rapid USB events
+and physical hotplug qualification remain pending. Replug after detected loss
+is an explicit recovery:
 verify exact descriptors/identity/channel routing privately, run the wrapper's
 read-only `--check` as the service user, and only then explicitly start the voice
 unit through that user's bus. Recovery starts a fresh conversation; it must not

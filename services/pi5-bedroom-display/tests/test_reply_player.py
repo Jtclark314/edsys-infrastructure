@@ -15,8 +15,8 @@ spec=importlib.util.spec_from_file_location('reply_player_fixture',ROOT/'kodi/re
 player=importlib.util.module_from_spec(spec);spec.loader.exec_module(player)
 
 
-def running(position=0,owner=4242):
-    return {'state':'RUNNING','owner_pid':str(owner),'hw_ptr':str(position)}
+def running(position=0,owner=4242,state='RUNNING'):
+    return {'state':state,'owner_pid':str(owner),'hw_ptr':str(position)}
 
 
 class ProgressTests(unittest.TestCase):
@@ -76,6 +76,33 @@ class HelperTests(unittest.TestCase):
         self.assertEqual([e['event'] for e in events],['started','finished'])
         self.assertTrue(events[-1]['ok']);self.assertEqual(child.returncode,0)
         self.assertIn('plughw:CARD=vc4hdmi0,DEV=0',popen.call_args.args[0])
+
+    def test_short_reply_observed_only_draining_can_finish_cleanly(self):
+        events,_,child,_=self.harness(lambda t:running(int(t*24000),state='DRAINING'),finish_at=.3)
+        self.assertEqual([e['event'] for e in events],['started','finished'])
+        self.assertTrue(events[-1]['ok']);self.assertEqual(child.returncode,0)
+
+    def test_running_to_advancing_long_drain_retains_progress_evidence(self):
+        events,_,child,elapsed=self.harness(
+            lambda t:running(int(t*24000),state='DRAINING' if t>=.1 else 'RUNNING'),finish_at=3.3)
+        self.assertEqual([e['event'] for e in events],['started','finished'])
+        self.assertTrue(events[-1]['ok']);self.assertEqual(child.returncode,0);self.assertGreater(elapsed,3)
+
+    def test_draining_does_not_relax_owner_or_pointer_checks(self):
+        for fields in [running(240,owner=99,state='DRAINING'),running(-1,state='DRAINING'),
+                       {'state':'DRAINING','owner_pid':'4242'}]:
+            with self.subTest(fields=fields):
+                p=player.PlaybackProgress(4242,0)
+                with self.assertRaises((ValueError,KeyError)):p.observe(fields,.1)
+        events,_,child,_=self.harness(lambda t:running(int(t*24000),owner=99 if t>.05 else 4242,state='DRAINING'))
+        self.assertEqual(events[0],{'event':'started'});self.assertFalse(events[-1]['ok'])
+        self.assertEqual(events[-1]['reason'],'status_unavailable');self.assertEqual(child.returncode,-15)
+
+    def test_stalled_drain_after_start_is_terminated(self):
+        events,_,child,elapsed=self.harness(lambda t:running(min(int(t*24000),600),state='DRAINING'))
+        self.assertEqual(events[0],{'event':'started'});self.assertFalse(events[-1]['ok'])
+        self.assertEqual(events[-1]['reason'],'progress_stalled');self.assertEqual(child.returncode,-15)
+        self.assertLess(elapsed,3)
 
     def test_poststart_stall_terminates_and_never_reports_success(self):
         events,_,child,elapsed=self.harness(lambda t:running(min(int(t*24000),600)))

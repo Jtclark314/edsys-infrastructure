@@ -390,7 +390,12 @@ still targets only named HDMI ALSA and accepts only the existing private bounded
 PCM file; it adds no audio device, passthrough path or network listener.
 
 The reply helper confirms its own `aplay` PID and advancing hardware pointer
-before announcing start, then continuously checks progress. It terminates on
+in ALSA `RUNNING` or `DRAINING` playback state before announcing start, then
+continuously checks progress. ALSA draining still plays pending frames; a short
+reply may reach that state before the first observation. This does not relax
+ownership/progress evidence or the requirement for a clean player exit.
+See [ALSA PCM drain semantics](https://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html).
+It terminates on
 missing status/changed ownership, a three-second unconfirmed start, a two-second
 post-start progress stall, parent EOF/heartbeat loss or the existing 63-second
 ceiling. A stalled/uncertain reply reports failure, never clean completion or

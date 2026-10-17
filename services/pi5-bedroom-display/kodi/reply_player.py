@@ -23,7 +23,9 @@ class PlaybackProgress:
 
     def observe(self,fields,now):
         self.check(now)
-        if fields.get('state')=='RUNNING':
+        # ALSA playback keeps consuming queued frames while DRAINING; short
+        # replies may enter this state before our first status observation.
+        if fields.get('state') in {'RUNNING','DRAINING'}:
             owner=int(fields['owner_pid']);position=int(fields['hw_ptr'])
             if owner!=self.owner_pid or position<0:raise ValueError('Playback ownership changed')
             if self.position is not None and position<self.position:raise ValueError('Playback position reset')
