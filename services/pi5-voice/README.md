@@ -1,8 +1,9 @@
 # Pi5 voice endpoint
 
-Status, 2026-10-13: software prepared and reboot checked. Microphone/speaker
-commissioning and room acceptance are pending. Additional services wait until
-voice passes room acceptance and a 24-hour soak.
+Status: software prepared and reboot checked; microphone/speaker commissioning,
+room acceptance and a 24-hour hands-free voice soak are pending. The later
+owner-authorized Nimo-first Kodi/display pilot proceeds independently of this
+Pi microphone gate; it does not establish hands-free acceptance.
 
 ## Architecture
 
@@ -68,7 +69,14 @@ recording off.
    keep identifiers private. Verify processed-channel isolation, simultaneous
    capture/reply playback, mute, volume without clipping and echo suppression.
 2. Select exact source/sink names from `pactl -f json list sources`/`sinks` in
-   private `audio.json`; set `commissioned: true` only after audio verification.
+   private `audio.json`. For the source-prepared hardening below, also record
+   `usb_device_identity` with the shared nonempty `device.name` and
+   `device.serial` properties. If the actual hardware has no stable serial,
+   explicitly commission its shared `device.bus_path` instead; this pins the
+   reviewed USB port, not a uniquely identifiable serial-less physical unit.
+   Keep these identifiers private. Both nodes must report USB bus and their
+   correct capture/playback roles. Set `commissioned: true` only after audio
+   verification, including processed capture-channel and hardware AEC mapping.
 3. Restart using the service user's bus:
 
    ```bash
@@ -123,3 +131,33 @@ References: [LVA](https://github.com/OHF-Voice/linux-voice-assistant/tree/v1.1.1
 [Seeed USB guidance](https://wiki.seeedstudio.com/respeaker_xvf3800_introduction/),
 [Seeed FAQ](https://wiki.seeedstudio.com/respeaker_xvf3800_faq/),
 [Amazon enclosed USB version](https://www.amazon.com/dp/B0GVJ5YQ58).
+
+## Source-prepared audio identity and disconnect hold — 2026-10-16
+
+These changes are prepared in source and verified with synthetic inventories;
+they are not installed or physically accepted. No microphone/audio test or
+endpoint/service change is authorized by this preparation. The current
+uncommissioned/no-microphone hold remains intentional.
+
+`run.py` requires exactly one named USB capture source and one named USB playback
+sink whose properties both match the explicit stable commissioning identity.
+Missing/blank identities cannot compare equal, monitors and separate DACs are
+rejected, and no default device or name-only substitute is selected. An older
+commissioned config without the identity remains held until deliberately
+commissioned; do not manufacture an identity or set `commissioned` to pass it.
+
+The five-second presence watchdog exits with status 78 on device loss or
+inventory uncertainty. `RestartPreventExitStatus=78` keeps that unit stopped
+after unplug even if the device quickly returns. Replug is an explicit recovery:
+verify exact descriptors/identity/channel routing privately, run the wrapper's
+read-only `--check` as the service user, and only then explicitly start the voice
+unit through that user's bus. Recovery starts a fresh conversation; it must not
+replay an old question/reply or resume TV/media. This does not qualify hotplug,
+AEC, acoustic isolation, reply audibility or physical recovery.
+
+When separately authorized to deploy, back up and compare the owned wrapper,
+user unit and private audio configuration; install the wrapper and unit together.
+Do not rerun the broad base installer merely to update this gate, and do not
+restart PipeWire/Kodi or change the HDMI audio owner for Pi voice recovery.
+Rollback compares/restores only these owned files while preserving later private
+commissioning choices. Hardware identity loss must continue to hold fail closed.

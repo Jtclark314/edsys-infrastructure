@@ -2,5 +2,6 @@
   "commissioned": false,
   "input_device": null,
   "output_device": null,
+  "usb_device_identity": null,
   "listen_address": "192.168.50.126"
 }

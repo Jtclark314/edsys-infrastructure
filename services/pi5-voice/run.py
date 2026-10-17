@@ -13,30 +13,56 @@ import time
 CONFIG = Path('/etc/edsys-voice/audio.json')
 ROOT = Path('/opt/edsys-voice/linux-voice-assistant')
 STATE = Path('/var/lib/edsys-voice')
+AUDIO_LOST_EXIT = 78
 
 
 def selected_audio(config):
+    if not isinstance(config,dict):raise ValueError('Invalid audio commissioning record')
     if config.get('commissioned') is not True:
         raise ValueError('Waiting for microphone commissioning')
     source = config.get('input_device')
     sink = config.get('output_device')
-    if not isinstance(source, str) or not source or source.endswith('.monitor'):
+    if not isinstance(source, str) or not source.strip() or source!=source.strip() or source.endswith('.monitor'):
         raise ValueError('An exact physical microphone source is required')
-    if not isinstance(sink, str) or not sink:
+    if not isinstance(sink, str) or not sink.strip() or sink!=sink.strip():
         raise ValueError('An exact reply sink is required')
+    identity=config.get('usb_device_identity')
+    if (not isinstance(identity,dict) or not {'device.name'}<=identity.keys()
+            or not set(identity)<={'device.name','device.serial','device.bus_path'}
+            or not {'device.serial','device.bus_path'}&identity.keys()
+            or any(not isinstance(v,str) or not v.strip() or v!=v.strip() for v in identity.values())):
+        raise ValueError('A stable commissioned USB identity is required')
     sources = json.loads(subprocess.check_output(['pactl', '-f', 'json', 'list', 'sources'], text=True, timeout=5))
     sinks = json.loads(subprocess.check_output(['pactl', '-f', 'json', 'list', 'sinks'], text=True, timeout=5))
-    microphones = [s for s in sources if s['name'] == source
+    if not isinstance(sources,list) or not isinstance(sinks,list):raise ValueError('Invalid audio inventory')
+    microphones = [s for s in sources if isinstance(s,dict) and s.get('name') == source
+                   and isinstance(s.get('properties'),dict)
                    and s.get('properties', {}).get('api.alsa.pcm.stream') == 'capture'
-                   and s.get('properties', {}).get('device.bus') == 'usb']
-    if not microphones:
+                   and s.get('properties', {}).get('device.bus') == 'usb'
+                   and s.get('monitor_of_sink',4294967295) in (None,4294967295,'4294967295')]
+    if len(microphones)!=1:
         raise ValueError('Commissioned microphone is not present')
-    outputs = [s for s in sinks if s['name'] == sink]
-    if not outputs:
+    outputs = [s for s in sinks if isinstance(s,dict) and s.get('name') == sink
+               and isinstance(s.get('properties'),dict)
+               and s['properties'].get('api.alsa.pcm.stream')=='playback'
+               and s['properties'].get('device.bus')=='usb']
+    if len(outputs)!=1:
         raise ValueError('Commissioned reply output is not present')
-    if microphones[0]['properties'].get('device.name') != outputs[0].get('properties', {}).get('device.name'):
+    if any(device['properties'].get(key)!=value for device in (microphones[0],outputs[0]) for key,value in identity.items()):
         raise ValueError('Microphone and reply output must share the echo-cancelling USB device')
     return source, sink
+
+
+def watch_audio(config):
+    while True:
+        time.sleep(5)
+        try:
+            selected_audio(config)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            print('Voice endpoint stopped: commissioned audio device disconnected; explicit recovery required.', flush=True)
+            # The unit prevents restart for this exit code. Replug must not
+            # resurrect an interrupted conversation or select another device.
+            os._exit(AUDIO_LOST_EXIT)
 
 
 def main():
@@ -51,15 +77,7 @@ def main():
         return 1
     if args.check:
         return 0
-    def watch_audio():
-        while True:
-            time.sleep(5)
-            try:
-                selected_audio(config)
-            except (OSError, ValueError, subprocess.SubprocessError):
-                print('Voice endpoint stopped: commissioned audio device disconnected.', flush=True)
-                os._exit(1)
-    threading.Thread(target=watch_audio, daemon=True, name='audio-presence').start()
+    threading.Thread(target=watch_audio, args=(config,), daemon=True, name='audio-presence').start()
     STATE.mkdir(exist_ok=True)
     os.chdir(ROOT)
     sys.path.insert(0, str(ROOT))

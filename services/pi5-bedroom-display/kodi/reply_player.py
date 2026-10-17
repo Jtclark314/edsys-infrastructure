@@ -9,41 +9,73 @@ import sys
 import time
 import wave
 
+from alsa_status import read_playback_status
+
+START_TIMEOUT=3
+PROGRESS_TIMEOUT=2
+
+
+class PlaybackProgress:
+    """Prove local ownership and continuing playback, never just process liveness."""
+    def __init__(self,owner_pid,created):
+        self.owner_pid=owner_pid;self.created=created;self.started=False
+        self.position=None;self.last_progress=created
+
+    def observe(self,fields,now):
+        self.check(now)
+        if fields.get('state')=='RUNNING':
+            owner=int(fields['owner_pid']);position=int(fields['hw_ptr'])
+            if owner!=self.owner_pid or position<0:raise ValueError('Playback ownership changed')
+            if self.position is not None and position<self.position:raise ValueError('Playback position reset')
+            advanced=self.position is not None and position>self.position
+            self.position=position
+            if advanced:
+                first=not self.started;self.started=True;self.last_progress=now
+                return first
+        return False
+
+    def check(self,now):
+        if not self.started and now-self.created>=START_TIMEOUT:raise TimeoutError('Playback start unconfirmed')
+        if self.started and now-self.last_progress>=PROGRESS_TIMEOUT:raise TimeoutError('Playback progress stalled')
+
 
 def run(path):
     p=Path(path)
     if not re.fullmatch(r'/run/edsys-bedroom-display/reply-[a-f0-9-]{36}\.wav',str(p)) or p.is_symlink() or p.stat().st_uid!=os.getuid():raise ValueError('Unmanaged audio file')
     with wave.open(str(p),'rb') as w:
         if (w.getnchannels(),w.getsampwidth(),w.getframerate(),w.getcomptype())!=(1,2,24000,'NONE') or not 0<w.getnframes()<=1_440_000:raise ValueError('Unsupported PCM')
-    parent=os.getppid();started=False;before=None;created=last=time.monotonic()
+    parent=os.getppid();created=last=time.monotonic();failure=None
+    # Fail before launch if the named sink cannot be identified. Never rely on
+    # card0: USB hotplug can change numeric card ordering.
+    read_playback_status()
     child=subprocess.Popen(['/usr/bin/aplay','-q','-D','plughw:CARD=vc4hdmi0,DEV=0',str(p)],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+    progress=PlaybackProgress(child.pid,created)
     try:
         while child.poll() is None:
             now=time.monotonic()
-            if os.getppid()!=parent or now-last>7 or now-created>63:break
+            if os.getppid()!=parent or now-last>7 or now-created>63:
+                failure='supervision_lost';break
             if select.select([sys.stdin],[],[],0)[0]:
                 data=os.read(0,64)
-                if not data or data.strip(b'.'):break
+                if not data or data.strip(b'.'):
+                    failure='parent_closed';break
                 last=now
             try:
-                text=Path('/proc/asound/card0/pcm0p/sub0/status').read_text()
-                fields={k.strip():v.strip() for line in text.splitlines() if ':' in line for k,v in [line.split(':',1)]}
-                position=int(fields.get('hw_ptr','0').strip())
-                if fields.get('state','').strip()=='RUNNING' and int(fields.get('owner_pid','-1'))==child.pid:
-                    if before is not None and position>before and not started:
-                        started=True;print(json.dumps({'event':'started'}),flush=True)
-                    before=position
-            except (OSError,ValueError):pass
-            if not started and now-created>3:break
+                if progress.observe(read_playback_status(),now):
+                    print(json.dumps({'event':'started'}),flush=True)
+            except TimeoutError:
+                failure='progress_stalled' if progress.started else 'start_unconfirmed';break
+            except (OSError,ValueError,KeyError):
+                failure='status_unavailable';break
             time.sleep(.025)
-        ok=child.poll()==0 and started
+        ok=failure is None and child.poll()==0 and progress.started
     finally:
         if child.poll() is None:
             child.terminate()
             try:child.wait(timeout=1)
             except subprocess.TimeoutExpired:child.kill();child.wait(timeout=1)
     detail=child.stderr.read(1024).lower()
-    reason='busy' if b'busy' in detail else 'permission' if b'denied' in detail else 'start_unconfirmed' if not started else 'player_exit'
+    reason=failure or ('busy' if b'busy' in detail else 'permission' if b'denied' in detail else 'start_unconfirmed' if not progress.started else 'player_exit')
     print(json.dumps({'event':'finished','ok':ok,'reason':reason,'returncode':child.returncode}),flush=True)
 
 

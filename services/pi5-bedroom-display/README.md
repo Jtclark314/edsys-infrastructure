@@ -374,3 +374,42 @@ restore the matching prior 599-file backup, removing only `reply_audio.py` and
 user changes; enable the add-on without restarting Kodi. Restore HA's matching
 14-file component/output binding and Nimo scripts separately as their runbooks
 specify. Do not restore an entire profile/VM or older art-only package.
+
+## Source-prepared named ALSA supervision — 2026-10-16
+
+Prepared source only: no deployment, add-on/service restart, audio/playback test,
+TV/input action or physical qualification occurred. The owner's live-test hold
+remains. Existing installed 0.7.0/601-file results above remain historical;
+the new helper increases the closed source-built package to 602 files.
+
+`kodi/alsa_status.py` resolves the configured `vc4hdmi0` card name via each
+`/proc/asound/cardN/id` observation rather than assuming card 0. Missing,
+ambiguous, changed or malformed card/status mappings fail closed. Its status
+reader handles ALSA's padded field names and `closed` sentinel. The fixed player
+still targets only named HDMI ALSA and accepts only the existing private bounded
+PCM file; it adds no audio device, passthrough path or network listener.
+
+The reply helper confirms its own `aplay` PID and advancing hardware pointer
+before announcing start, then continuously checks progress. It terminates on
+missing status/changed ownership, a three-second unconfirmed start, a two-second
+post-start progress stall, parent EOF/heartbeat loss or the existing 63-second
+ceiling. A stalled/uncertain reply reports failure, never clean completion or
+permission to resume media. Silent fixtures prove source policy only; physical
+HDMI startup/continuous playback/reacquisition still need attended acceptance.
+
+Retain `Restart=no`, the connected-HDMI start condition and explicit operator
+display recovery. No hotplug watcher or automatic Kodi restart is added: native
+PM4K may restore prior media/UI state, so a no-replay automatic restart has not
+been demonstrated. After a physical unplug/boot-without-TV, inspect fresh player,
+TV/input and display service state before any owner-authorized start; do not
+automatically restore an item, overlay or voice lease. An in-flight reply failure
+forfeits return, and recovery must not resume that media later.
+
+For later authorized add-on deployment, preserve the linked profile and compare
+the reviewed current owned files before disabling only this add-on/updating its
+closed ZIP/re-enabling it. The builder and both closed installer allowlists ship
+`alsa_status.py` with its callers. Back up the prior package; when withdrawing
+this source change restore only its owned callers and remove the helper only if
+no retained caller uses it. Do not restore a whole profile or restart Kodi merely
+to replace supervision code. HA/Pi speech changes may add dependencies and must
+be reviewed/deployed as one matching package.

@@ -31,7 +31,7 @@ def build(destination,animation_dir):
         if len(raw)>1024*1024 or raw[:8]!=b'\x89PNG\r\n\x1a\n' or struct.unpack('>II',raw[16:24])!=(512,768) or hashlib.sha256(raw).hexdigest()!=manifest['files'][name]:
             raise RuntimeError('Invalid rendered Phil frame')
     files.extend([('character.py','character.py'),('kodi/voice_display.py','voice_display.py')])
-    files.extend([('kodi/reply_audio.py','reply_audio.py'),('kodi/reply_player.py','reply_player.py')])
+    files.extend([('kodi/reply_audio.py','reply_audio.py'),('kodi/reply_player.py','reply_player.py'),('kodi/alsa_status.py','alsa_status.py')])
     destination.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(destination, 'w', zipfile.ZIP_DEFLATED) as z:
         for source, target in files:
