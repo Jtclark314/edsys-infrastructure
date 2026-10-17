@@ -1,11 +1,49 @@
 # Home Assistant Dashboard Design
 
+## Primary Google Map: 2026-10-17
+
+The existing **Map** entry (`/map`) now uses Google Maps with a saved
+**Hybrid** initial style. Native promotion and live Nimo Chrome are verified.
+The original native map was copied exactly to `/map-fallback`,
+shown as **HA Map (Fallback)** and linked by the Google card. Its original
+access is retained; Google remains admin-only as in the trial. The legacy
+`/google-maps-trial/trial` route stays compatible but is hidden from the sidebar.
+EdSys Home remains the system landing dashboard.
+
+Parent v1.0.2 adds validated saved-style/fallback-path settings. Loading stays
+manual, and quota/budget/isolation/selected-location/history boundaries are
+unchanged. The responsive card fills the available viewport height while
+retaining HA navigation/header and map controls, without fullscreen. Eighteen JS and five Python checks pass.
+Synthetic desktop/tall/phone/landscape browser checks verified viewport fill
+within a 16px margin, retained controls, short-screen scrolling and one Map/SDK
+across resizing. Renderer v1.0.0 is unchanged. The native API promotion verifies
+the exact fallback before replacing `/map`, retains the key inside HA and compares
+all resulting dashboard metadata. Dry-run/apply and exact primary/legacy/
+fallback/resource readback passed; protected persisted checks confirmed the
+same valid key, Hybrid default and fallback link.
+
+Nimo `/map/0` showed Hybrid selected before loading, then real Hybrid imagery
+filled the viewport to the footer in narrow and maximized windows while HA
+header/sidebar/toolbar stayed visible. The in-card fallback rendered the
+original native map at `/map-fallback/0`; sidebar Map returned to Google with
+Hybrid selected. A fresh Hybrid load worked and was left open. No Cloud/key
+change, HA/Pi restart, household action or voice change. The trial evidence
+below describes the earlier installation.
+
+Rollback restores only the original native Map configuration from the verified
+current fallback and original Map metadata through the native API. Delete
+only the created fallback if authorized. Use native API path `map-fallback`,
+not a guessed storage filename (observed storage ID `map_fallback`); do not
+restore whole HA storage, old
+dashboard inventories or resource lists. See the owning
+[Google Maps runbook](../services/home-assistant-google-maps/README.md).
+
 ## Google Maps trial: 2026-10-17
 
 The owner-authorized separate `/google-maps-trial/trial` dashboard is installed
 admin-only; the restricted key is now securely entered and natively saved.
 It retains the original Map's six explicit locations and two-hour history.
-The existing `/map` configuration, all other
+At that trial-installation stage, the existing `/map` configuration, all other
 dashboard metadata/resources, and nine protected HA files matched baseline.
 Only one new module resource, its two immutable HA assets and one dedicated
 9950x static renderer route were added. No device action or HA/Pi restart.
@@ -51,8 +89,8 @@ clipboard transfer or credential export; no private origin or key is published.
 Nimo Windows app control works; no CUA browser was required. Owner preference
 acceptance, physical GPS accuracy, alert-email delivery and final billed spend
 were not verified.
-Existing map is the immediate fallback on unsupported browsers, renderer
-failure or trial closure.
+At that trial stage, Existing map linked the unchanged native map. The primary
+promotion above relocates that exact fallback to `/map-fallback`.
 Setup, privacy, limits and narrow recovery:
 [Google Maps trial runbook](../services/home-assistant-google-maps/README.md).
 

@@ -13,12 +13,13 @@ from configure import client,ws
 from build import build
 
 PATH='google-maps-trial'
-VERSION='v1.0.1'
+VERSION='v1.0.2'
 RESOURCE=f'/local/edsys-google-maps/{VERSION}/edsys-google-maps-trial.js'
 
-def guest(code,payload):
+def guest(code,payload,*,container='homeassistant'):
     import shlex
-    cmd=shlex.join(['qm','guest','exec','300','--pass-stdin','1','--timeout','30','--','docker','exec','-i','homeassistant','python3','-c',code])
+    if container not in ('homeassistant','hassio_supervisor'):raise ValueError('Unsupported container')
+    cmd=shlex.join(['qm','guest','exec','300','--pass-stdin','1','--timeout','30','--','docker','exec','-i',container,'python3','-c',code])
     run=subprocess.run(['ssh','-o','BatchMode=yes','-o','ClearAllForwardings=yes','pve-node3',cmd],input=json.dumps(payload),capture_output=True,text=True,timeout=45,check=True)
     result=json.loads(run.stdout)
     if result.get('exitcode') or result.get('out-truncated'):raise RuntimeError('Guest operation failed; inspect before retry')
@@ -54,7 +55,7 @@ def candidate(entities,renderer_url):
 
 INSTALL=r'''
 import hashlib,json,os,pathlib,sys,tempfile
-p=json.load(sys.stdin);root=pathlib.Path('/config/www/edsys-google-maps/v1.0.1')
+p=json.load(sys.stdin);root=pathlib.Path('/config/www/edsys-google-maps/v1.0.2')
 for parent in [root,*root.parents]:
  if parent.is_symlink():raise RuntimeError('Unexpected asset symlink')
 root.mkdir(parents=True,exist_ok=True)

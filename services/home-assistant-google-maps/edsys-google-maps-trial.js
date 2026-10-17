@@ -1,7 +1,7 @@
 import {CHANNEL,KEY_PATTERN,validateConfig,rendererURL,projectStates,projectHistory,historyCommand,createNonce,reserveBrowserLoad,DAILY_BROWSER_LOADS} from "./core.js";
 
 class GoogleMapTrial extends HTMLElement {
-  constructor() { super();this.attachShadow({mode:"open"});this._receive=this._receive.bind(this); }
+  constructor() { super();this.attachShadow({mode:"open"});this._receive=this._receive.bind(this);this._layoutActive=false;this._layoutFrame=null;this._layoutResize=()=>this.queueLayout(); }
   static getConfigElement() { return document.createElement("edsys-google-map-editor"); }
   static getStubConfig() { return {type:"custom:edsys-google-maps-trial",entities:[],hours_to_show:2,api_key:""}; }
   setConfig(value) {
@@ -12,24 +12,46 @@ class GoogleMapTrial extends HTMLElement {
   set hass(value) { this._hass=value;this.queueUpdate(); }
   getCardSize() { return 9; }
   getGridOptions() { return {columns:"full",rows:10,min_rows:6}; }
-  connectedCallback() { window.addEventListener("message",this._receive);if(this._config && !this.shadowRoot.firstChild)this.render(); }
-  disconnectedCallback() { window.removeEventListener("message",this._receive);this.stop(); }
+  connectedCallback() { window.addEventListener("message",this._receive);this._layoutActive=true;window.addEventListener("resize",this._layoutResize);window.visualViewport?.addEventListener("resize",this._layoutResize);if(this._config && !this.shadowRoot.firstChild)this.render();this.watchLayout(); }
+  disconnectedCallback() { window.removeEventListener("message",this._receive);this._layoutActive=false;window.removeEventListener("resize",this._layoutResize);window.visualViewport?.removeEventListener("resize",this._layoutResize);this._layoutObserver?.disconnect();if(this._layoutFrame!==null)cancelAnimationFrame(this._layoutFrame);this._layoutFrame=null;this.stop(); }
+  watchLayout() {
+    if(!this._layoutActive)return;
+    if(typeof ResizeObserver==="function")this._layoutObserver??=new ResizeObserver(this._layoutResize);
+    this._layoutObserver?.disconnect();
+    for(const node of [this,...["header",".tools",".status","footer"].map(selector=>this.shadowRoot.querySelector(selector))])if(node)this._layoutObserver?.observe(node);
+    this.queueLayout();
+  }
+  queueLayout() {
+    if(!this._layoutActive || !this._config || this._layoutFrame!==null)return;
+    this._layoutFrame=requestAnimationFrame(()=>{
+      this._layoutFrame=null;if(!this._layoutActive)return;
+      const card=this.shadowRoot.querySelector("ha-card");if(!card)return;
+      const viewport=window.visualViewport,bottom=viewport?viewport.offsetTop+viewport.height:window.innerHeight;
+      const top=Math.max(0,card.getBoundingClientRect().top);
+      const minimum=242+["header",".tools",".status","footer"].reduce((height,selector)=>height+(this.shadowRoot.querySelector(selector)?.getBoundingClientRect().height||0),0);
+      const height=Math.max(Math.ceil(minimum),Math.floor(bottom-top-8));
+      if(Number.isFinite(height) && card.style.height!==`${height}px`)card.style.height=`${height}px`;
+    });
+  }
   render() {
     if(!this._config)return;
     this.shadowRoot.innerHTML=`<style>
-      ha-card{display:block;overflow:hidden}header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 16px 8px}h2{font-size:20px;font-weight:500;margin:0;flex:1}
+      ha-card{display:flex;flex-direction:column;box-sizing:border-box;height:calc(100dvh - 72px);min-width:0;overflow:hidden}header,.tools,.status,footer{flex:none}header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 16px 8px}h2{font-size:20px;font-weight:500;margin:0;flex:1}
       button,select{font:inherit;border:1px solid var(--divider-color,#888);border-radius:8px;padding:8px 12px;color:var(--primary-text-color,#222);background:var(--card-background-color,#fff)}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}
-      .tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:0 16px 12px}.status{padding:0 16px 10px;color:var(--secondary-text-color,#555)}.stage{height:clamp(330px,62vh,650px);background:var(--secondary-background-color,#eee);display:grid;place-items:center}.stage p{max-width:480px;padding:20px;line-height:1.5}iframe{border:0;width:100%;height:100%}footer{padding:12px 16px;font-size:13px}a{color:var(--primary-color,#1976d2)}
+      .tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:0 16px 12px}.status{padding:0 16px 10px;color:var(--secondary-text-color,#555)}.stage{flex:1;min-width:0;min-height:240px;background:var(--secondary-background-color,#eee);display:grid;place-items:center}.stage p{max-width:480px;padding:20px;line-height:1.5}iframe{display:block;border:0;width:100%;height:100%;min-width:0;min-height:0}footer{padding:12px 16px;font-size:13px}a{color:var(--primary-color,#1976d2)}
     </style><ha-card><header><h2></h2><a href="/map">Existing map</a></header><div class="tools"><button class="load">Load Google map</button><button class="stop" disabled>Close map</button><select aria-label="Map style"><option value="roadmap">Road</option><option value="satellite">Satellite</option><option value="hybrid">Hybrid</option></select><label><input class="traffic" type="checkbox"> Traffic</label><button class="fit" disabled>Fit locations</button></div><div class="status" role="status"></div><div class="stage"><p>Google Maps loads on request. Location tracking continues in Home Assistant. Add the restricted browser key in this card’s settings to begin.</p></div><footer>Two-hour HA history · Street View and route/search features excluded · Google budget alerts notify; they do not cap spending.</footer></ha-card>`;
     this.shadowRoot.querySelector("h2").textContent=this._config.title;
+    const fallback=this.shadowRoot.querySelector("a");fallback.href=this._config.fallback_path;fallback.textContent=this._config.fallback_path==="/map-fallback"?"HA Map (Fallback)":"Existing map";
+    this.shadowRoot.querySelector("select").value=this._config.default_map_type;
     this.shadowRoot.querySelector(".load").onclick=()=>this.start();
     this.shadowRoot.querySelector(".stop").onclick=()=>this.stop();
     this.shadowRoot.querySelector("select").onchange=()=>this.send("controls",this.controls());
     this.shadowRoot.querySelector(".traffic").onchange=()=>this.send("controls",this.controls());
     this.shadowRoot.querySelector(".fit").onclick=()=>this.send("fit",{});
     this.status(this._config.api_key ? "Ready. Press Load Google map to start." : "Setup needed: add the restricted Google Maps browser key in card settings.");
+    this.watchLayout();
   }
-  status(text) { const node=this.shadowRoot.querySelector(".status");if(node)node.textContent=text; }
+  status(text) { const node=this.shadowRoot.querySelector(".status");if(node)node.textContent=text;this.queueLayout(); }
   controls() { return {map_type:this.shadowRoot.querySelector("select").value,traffic:this.shadowRoot.querySelector(".traffic").checked}; }
   start() {
     if(this._frame || !this._config?.api_key)return;

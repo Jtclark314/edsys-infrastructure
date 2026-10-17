@@ -1,15 +1,15 @@
 name: home-assistant-google-maps-trial
-description: On-demand read-only Google Maps view with native HA fallback
+description: On-demand primary Google Map with saved Hybrid default and exact native HA fallback
 host: HA VM300 and 9950x
 runtime: Native HA module resource and one Tailscale Serve static file
 ports:
   - "Existing HA frontend; no new listener"
   - "8450 private tailnet HTTPS; renderer only; no Funnel"
 volumes:
-  - "HA /config/www/edsys-google-maps/v1.0.1: two deployed immutable parent files"
+  - "HA /config/www/edsys-google-maps/v1.0.2: two deployed immutable parent files"
   - "9950x private local-share renderer/v1.0.0: one immutable HTML file"
 environment:
-  configuration: Native admin-only dashboard; exact selected locations and renderer URL stay private
+  configuration: Primary /map and hidden legacy route admin-only; original native /map-fallback retains prior access; saved Hybrid default; exact selected locations and renderer URL stay private
   client: Current Chromium with credentialless support and Tailscale
 secrets_required:
   - Dedicated browser key restricted to websites and Maps JavaScript API; verified and saved in native HA configuration
@@ -20,7 +20,7 @@ backup:
     - Only the dedicated Tailscale Serve route; source rebuilds static files
 monitoring:
   healthcheck: Trusted renderer HTTPS source hash and native HA readback
-  acceptance: Browser-verified Nimo Road/Satellite/Hybrid, available markers/history, controls/close and native fallback; billing/key/quotas read back; preference/GPS truth/email delivery/spend unverified
-restore_notes: Remove only recorded trial dashboard/resource and port 8450 handler; preserve original Map and all other routes
+  acceptance: Native primary/legacy/fallback and metadata readback exact; Nimo fresh Hybrid default, real viewport-filling imagery, visible HA controls and native fallback verified; 18 JS/5 Python and layout browser checks pass; GPS truth/email delivery/spend unverified
+restore_notes: Restore original /map config from verified current /map-fallback and saved original metadata through native API; remove only created fallback if authorized; never restore full HA storage/resource lists or reset Serve
 owner: Jeremy
-last_verified: "2026-10-17 (parent v1.0.1 deployed; live Google trial and original native Map browser-verified)"
+last_verified: "2026-10-17 (v1.0.2 deployed; primary Hybrid Map and exact native fallback browser-verified)"

@@ -26,6 +26,20 @@ test("trial accepts only bounded explicit location entities and empty/restricted
   for(const entities of [[],["light.synthetic"],["person.synthetic","person.synthetic"],Array.from({length:11},(_,i)=>`person.synthetic_${i}`)])assert.throws(()=>validateConfig({...c,entities}));
   assert.throws(()=>validateConfig({...c,api_key:"not-a-browser-key"}));assert.throws(()=>validateConfig({...c,hours_to_show:48}));
 });
+test("saved map style and approved fallback survive normalization with backward-compatible defaults",()=>{
+  const base={type:"custom:edsys-google-maps-trial",entities:["person.synthetic"]};
+  const defaults=validateConfig(base);assert.equal(defaults.default_map_type,"roadmap");assert.equal(defaults.fallback_path,"/map");
+  for(const default_map_type of ["roadmap","satellite","hybrid"])for(const fallback_path of ["/map","/map-fallback"]){
+    const config=validateConfig({...base,default_map_type,fallback_path});
+    assert.equal(config.default_map_type,default_map_type);assert.equal(config.fallback_path,fallback_path);
+    assert.deepEqual(validateConfig(JSON.parse(JSON.stringify(config))),config);
+  }
+});
+test("map defaults reject unsupported styles, arbitrary URLs, paths and wrong types",()=>{
+  const base={type:"custom:edsys-google-maps-trial",entities:["person.synthetic"]};
+  for(const default_map_type of [null,"","Hybrid","terrain",0,false,{},"hybrid\"><script>"])assert.throws(()=>validateConfig({...base,default_map_type}));
+  for(const fallback_path of [null,"","/map/","/map-fallback/","/map?x","/map#x","//other.example.test/map","https://other.example.test/map","javascript:alert(1)",0,false,{}])assert.throws(()=>validateConfig({...base,fallback_path}));
+});
 test("invalid or string coordinates cannot turn into false points",()=>{
   for(const value of [{latitude:"1",longitude:2},{latitude:91,longitude:2},{latitude:1,longitude:Infinity},null])assert.equal(coordinates(value),null);
   assert.deepEqual(coordinates({latitude:0,longitude:0}),{lat:0,lng:0});

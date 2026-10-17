@@ -32,7 +32,7 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `EDCORE_CONTROL_PLANE.md` - current 9950x-to-pve-node3 Proxmox, HAOS, and isolated-lab control plane.
 - `HOME_ASSISTANT_CONTROL.md` - Phil's existing privileged HA API route, bounded reads, explicit actions, disposable-helper verification, privacy and rollback.
 - `HOME_ASSISTANT_DASHBOARDS.md` - accepted native dashboard design, UI/data verification boundaries, private checkpoints, and narrow rollback.
-- `../services/home-assistant-google-maps/README.md` - isolated Google Maps trial, pending restricted key, $5 alert budget, quota limits and native fallback.
+- `../services/home-assistant-google-maps/README.md` - isolated primary Google Map, saved Hybrid default, original native fallback, restricted key, $5 alerts and quota limits; primary/fallback browser-verified.
 - `ARR_TRANSFER_ARBITER.md` - current concurrent SABnzbd/qBittorrent operation and retained, disabled mutual-exclusion controller.
 - `NETDATA_COMPUTE.md` - authoritative nine-node Netdata Parent/Child deployment and recovery procedure.
 - `../docker/netbox/README.md` - production NetBox platform, access, backup, restore, and upgrade boundary.
