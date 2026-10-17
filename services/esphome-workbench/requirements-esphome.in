@@ -1,0 +1,4 @@
+# ESPHome's own dependency pins (including PlatformIO 6.1.19) stay intact.
+esphome==2026.9.1
+# Manual Device Builder capability only; no daemon or remote builder pairing.
+esphome-device-builder==1.14.9

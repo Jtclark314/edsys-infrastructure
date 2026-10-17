@@ -1,0 +1,7 @@
+# Offline schema-validation example only: no ESP board, pins, sensors, Wi-Fi,
+# firmware build, flashing, or running host executable has been qualified.
+esphome:
+  name: edsys-schema-only
+host:
+logger:
+  level: INFO
