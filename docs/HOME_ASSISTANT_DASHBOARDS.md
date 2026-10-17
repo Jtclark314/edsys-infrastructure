@@ -3,8 +3,9 @@
 ## Google Maps trial: 2026-10-17
 
 The owner-authorized separate `/google-maps-trial/trial` dashboard is installed
-admin-only with an empty key. It retains the original Map's six explicit
-locations and two-hour history. The existing `/map` configuration, all other
+admin-only; the restricted key is now securely entered and natively saved.
+It retains the original Map's six explicit locations and two-hour history.
+The existing `/map` configuration, all other
 dashboard metadata/resources, and nine protected HA files matched baseline.
 Only one new module resource, its two immutable HA assets and one dedicated
 9950x static renderer route were added. No device action or HA/Pi restart.
@@ -14,10 +15,22 @@ isolated from HA in a different HTTPS origin, credentialless sandboxed iframe;
 the private renderer requires Tailscale and current Chromium. Road/Satellite/
 Hybrid, Traffic, bounded selected trails, close/reopen, origin-only referrer,
 parent/storage isolation and narrow layouts passed offline browser checks with
-a fake SDK, including the deployed HTTPS renderer. Ten projection/configuration
-regressions and three build/deployment checks pass. Nimo reached the renderer;
-Signed-in HA trial-page/native-card and actual restricted-key Google imagery
-acceptance remain pending.
+a fake SDK, including the deployed HTTPS renderer. Fourteen JavaScript
+regressions and three Python build/deployment checks pass. A non-loopback HTTP
+synthetic browser check passed CSPRNG startup and credentialless isolation.
+Deployed parent v1.0.1 replaces secure-context-only randomUUID with a 128-bit
+getRandomValues hexadecimal nonce before load reservation; failures reserve
+no load and create no iframe. Only the module resource URL changed to the new
+immutable parent path; exact current-resource readback and comparisons confirmed
+Map configuration, dashboard metadata, trial configuration and private key/
+configuration digest unchanged. Renderer v1.0.0 stays unchanged.
+
+Live signed-in Nimo UI and screenshots verified actual Road/Satellite/Hybrid
+imagery, three available markers (two people and Home), three honestly listed
+unavailable trackers and visible two-hour trails. Traffic/Fit were invoked;
+Close removed the renderer, and Existing map opened the original native Map
+with its live map working. The correct Cloud project's Maps JavaScript API
+metrics showed Requests 1 and Errors — (no errors reported).
 
 Live Nimo Chrome verification confirmed the active dedicated **EdSys HA Maps
 Trial Billing** account, existing personal payment profile and **EdSys HA Maps
@@ -28,10 +41,16 @@ Actual alerts are 50/80/100% ($2.50/$4/$5), forecast 100% ($5); billing
 administrator/user role emails are on, Pub/Sub and Monitoring channels off.
 Promotional credits are excluded; free-tier/other discount credits retained.
 The budget list shows cap status **Not applicable**: these are **alerts only**.
-Nimo Windows app control works; no
-CUA browser is needed. Maps API enablement, restricted key, editable quota
-readback and live imagery remain pending; the HA key is still empty. Do not
-claim an available daily quota or dollar cutoff without console evidence.
+Only Maps JavaScript API is enabled. The one **EdSys HA Maps Renderer** key
+was saved/reopened with Websites restricted to the exact renderer HTTPS origin,
+no path/wildcard, and API restriction to Maps JavaScript API only. Effective
+quotas are **100 map loads/day**, **10/minute**, **0 3D map loads/day** and
+**0 Grounding Widget loads/day**. These request limits are not a dollar cap.
+Key entry and native save used ephemeral Nimo Windows UI Automation, with no
+clipboard transfer or credential export; no private origin or key is published.
+Nimo Windows app control works; no CUA browser was required. Owner preference
+acceptance, physical GPS accuracy, alert-email delivery and final billed spend
+were not verified.
 Existing map is the immediate fallback on unsupported browsers, renderer
 failure or trial closure.
 Setup, privacy, limits and narrow recovery:

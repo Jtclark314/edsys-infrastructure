@@ -1,8 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {validateConfig,rendererURL,coordinates,projectStates,projectHistory,historyCommand,reserveBrowserLoad} from "../core.js";
+import {validateConfig,rendererURL,coordinates,projectStates,projectHistory,historyCommand,createNonce,reserveBrowserLoad} from "../core.js";
 const now=Date.parse("2026-10-17T12:00:00Z");
 const selected=[{entity:"person.synthetic"},{entity:"zone.synthetic"}];
+
+test("nonce uses sixteen fresh CSPRNG bytes without requiring randomUUID",()=>{
+  let calls=0;
+  const cryptoSource={getRandomValues(bytes){assert.ok(bytes instanceof Uint8Array);assert.equal(bytes.length,16);for(let i=0;i<bytes.length;i++)bytes[i]=calls*16+i;calls++;return bytes;}};
+  const first=createNonce(cryptoSource),second=createNonce(cryptoSource);
+  assert.equal(first,"000102030405060708090a0b0c0d0e0f");
+  assert.match(second,/^[0-9a-f]{32}$/);assert.notEqual(first,second);assert.equal(calls,2);
+});
+test("nonce fails closed on missing or throwing CSPRNG with a safe useful message",()=>{
+  for(const source of [null,{}, {getRandomValues:42},{getRandomValues(){throw Error("private failure detail");}}])assert.throws(()=>createNonce(source),error=>error.message.includes("Secure random generation is unavailable") && !error.message.includes("private failure detail"));
+});
 
 test("renderer must use a separate HTTPS origin without URL credentials or query",()=>{
   const parent="https://ha.example.test";

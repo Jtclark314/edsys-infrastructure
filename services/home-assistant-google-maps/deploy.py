@@ -13,7 +13,7 @@ from configure import client,ws
 from build import build
 
 PATH='google-maps-trial'
-VERSION='v1.0.0'
+VERSION='v1.0.1'
 RESOURCE=f'/local/edsys-google-maps/{VERSION}/edsys-google-maps-trial.js'
 
 def guest(code,payload):
@@ -54,7 +54,7 @@ def candidate(entities,renderer_url):
 
 INSTALL=r'''
 import hashlib,json,os,pathlib,sys,tempfile
-p=json.load(sys.stdin);root=pathlib.Path('/config/www/edsys-google-maps/v1.0.0')
+p=json.load(sys.stdin);root=pathlib.Path('/config/www/edsys-google-maps/v1.0.1')
 for parent in [root,*root.parents]:
  if parent.is_symlink():raise RuntimeError('Unexpected asset symlink')
 root.mkdir(parents=True,exist_ok=True)

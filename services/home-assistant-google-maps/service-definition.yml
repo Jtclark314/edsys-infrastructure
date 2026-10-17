@@ -6,13 +6,13 @@ ports:
   - "Existing HA frontend; no new listener"
   - "8450 private tailnet HTTPS; renderer only; no Funnel"
 volumes:
-  - "HA /config/www/edsys-google-maps/v1.0.0: two immutable source files"
+  - "HA /config/www/edsys-google-maps/v1.0.1: two deployed immutable parent files"
   - "9950x private local-share renderer/v1.0.0: one immutable HTML file"
 environment:
   configuration: Native admin-only dashboard; exact selected locations and renderer URL stay private
   client: Current Chromium with credentialless support and Tailscale
 secrets_required:
-  - Dedicated website- and API-restricted Google browser key; pending owner setup
+  - Dedicated browser key restricted to websites and Maps JavaScript API; verified and saved in native HA configuration
 backup:
   required: true
   paths:
@@ -20,7 +20,7 @@ backup:
     - Only the dedicated Tailscale Serve route; source rebuilds static files
 monitoring:
   healthcheck: Trusted renderer HTTPS source hash and native HA readback
-  acceptance: Billing and USD5 monthly alerts read back; restricted key, quotas and real imagery pending
+  acceptance: Browser-verified Nimo Road/Satellite/Hybrid, available markers/history, controls/close and native fallback; billing/key/quotas read back; preference/GPS truth/email delivery/spend unverified
 restore_notes: Remove only recorded trial dashboard/resource and port 8450 handler; preserve original Map and all other routes
 owner: Jeremy
-last_verified: "2026-10-17 (empty-key installation; not live Google acceptance)"
+last_verified: "2026-10-17 (parent v1.0.1 deployed; live Google trial and original native Map browser-verified)"

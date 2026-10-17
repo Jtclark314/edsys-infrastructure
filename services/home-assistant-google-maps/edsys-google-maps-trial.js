@@ -1,4 +1,4 @@
-import {CHANNEL,KEY_PATTERN,validateConfig,rendererURL,projectStates,projectHistory,historyCommand,reserveBrowserLoad,DAILY_BROWSER_LOADS} from "./core.js";
+import {CHANNEL,KEY_PATTERN,validateConfig,rendererURL,projectStates,projectHistory,historyCommand,createNonce,reserveBrowserLoad,DAILY_BROWSER_LOADS} from "./core.js";
 
 class GoogleMapTrial extends HTMLElement {
   constructor() { super();this.attachShadow({mode:"open"});this._receive=this._receive.bind(this); }
@@ -39,9 +39,9 @@ class GoogleMapTrial extends HTMLElement {
     if(!this._hass?.connected){this.status("Home Assistant is disconnected. Use the existing map and try a fresh load when connected.");return;}
     const points=projectStates(this._hass.states,this._config.entities);
     if(!points.some(point=>point.position)){this.status("No selected location is available. Use the existing map.");return;}
-    let count;
-    try{count=reserveBrowserLoad(localStorage);}catch(error){this.status(error.message);return;}
-    this._nonce=crypto.randomUUID();this._loaded=false;this._history=[];
+    let nonce,count;
+    try{nonce=createNonce();count=reserveBrowserLoad(localStorage);}catch(error){this.status(error.message);return;}
+    this._nonce=nonce;this._loaded=false;this._history=[];
     const frame=document.createElement("iframe");frame.title="Google Maps trial";frame.credentialless=true;frame.setAttribute("sandbox","allow-scripts allow-same-origin allow-popups");frame.referrerPolicy="origin";
     this._rendererOrigin=url.origin;url.hash=this._nonce;frame.src=url.href;this._frame=frame;
     this.shadowRoot.querySelector(".stage").replaceChildren(frame);this.shadowRoot.querySelector(".load").disabled=true;this.shadowRoot.querySelector(".stop").disabled=false;

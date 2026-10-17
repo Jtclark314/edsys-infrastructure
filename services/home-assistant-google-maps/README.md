@@ -1,10 +1,10 @@
 # Home Assistant Google Maps trial
 
 Status, 2026-10-17: separate admin-only `/google-maps-trial/trial` dashboard
-installed with an **empty key**. Dedicated Google Cloud billing and the
-persisted $5 monthly alert budget are verified. Maps JavaScript API enablement,
-the restricted key, quotas and real Google imagery acceptance remain pending.
-The existing `/map` dashboard remains exactly as before this change.
+installed; dedicated billing, the persisted $5 alert budget, restricted browser
+key, quotas and native HA key save are verified. Parent assets **v1.0.1 are
+deployed**, and the actual Google Maps trial is **browser-verified on Nimo**.
+The original `/map` configuration is unchanged and its live map still works.
 
 ## Scope and architecture
 
@@ -20,9 +20,15 @@ included additional coordinate lookups. It was not installed. This own-source
 trial instead uses the official Google Maps JavaScript SDK, quarterly channel,
 modern Advanced Markers, raster imagery and the official test `DEMO_MAP_ID`.
 
-HA serves two immutable files at
-`/local/edsys-google-maps/v1.0.0/`: `core.js` and
+HA serves the two immutable parent assets at
+`/local/edsys-google-maps/v1.0.1/`: `core.js` and
 `edsys-google-maps-trial.js`. Only the latter is a Lovelace module resource.
+The v1.0.1 fix replaces secure-context-only `crypto.randomUUID()` with a
+128-bit `crypto.getRandomValues()` nonce encoded as hexadecimal, so the
+existing HTTP LAN HA route can start the trial. Nonce generation precedes
+browser load reservation and fails closed with a useful status if unavailable;
+no weak randomness or isolation fallback is allowed. The renderer stays at
+v1.0.0 unchanged.
 Google's SDK runs on a **different HTTPS origin**, served by the existing 9950x
 Tailscale daemon at dedicated port **8450**, path `/v1.0.0/renderer.html`.
 It is one static file; no new daemon, container, HA API proxy or CORS grant.
@@ -56,39 +62,38 @@ filter. Actual-spend alerts are **50/80/100%** ($2.50/$4/$5), with forecast
 Monitoring channels are off. Promotional credits are excluded from budget
 calculations; free-tier and other discount credits are retained. These are
 **alerts only**; the budget list shows cap status **Not applicable**. Nimo's
-Windows app control works;
-no CUA browser is required for the remaining setup.
+Windows app control works; no CUA browser was required for setup or acceptance.
 
-The owner handles sign-in, payment details and key entry directly. Never paste
-a key/payment detail into chat, Git, screenshots or a document. Remaining steps:
+Google Cloud configuration is now saved and reopened for verification:
 
-1. Enable **Maps JavaScript API only** for this pilot. Do not enable Places,
-   Routes, Geocoding or Street View APIs just because a setup wizard suggests
-   them. No service-account key is needed.
-2. In Maps JavaScript API → Quotas & System Limits, inspect the **actual editable
-   quotas**. Record any applied changes and read them back. If a daily map-load
-   quota is offered, 100/day is a conservative trial target; do not assume it
-   exists. Current public documentation lists 30,000 loads/min/project and
-   300/min/IP and does not promise an adjustable daily quota. A rate quota
-   alone does not implement a monthly dollar cap.
-3. Create a dedicated **browser API key**. Set application restriction to
-   **Websites**, and authorize exactly the **renderer origin**, including its
-   HTTPS port. Copy that origin from this card's native visual editor, not
-   HA's address bar. The loader uses `auth_referrer_policy=origin`; avoid a
-   path-specific restriction and broad domain wildcards. Set API restriction
-   to **Maps JavaScript API only**. Save and inspect both restrictions before
-   entering the key. The renderer's private URL is not a source-file constant.
-4. In HA's Google Maps Trial dashboard, Edit dashboard → Edit card, enter the
-   key in the password field and save. Keep the key in HA's private dashboard
-   configuration. The native frontend must use it, so it is a **restricted
-   browser credential, not a server-side secret**. Dashboard administrators and
-   authorized clients can access it. No key goes in static assets or helpers.
-5. Press **Load Google map**. Check actual imagery and all selected markers,
-   Road/Satellite/Hybrid, Traffic, Fit, two-hour trails where recorder data
-   exists, Close and the Existing map link. Check the Google console for
-   successful restricted-key traffic, usage attribution and quota settings.
-   Remove/disable the key promptly if the trial is abandoned or unexpected
-   usage appears. Never remove restrictions as an error workaround.
+- **Maps JavaScript API is the only enabled Maps service.**
+- The one dedicated key, **EdSys HA Maps Renderer**, has **Websites** application
+  restriction to the exact renderer HTTPS origin, including its port, with
+  **no path or wildcard**; its API restriction allows **Maps JavaScript API
+  only**. The private origin remains outside Git/RAG and appears in the native
+  card editor. The loader retains `auth_referrer_policy=origin`.
+- Effective project quotas read back as **100 map loads/day**, **10 map
+  loads/minute**, **0 3D map loads/day** and **0 Grounding Widget loads/day**.
+  These are observed project limits, not an assumed public default or a dollar
+  spending cap.
+- The key was entered securely and saved through Nimo's native HA editor using
+  ephemeral Windows UI Automation, with no clipboard transfer or credential
+  export. It remains in HA's private dashboard configuration, never static
+  assets, helpers, source or documentation. It is a restricted browser
+  credential, not a server-side secret; dashboard administrators and authorized
+  clients can access it.
+
+In the signed-in Nimo HA trial, **Load Google map** displayed actual Road,
+Satellite and Hybrid imagery, **three available markers** (two people and Home),
+**three unavailable trackers honestly listed**, and visible two-hour trails.
+Traffic and Fit were invoked; Close removed the renderer. Existing map opened
+the original native Map and its live map rendered. The correct Cloud project's
+Maps JavaScript API metrics reported **Requests: 1**, with **Errors: —** (no
+errors reported); this is not a billed-spend measurement.
+
+Never remove restrictions as an error workaround. Disable/delete the key and
+review usage if the trial is abandoned or unexpected usage appears. Never
+paste a key/payment detail into chat, Git, screenshots or a document.
 
 **A $5 budget is an alert, not a spending cap.** Google Maps is not listed as
 eligible for Cloud's spend-cap budgets. The trial additionally requires a
@@ -129,18 +134,31 @@ Tailscale Serve, with no Funnel. Its runtime file is private outside Git under
 the checkpoint's sibling `renderer/v1.0.0/`. Port 8450 is a dedicated origin;
 never host HA or another authenticated application on it.
 
-Ten projection/isolation/load-guard regressions and three configuration/build
-checks pass. CLI-based browser checks (`tests/browser-check.js`) use only
+Fourteen JavaScript projection/isolation/load-guard/nonce regressions and three
+Python configuration/build checks pass. The nonce checks cover a crypto object
+without `randomUUID` and prove missing/throwing CSPRNGs reserve no load and
+create no iframe. A real **non-loopback HTTP** synthetic browser check also
+passed CSPRNG startup and credentialless parent/storage isolation; localhost
+alone would not detect the secure-context regression.
+CLI-based browser checks (`tests/browser-check.js`) use only
 synthetic locations and an intercepted fake SDK: no Google request or charge.
 They verify parent access denial, no regular cookies/storage, origin-only SDK
 referrer, bounded history rendering, one Map across updates, controls,
 close/reopen, fallback and 390/1280-pixel layouts. The same checks also passed
 with the **deployed HTTPS renderer**. Nimo's native HTTP client reached that
 renderer with expected content; this does not prove its signed-in HA browser
-or live Google imagery. Native HA resource/dashboard/configuration readback
-matched, including the persisted empty key. The operator API masks even empty
-`api_key` fields, so the installer compares persisted initial config inside
-the guest and returns only a boolean; no credential is exported.
+or live Google imagery. Initial native resource/dashboard/configuration readback
+matched the empty-key installation baseline. Subsequent native key save and the
+live Nimo browser workflow above were verified with native UI and screenshots.
+Activation deployed v1.0.1 to a new immutable parent path and changed only its
+module resource URL; exact expected-resource readback and comparison confirmed
+original Map configuration, dashboard metadata, trial configuration and private
+key/configuration digest unchanged. Renderer v1.0.0 was not modified. The
+operator API masks `api_key` fields; protected comparisons stay inside the
+guest and export no credential.
+
+Owner preference acceptance, physical GPS accuracy, alert-email delivery and
+final billed spend were not verified.
 
 ## Backup and narrow recovery
 
@@ -151,8 +169,9 @@ Fresh offsite/export/restore acceptance is not established by this trial.
 
 To remove an authorized trial, read `deployment.json` and the current trial
 configuration first. Delete only the recorded Google Maps Trial dashboard and
-the matching new module resource through native APIs/UI. Retain or remove only
-the two versioned HA assets after confirming no remaining resource references.
+the matching trial module resource through native APIs/UI. Retain or remove
+only the active version's two HA assets after confirming no remaining resource
+references; keep older immutable assets available for narrow rollback.
 If the port 8450 Serve handler still exactly matches the recorded one-file
 route, run `tailscale serve --https=8450 off`; verify every other route matches
 its before-state. **Never run `tailscale serve reset` or restore entire HA

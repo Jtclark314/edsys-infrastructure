@@ -5,6 +5,14 @@ export const CHANNEL = "edsys-google-map-v1";
 export const KEY_PATTERN = /^AIza[A-Za-z0-9_-]{35}$/;
 const ENTITY = /^(person|device_tracker|zone)\.[a-z0-9_]+$/;
 
+export function createNonce(cryptoSource=globalThis.crypto) {
+  try {
+    if(typeof cryptoSource?.getRandomValues!=="function")throw Error("unavailable");
+    const bytes=new Uint8Array(16);cryptoSource.getRandomValues(bytes);
+    return Array.from(bytes,byte=>byte.toString(16).padStart(2,"0")).join("");
+  } catch {throw Error("Secure random generation is unavailable. Use the existing map or a current browser.");}
+}
+
 export function rendererURL(value, parentOrigin) {
   const url = new URL(value);
   const loopback = ["127.0.0.1","localhost"].includes(url.hostname);
