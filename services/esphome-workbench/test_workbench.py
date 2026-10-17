@@ -60,6 +60,34 @@ class InstallationBoundaries(unittest.TestCase):
                 install.check_launcher_links(base, root)
 
 
+class LockedClosureBoundaries(unittest.TestCase):
+    LOCK = "esphome==2026.9.1\nrequests==2.34.2\nruamel-yaml==0.19.1\n"
+    PACKAGES = [("esphome", "2026.9.1"), ("requests", "2.34.2"), ("ruamel.yaml", "0.19.1")]
+
+    def test_exact_closure_accepts_canonical_package_names(self):
+        install.validate_locked_packages(self.LOCK, self.PACKAGES)
+        self.assertEqual(install.canonical_package_map([("Ruamel_YAML", "0.19.1")]), {"ruamel-yaml": "0.19.1"})
+
+    def test_compatible_transitive_drift_is_rejected(self):
+        # Core accepts requests==2.*, so this remains compatible but drifts.
+        lock = "platformio==6.2.0\nrequests==2.34.2\n"
+        installed = [("platformio", "6.2.0"), ("requests", "2.34.1")]
+        with self.assertRaisesRegex(RuntimeError, "version_drift=\\['requests'\\]"):
+            install.validate_locked_packages(lock, installed)
+
+    def test_extraneous_and_missing_packages_are_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, "extra=\\['unrelated-package'\\]"):
+            install.validate_locked_packages(self.LOCK, self.PACKAGES + [("unrelated_package", "1.0")])
+        with self.assertRaisesRegex(RuntimeError, "missing=\\['requests'\\]"):
+            install.validate_locked_packages(self.LOCK, [pair for pair in self.PACKAGES if pair[0] != "requests"])
+
+    def test_duplicate_distributions_and_partial_lock_parsing_are_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, "Duplicate"):
+            install.validate_locked_packages(self.LOCK, self.PACKAGES + [("Ruamel_YAML", "0.19.1")])
+        with self.assertRaisesRegex(RuntimeError, "Unsupported"):
+            install.validate_locked_packages("requests>=2\n", [("requests", "2.34.2")])
+
+
 class LauncherBoundaries(unittest.TestCase):
     def fixture(self, root):
         environments = {}

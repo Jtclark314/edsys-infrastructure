@@ -55,8 +55,10 @@ hashes. It creates only these paths:
   unique symlinks into the private runtime. No shell startup files are edited.
 
 An existing unmarked runtime or unrelated launcher collision causes refusal.
-Identical lock hashes reuse an existing environment and check package
-compatibility; changed locks produce a new environment. If installation fails
+Identical lock hashes reuse an existing environment only after its complete
+canonicalized package/version map matches the lock exactly and dependency
+compatibility passes. Transitive version drift, missing or extra packages are
+refused; changed locks produce a new environment. If installation fails
 before its environment stamp is written, inspect that exact incomplete directory
 and remove only it before retrying. The installer never adopts arbitrary files.
 Runtime installer/launcher/lock hashes and all installed distribution versions

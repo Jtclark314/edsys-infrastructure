@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -19,6 +20,38 @@ SOURCE = Path(__file__).resolve().parent
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def canonical_package_map(packages: list[tuple[str, str]]) -> dict[str, str]:
+    result = {}
+    for name, version in packages:
+        canonical = re.sub(r"[-_.]+", "-", name).lower()
+        if canonical in result:
+            raise RuntimeError(f"Duplicate installed/locked distribution: {canonical}")
+        result[canonical] = version
+    return result
+
+
+def validate_locked_packages(lock_text: str, installed: list[tuple[str, str]]) -> None:
+    """Require the complete pinned closure, including absence of extra packages."""
+    pinned = []
+    for raw_line in lock_text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", "--hash=sha256:")):
+            continue
+        match = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9_.-]*)==([^\s;\\]+)(?:\s+\\)?", line)
+        if not match:
+            raise RuntimeError("Unsupported requirement in hash lock; refusing partial validation")
+        pinned.append((match[1], match[2]))
+    expected = canonical_package_map(pinned)
+    actual = canonical_package_map(installed)
+    if not expected:
+        raise RuntimeError("Empty package lock")
+    if actual != expected:
+        missing = sorted(expected.keys() - actual.keys())
+        extra = sorted(actual.keys() - expected.keys())
+        drift = sorted(name for name in actual.keys() & expected.keys() if actual[name] != expected[name])
+        raise RuntimeError(f"Environment differs from lock: missing={missing}, extra={extra}, version_drift={drift}")
 
 
 def check_launcher_links(bin_dir: Path, root: Path) -> None:
@@ -84,15 +117,18 @@ def main() -> None:
             run([uv, "--no-config", "venv", "--python", sys.executable, str(target)], env)
             # Only pinned Python packages; no board platforms, frameworks, SDKs or firmware.
             run([uv, "--no-config", "pip", "sync", "--python", str(target / "bin/python"), "--default-index", "https://pypi.org/simple", "--require-hashes", str(lock)], env)
-            stamp.write_text(digest + "\n")
         run([uv, "--no-config", "pip", "check", "--python", str(target / "bin/python")], env)
-        metadata_code = "import importlib.metadata as m,json; print(json.dumps({d.metadata['Name']:d.version for d in m.distributions()},sort_keys=True))"
+        metadata_code = "import importlib.metadata as m,json; print(json.dumps([[d.metadata['Name'],d.version] for d in m.distributions()]))"
         result = subprocess.run([str(target / "bin/python"), "-I", "-c", metadata_code], check=True, text=True, capture_output=True, env=env)
-        packages = json.loads(result.stdout)
+        installed = json.loads(result.stdout)
+        validate_locked_packages(lock.read_text(), installed)
+        packages = dict(installed)
         if packages.get(name) != version:
             raise RuntimeError(f"Unexpected {name} version")
         if name == "esphome" and packages.get("esphome-device-builder") != "1.14.9":
             raise RuntimeError("Unexpected ESPHome Device Builder version")
+        if not stamp.exists():
+            stamp.write_text(digest + "\n")
         environments[name] = {"path": str(relative), "version": version, "lock_sha256": digest, "packages": packages}
     launcher_source = SOURCE / "tool_launcher.py"
     for name in LAUNCHERS:
