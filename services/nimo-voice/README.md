@@ -211,3 +211,32 @@ To withdraw, compare and restore only the matching three-script recovery copy;
 restart only Nimo Voice to discard the decorator. Preserve sign-in/settings.
 Actual Nimo DOM/native Audio binding, spoken behavior and audibility remain
 pending. The current frontend dependency must be requalified after HA updates.
+
+## Pending-start lifecycle hardening: 2026-10-16 candidate
+
+The Phil decorator now gives each start a generation. A superseded or cancelled
+pending start cannot submit a native pipeline, replay a household command, or
+construct reply Audio from a late event. A late begin response cancels only its
+own never-bound session; it cannot dismiss the newer turn. Begin timeout still
+uses ordinary Nimo speech once, and the late optional Pi lease is retired.
+Stop, disconnect, page hide and unload remove the decorator's owned timers and
+connection/window/Audio listeners. A late subscription failure cannot cancel
+the current generation. Native capture, profile, sign-in and Alt+V stay owned
+by the existing app and Home Assistant.
+
+Source-only verification uses fake HA, Audio and timers; no real voice or media
+is exercised:
+
+```sh
+node --check services/nimo-voice/camera-view.js
+node services/nimo-voice/test-phil.cjs
+node services/nimo-voice/test-phil-lg.cjs
+node services/nimo-voice/test-phil-start.cjs
+```
+
+The new start suite covers both reply orders, cancellation while begin is
+pending, same-tick supersession, cancellation at lease handoff, timeout then a
+late lease, connection replacement, late native callbacks/failures, in-flight
+RPC retirement and listener cleanup. Deployment uses the existing reviewed
+three-script hash/backup procedure. Candidate checks do not release the owner's
+hold on actual frontend, microphone, spoken reply or playback acceptance.

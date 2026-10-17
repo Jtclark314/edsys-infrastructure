@@ -19,7 +19,7 @@ async function fixture({active=true}={}) {
   return{active:true};
  }};
  const document={querySelector:s=>s==='home-assistant'?{hass}:s==='ha-assist-chat'?chat:null,querySelectorAll:()=>[]};
- const window={Audio:NativeAudio};const ctx={window,document,Promise,Event,EventTarget,setTimeout:()=>0,setInterval:(f,ms)=>{timers.set(++next,{f,ms});return next;},clearInterval:id=>timers.delete(id)};
+ const window={Audio:NativeAudio};const ctx={window,document,Promise,Event,EventTarget,setTimeout:()=>0,clearTimeout:()=>{},setInterval:(f,ms)=>{timers.set(++next,{f,ms});return next;},clearInterval:id=>timers.delete(id)};
  vm.createContext(ctx);vm.runInContext(source,ctx);await window.edsysSetupNimo('named');await window.edsysSetupPhil('named');
  async function start(){await connection.subscribeMessage(e=>{
   if(e.type==='run-start'){

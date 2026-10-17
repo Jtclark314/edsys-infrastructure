@@ -10,7 +10,7 @@ async function fixture({eligible=true,fail=false}={}) {
  const hass={connection,callWS:async m=>{sent.push(m);if(fail)throw Error('offline');return m.type.endsWith('phil_begin')?{active:eligible,session_id:'fixture-session',audio_ref:'fixture-audio'}:{active:!['audio_end','cancelled'].includes(m.phase)};}};
  const document={querySelector:s=>s==='home-assistant'?{hass}:s==='ha-assist-chat'?chat:null,querySelectorAll:()=>[]};
  const window={};
- const ctx={window,document,Promise,setTimeout:()=>0,setInterval:f=>{intervals.set(++nextTimer,f);return nextTimer;},clearInterval:id=>intervals.delete(id)};
+ const ctx={window,document,Promise,setTimeout:()=>0,clearTimeout:()=>{},setInterval:f=>{intervals.set(++nextTimer,f);return nextTimer;},clearInterval:id=>intervals.delete(id)};
  vm.createContext(ctx);vm.runInContext(source,ctx);await window.edsysSetupPhil('named');
  async function start(message={type:'assist_pipeline/run',pipeline:'named',start_stage:'stt'}){
   let called=0;await connection.subscribeMessage(()=>called++,message,{});return()=>called;

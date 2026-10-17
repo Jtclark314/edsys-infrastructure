@@ -111,18 +111,59 @@ window.edsysSetupPhil = async pipelineId => {
   const connection = app?.hass?.connection;
   if (!connection) return;
   const old = window.edsysPhilBinding;
-  if (old?.connection === connection) { old.pipeline = pipelineId; return; }
+  if (old?.connection === connection) {
+    if (old.pipeline !== pipelineId) old.stop();
+    old.pipeline = pipelineId;return;
+  }
   old?.stop();
-  const state = {connection, pipeline: pipelineId, current: null};
+  const state = {connection, pipeline: pipelineId, current: null, pending: null, generation: 0};
   window.edsysPhilBinding = state;
-  function clear(run) { clearInterval(run.timer);clearInterval(run.poller); }
+  let watching = false;
+  function watch(active) {
+    if (watching === active) return;
+    watching = active;
+    const method = active ? 'addEventListener' : 'removeEventListener';
+    connection[method]?.('disconnected', stop);
+    window[method]?.('pagehide', stop);
+    window[method]?.('beforeunload', stop);
+  }
+  function idle() { if (!state.current && !state.pending) watch(false); }
+  function intervals(run) { clearInterval(run.timer);clearInterval(run.poller); }
+  function unlisten(run) { for (const remove of run.listeners.splice(0)) remove(); }
+  function clear(run) {
+    intervals(run);unlisten(run);run.retire();
+    for (const timer of run.timeouts) clearTimeout(timer);
+    run.timeouts.clear();
+  }
+  function listen(run, target, event, callback) {
+    target.addEventListener(event, callback);
+    run.listeners.push(() => target.removeEventListener?.(event, callback));
+  }
+  async function bounded(run, promise, ms, reason) {
+    let timer;
+    try {
+      return await Promise.race([promise,
+        new Promise((_, reject) => { timer = setTimeout(() => reject(Error(reason)), ms);run.timeouts.add(timer); }),
+        run.retired.then(() => { throw Error('voice-retired'); })]);
+    } finally { clearTimeout(timer);run.timeouts.delete(timer); }
+  }
+  function close(run) {
+    run.closed = true;clear(run);
+    if (state.current === run) state.current = null;
+    idle();
+  }
   function stop() {
+    state.generation++;
+    const pending = state.pending;
+    state.pending = null;pending?.cancel();
     const run = state.current;
-    if (!run) return;
-    state.current = null;clear(run);
-    if (run.closed) return;
-    run.closed = true;
+    if (!run) { idle();return; }
+    close(run);
     run.fallback?.pause();
+    if (run.proxy) {
+      run.proxy.paused = true;
+      run.proxy.dispatchEvent(new Event('error'));
+    }
     const sequence = ++run.sequence;
     // Never replay a command or retry an uncertain speech commit.
     run.queue = run.queue.catch(() => {}).then(() => app.hass.callWS({
@@ -132,7 +173,41 @@ window.edsysSetupPhil = async pipelineId => {
   }
   state.stop = stop;
   window.edsysStopPhil = stop;
-  connection.addEventListener?.('disconnected', stop);
+  async function begin(generation) {
+    let cancel, timer;
+    const attempt = {done: false, accepted: false, cancelled: new Set()};
+    const cancelled = new Promise(resolve => { cancel = resolve; });
+    attempt.cancel = () => { clearTimeout(timer);cancel(); };
+    state.pending = attempt;watch(true);
+    // A late response can retire only its own never-bound lease. The server's
+    // session check prevents it from cancelling a newer turn.
+    function discard(lease) {
+      if (!lease?.active || !lease.session_id || attempt.cancelled.has(lease.session_id)) return;
+      attempt.cancelled.add(lease.session_id);
+      void app.hass.callWS({type: 'edsys_voice_knowledge/phil_update', session_id: lease.session_id,
+        sequence: 0, phase: 'cancelled', audio_ref: null}).catch(() => {});
+    }
+    const request = Promise.resolve().then(() => live(generation) ? app.hass.callWS({
+      type: 'edsys_voice_knowledge/phil_begin', pipeline_id: state.pipeline
+    }) : null);
+    request.then(lease => { if (attempt.done && !attempt.accepted) discard(lease); }, () => {});
+    try {
+      const result = await Promise.race([
+        request.then(lease => ({lease}), () => ({})),
+        new Promise(resolve => { timer = setTimeout(() => resolve({}), 2000); }),
+        cancelled.then(() => ({}))]);
+      attempt.done = true;
+      if (!live(generation)) { discard(result.lease);return null; }
+      // A timeout uses native Nimo speech once. Its eventual lease must still
+      // be discarded, rather than opening an orphan Pi display after fallback.
+      return {lease: result.lease, discard: () => discard(result.lease),
+        accept: () => { if (result.lease) attempt.accepted = true; }};
+    } finally {
+      clearTimeout(timer);
+      if (state.pending === attempt) state.pending = null;
+    }
+  }
+  function live(generation) { return generation === state.generation && window.edsysPhilBinding === state; }
   function audio() {
     const roots = [document];
     for (let i = 0; i < roots.length && i < 2000; i++) {
@@ -147,26 +222,22 @@ window.edsysSetupPhil = async pipelineId => {
     const sequence = ++run.sequence;
     run.queue = run.queue.then(async () => {
       if (!current(run)) return;
-      const result = await Promise.race([
-        app.hass.callWS({type: 'edsys_voice_knowledge/phil_update',
-          session_id: run.session_id, sequence, phase, audio_ref: ref}),
-        new Promise((_, reject) => setTimeout(() => reject(Error('display-timeout')), 3000))
-      ]);
+      const result = await bounded(run, app.hass.callWS({type: 'edsys_voice_knowledge/phil_update',
+        session_id: run.session_id, sequence, phase, audio_ref: ref}), 3000, 'display-timeout');
       // Pi completion/outcome is read separately. Do not lose its safe fallback
       // outcome to a simultaneous final heartbeat.
-      if (!result?.active && run.output !== 'pi') { run.closed = true;clear(run); }
-    }).catch(() => { if (run.output === 'pi') fail(run); else { run.closed = true;clear(run); } });
+      if (!result?.active && run.output !== 'pi') close(run);
+    }).catch(() => { if (run.output === 'pi') fail(run); else close(run); });
     return run.queue;
   }
   function complete(run, event) {
     if (!current(run)) return;
-    clear(run);run.closed = true;run.terminal = true;state.current = null;
+    run.terminal = true;close(run);
     if (run.proxy) { run.proxy.ended = event === 'ended';run.proxy.paused = true;run.proxy.dispatchEvent(new Event(event)); }
   }
   function fail(run) {
     if (!current(run)) return;
-    const proxy=run.proxy;stop();
-    if (proxy) proxy.dispatchEvent(new Event('error'));
+    stop();
   }
   function attach(run) {
     const nativeAudio = audio();
@@ -175,13 +246,13 @@ window.edsysSetupPhil = async pipelineId => {
     const played = () => { if (current(run)) { run.audioStarted = true;enqueue(run, 'audio_start', run.audio_ref); } };
     const ended = () => {
       if (!current(run) || run.terminal) return;
-      run.terminal = true;clear(run);enqueue(run, 'audio_end', run.audio_ref);
+      run.terminal = true;intervals(run);unlisten(run);enqueue(run, 'audio_end', run.audio_ref);
     };
-    nativeAudio.addEventListener('playing', played);
-    nativeAudio.addEventListener('waiting', () => { if (current(run) && run.audioStarted) enqueue(run, 'audio_waiting', run.audio_ref); });
-    nativeAudio.addEventListener('ended', ended);
-    nativeAudio.addEventListener('pause', () => { if (current(run)) { if (nativeAudio.ended) ended(); else stop(); } });
-    nativeAudio.addEventListener('error', () => { if (current(run)) { clear(run);run.terminal = true;enqueue(run, 'failed'); } });
+    listen(run, nativeAudio, 'playing', played);
+    listen(run, nativeAudio, 'waiting', () => { if (current(run) && run.audioStarted) enqueue(run, 'audio_waiting', run.audio_ref); });
+    listen(run, nativeAudio, 'ended', ended);
+    listen(run, nativeAudio, 'pause', () => { if (current(run)) { if (nativeAudio.ended) ended(); else stop(); } });
+    listen(run, nativeAudio, 'error', () => { if (current(run)) { intervals(run);unlisten(run);run.terminal = true;enqueue(run, 'failed'); } });
     if (!nativeAudio.paused && nativeAudio.readyState >= 2 && nativeAudio.currentTime > 0) played();
   }
   function remoteAudio(run, NativeAudio, url) {
@@ -196,10 +267,8 @@ window.edsysSetupPhil = async pipelineId => {
       if (!current(run) || run.polling || run.fallback) return;
       run.polling = true;
       try {
-        const status = await Promise.race([
-          app.hass.callWS({type: 'edsys_voice_knowledge/phil_status', session_id: run.session_id}),
-          new Promise((_, reject) => setTimeout(() => reject(Error('reply-timeout')), 3000))
-        ]);
+        const status = await bounded(run, app.hass.callWS({type: 'edsys_voice_knowledge/phil_status',
+          session_id: run.session_id}), 3000, 'reply-timeout');
         if (!current(run)) return;
         if (status.started && !run.audioStarted) {
           run.audioStarted = true;proxy.paused = false;proxy.readyState = 2;proxy.dispatchEvent(new Event('playing'));
@@ -208,10 +277,10 @@ window.edsysSetupPhil = async pipelineId => {
         else if (status.audio_state === 'failed' && status.fallback_allowed === true && !status.started && run.nativeUrl) {
           // Same generated TTS only, and only with an explicit pre-commit HA
           // outcome. No pipeline/household command is submitted a second time.
-          clear(run);run.fallback = new NativeAudio(run.nativeUrl);
-          run.fallback.addEventListener('playing', () => { if (current(run)) proxy.dispatchEvent(new Event('playing')); });
-          run.fallback.addEventListener('ended', () => complete(run, 'ended'));
-          run.fallback.addEventListener('error', () => fail(run));
+          intervals(run);run.fallback = new NativeAudio(run.nativeUrl);
+          listen(run, run.fallback, 'playing', () => { if (current(run)) proxy.dispatchEvent(new Event('playing')); });
+          listen(run, run.fallback, 'ended', () => complete(run, 'ended'));
+          listen(run, run.fallback, 'error', () => fail(run));
           run.fallback.play().catch(() => fail(run));
         } else if (!status.active) fail(run);
       } catch { fail(run); }
@@ -225,22 +294,26 @@ window.edsysSetupPhil = async pipelineId => {
     if (message?.type !== 'assist_pipeline/run' || message.pipeline !== state.pipeline || message.start_stage !== 'stt') {
       return subscribe.call(this, callback, message, options);
     }
+    if (window.edsysPhilBinding !== state) return () => {};
     stop();
-    let lease;
-    try {
-      lease = await Promise.race([
-        app.hass.callWS({type: 'edsys_voice_knowledge/phil_begin', pipeline_id: state.pipeline}),
-        new Promise(resolve => setTimeout(() => resolve(null), 2000))
-      ]);
-    } catch { }
-    const run = lease?.active ? {...lease, sequence: -1, queue: Promise.resolve(), closed: false, terminal: false} : null;
+    const generation = state.generation;
+    const attempt = await begin(generation);
+    // Superseded/cancelled starts never submit a native pipeline or household
+    // command. The latest start alone owns the eventual subscription.
+    if (!live(generation)) { attempt?.discard();idle();return () => {}; }
+    const lease = attempt?.lease;
+    attempt?.accept();
+    const run = lease?.active ? {...lease, sequence: -1, queue: Promise.resolve(), closed: false,
+      terminal: false, listeners: [], timeouts: new Set()} : null;
     if (run) {
+      run.retired = new Promise(resolve => { run.retire = resolve; });
       state.current = run;
       run.timer = setInterval(() => { if (!run.terminal) enqueue(run, 'heartbeat'); }, 2000);
-    }
+    } else idle();
     const wire = run?.output === 'pi' ? {...message, type: 'edsys_voice_knowledge/phil_pipeline', phil_session_id: run.session_id} : message;
     try {
-      return await subscribe.call(this, event => {
+      const unsubscribe = await subscribe.call(this, event => {
+        if (!live(generation) || run && !current(run)) return;
         if (run?.output === 'pi' && current(run) && event?.type === 'run-start') {
           // HA currently constructs its Audio synchronously in run-start. Scope
           // the constructor substitution to that callback and restore it even
@@ -258,10 +331,15 @@ window.edsysSetupPhil = async pipelineId => {
         else if (['stt-vad-end','stt-end','intent-start'].includes(event?.type)) enqueue(run, 'processing');
         else if (event?.type === 'error') {
           if (run.output === 'pi') fail(run);
-          else { clear(run);run.terminal = true;enqueue(run, 'failed'); }
+          else { intervals(run);unlisten(run);run.terminal = true;enqueue(run, 'failed'); }
         }
         // Generation run-end never completes reply playback/follow-up listening.
       }, wire, {...options, resubscribe: false});
-    } catch (error) { stop();throw error; }
+      if (!live(generation)) {
+        try { void Promise.resolve(unsubscribe?.()).catch(() => {}); } catch { }
+        return () => {};
+      }
+      return unsubscribe;
+    } catch (error) { if (live(generation)) stop();throw error; }
   };
 };
