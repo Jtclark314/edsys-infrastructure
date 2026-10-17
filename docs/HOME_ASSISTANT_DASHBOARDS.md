@@ -1,5 +1,41 @@
 # Home Assistant Dashboard Design
 
+## Google Map marker stability: 2026-10-17
+
+The owner reported the 1/2/H markers blinking roughly once per second. The
+renderer rebuilt all map overlays and list rows for every HA update. The
+deployed v1.0.3 repair keeps them keyed to selected locations, updates only
+changed coordinates/radius/title/list/trails and prunes stale/unavailable
+overlays. The owner refreshed/reloaded Map, watched for about 15 seconds and confirmed
+the 1/2/H icons stay steady. Eighteen
+JS/five Python checks and expanded real Chromium tests passed: five identical
+updates caused no overlay position/layer writes, detaches or refits; changed
+coordinates/radius/title/history, unavailable marker/circle pruning, recovery
+and reopen passed. Layout/isolation and non-loopback HTTP checks also passed.
+The renderer HTTPS hash is exact; previous routes are retained. Native
+readback confirms only primary/legacy renderer URLs changed, with every other
+field/key, fallback/resources/dashboard metadata exact; parent v1.0.2, accepted
+wheel/closer zoom, Hybrid/height, key, native fallback, permissions, quotas
+and budget stay unchanged. Prior renderer v1.0.2 is retained for narrow
+URL-only rollback after current-state and unchanged-field/key checks.
+
+## Google Map wheel and closer zoom: 2026-10-17
+
+Renderer v1.0.2 enables ordinary wheel zoom without Ctrl and raises the zoom
+ceiling from 18 to 22. Hover over the map to zoom; sidebar and location-list
+scrolling stay normal. Actual Nimo metadata showed zoom 20 and visibly closer
+imagery beyond the old limit. The owner tested wheel up/down without Ctrl and
+closer zoom and confirmed both work. Zoom 22 and physical image sharpness were
+not established; closer detail depends on Google imagery and may be blurry.
+
+The new immutable renderer hash matches HTTPS content. Previous v1.0.0/
+v1.0.1 and all other Serve routes are preserved. Parent v1.0.2 is untouched.
+Exact native checks confirmed only primary/legacy renderer URLs changed;
+key, Hybrid default, height, fallback, permissions, resources, dashboard
+metadata, quota and budget are unchanged. Five Python checks and JavaScript
+syntax/build/diff checks passed. Narrow rollback changes only those URLs to
+the recorded prior route through the protected API after current-state checks.
+
 ## Primary Google Map: 2026-10-17
 
 The existing **Map** entry (`/map`) now uses Google Maps with a saved
@@ -16,7 +52,8 @@ unchanged. The responsive card fills the available viewport height while
 retaining HA navigation/header and map controls, without fullscreen. Eighteen JS and five Python checks pass.
 Synthetic desktop/tall/phone/landscape browser checks verified viewport fill
 within a 16px margin, retained controls, short-screen scrolling and one Map/SDK
-across resizing. Renderer v1.0.0 is unchanged. The native API promotion verifies
+across resizing. The primary promotion retained renderer v1.0.0; the later
+interaction update above uses a new immutable version. The native API promotion verifies
 the exact fallback before replacing `/map`, retains the key inside HA and compares
 all resulting dashboard metadata. Dry-run/apply and exact primary/legacy/
 fallback/resource readback passed; protected persisted checks confirmed the
