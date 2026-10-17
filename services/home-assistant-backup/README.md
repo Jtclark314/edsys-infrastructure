@@ -6,6 +6,17 @@ creates no native backup and changes no HA, TV, voice, player or app setting.
 It adds no listener or credential and does not extend the existing Restic include
 set. Source and mocked tests alone do not establish deployed/offsite acceptance.
 
+## Deployment checkpoint — October 16 evening
+
+The initial protected `ab270a93` generation completed on 9950x. The actual
+hardened systemd service then proved idempotent reuse and validated all seven
+encrypted members against the current private key. Its daily 01:40 timer is
+active. The knowledge-refresh timer was restored and its normal shared-lock
+refresh passed. Encrypted snapshot/mirror and isolated file-recovery evidence
+is recorded in the canonical
+[backup runbook](https://github.com/Jtclark314/EdSys-Master/blob/main/docs/BACKUP_AND_RECOVERY.md#home-assistant-recovery).
+Full HA/MA application restoration remains a separate maintenance gate.
+
 ## Ownership and selection
 
 HA's native backup configuration owns daily creation at 01:00, app selection,

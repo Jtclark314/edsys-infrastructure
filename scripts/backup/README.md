@@ -157,7 +157,12 @@ Modes:
 
 If rate-limit errors appear, reduce mode or lower transfers/checkers/TPS in `/etc/edsys-backup/edsys-backup.conf`.
 
-Do not use restic directly over Google Drive and do not run `rclone serve restic` for this system.
+Production backup writes use the local repository followed by the mirror above.
+Do not run a network-listening `rclone serve restic` service. The controlled
+Foothills and HA/bedroom isolated restore checks may read the Drive repository
+through Restic's rclone backend over stdin/stdout, with `--no-lock`, a private
+isolated target and no repository-mutating operation. This proves remote
+readability without a new listener; it does not change the backup write path.
 
 ## Security
 
