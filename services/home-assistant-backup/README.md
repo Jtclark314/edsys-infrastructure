@@ -34,11 +34,18 @@ An older backup outside that freshness limit is not accepted as a successful
 new run. Its last good completed stage remains available for recovery.
 
 Eligibility requires native protection, HA with explicit database inclusion,
-and payloads/metadata for all three current apps:
+and payloads/metadata for these three original baseline apps:
 
 - `core_matter_server`
 - `core_mosquitto`
 - `d5369777_music_assistant`
+
+ESPHome Device Builder was added on October 16 after the original recovery
+checkpoint. Native creation remains set to include all installed apps. This
+collector minimum alone does not prove coverage of a newly added app: inspect
+the next completed archive for `5c53de3b_esphome` before claiming ESPHome
+recovery or offsite protection. Existing pre-install archives remain historical
+three-app backups. See `../home-assistant-esphome/README.md`.
 
 Current native archives still use `addons` in outer metadata even though the
 Supervisor API now calls them apps. Managed archives may be named

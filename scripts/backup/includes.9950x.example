@@ -54,3 +54,6 @@
 /mnt/ai-store/3d-printing/materials
 /mnt/ai-store/3d-printing/library
 /mnt/ai-store/3d-printing/environments/user-data
+
+# Private ESP32 project source, secrets and desired firmware exports.
+/home/jeremy/.local/share/edsys-esp32-tools/projects

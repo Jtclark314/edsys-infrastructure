@@ -70,3 +70,8 @@ Use this repo for deployable definitions and repeatable commands. Do not store r
   presentation pilot; native media/manual cards and bounded Nimo animation metadata.
 - `../services/home-assistant-pi-plex/README.md` - native Pi Plex dashboard,
   HA-only authenticated Kodi connection and narrow recovery.
+
+- `../services/home-assistant-esphome/README.md` - official HA Device Builder,
+  authenticated ingress, native device onboarding, Nimo USB flow and backup limits.
+- `../services/esphome-workbench/README.md` - isolated pinned 9950x ESPHome,
+  Device Builder, esptool and PlatformIO tools; no automatic device operations.

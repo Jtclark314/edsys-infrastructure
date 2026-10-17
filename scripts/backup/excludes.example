@@ -64,3 +64,7 @@
 /opt/edsys-workhorse/renovate/cache/**
 **/*.sock
 **/*.pid
+
+# Replaceable ESP32 project build caches; preserve YAML, secrets and exports.
+/home/jeremy/.local/share/edsys-esp32-tools/projects/**/.esphome/**
+/home/jeremy/.local/share/edsys-esp32-tools/projects/**/.pio/**

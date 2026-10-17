@@ -1,0 +1,12 @@
+{
+  "boot": "auto",
+  "watchdog": true,
+  "ingress_panel": true,
+  "auto_update": false,
+  "network": {"6052/tcp": null},
+  "options": {
+    "home_assistant_dashboard_integration": true,
+    "default_compile_process_limit": 2,
+    "leave_front_door_open": false
+  }
+}
