@@ -1,10 +1,38 @@
 # Home Assistant Family Hub
 
 Source for a responsive family calendar and selected shopping lists, using the
-existing authenticated HA frontend. Operational deployment/authentication status
-is separate: **AnyList authentication and live round-trip verification are
-pending at this checkpoint.** Source or synthetic browser checks do not establish
-production UI, physical phone or tablet acceptance.
+existing authenticated HA frontend. Operational state is separate from source
+checks: **AnyList authentication, isolated-list round trips and the final
+owner-selected grocery-list binding are verified in signed-in Nimo HA.**
+Physical phone/tablet acceptance remains pending; live voice/playback/TV tests
+remain held.
+
+### Verified connector progress — October 17, 2026
+
+Final native setup selects only the owner-selected grocery list, with
+meal-calendar export off and 60-second polling. Its one to-do entity and two
+settings selects are explicitly unexposed. Qualification used an isolated test
+list. Seven live HA→AnyList cases passed: comma-preserving add, check/uncheck, rename,
+rename while completed, completed-name add reusing its UID, and UID deletion
+with an empty-list readback. Read-only waits observed 6–10-second convergence;
+early cached reads were not treated as proof or a reason to replay writes.
+
+An independently web-created fixture reached HA in 19 seconds; a subsequent
+web quantity/note change reached HA in about 23 seconds. The actual Hub shopping
+card rendered the same fixture and quantity/note without changing the frontend
+asset. Its checkbox completed the same UID while retaining quantity/note;
+two-line entry created separate items and retained a comma within an item.
+Independent AnyList web and HA readback confirmed the resulting items and
+completed rename with metadata preserved. All three owned fixtures were
+UID-deleted; the test list was verified empty in HA and AnyList web.
+
+Only entity/display-title settings in two Hub shopping cards changed for the
+final grocery binding; exact native readback preserved all other Hub fields.
+Nimo rendered the final heading, enabled checkboxes, successful-read time,
+Refresh and Open AnyList controls without setup pending. The regular grocery
+list received **no item mutations** during this final read-only verification.
+Keep account/list names, IDs and test contents in private receipts. See the
+[operational checkpoint](../../docs/HOME_ASSISTANT_DASHBOARDS.md#family-hub-2026-10-17).
 
 ## Components and boundaries
 
@@ -87,7 +115,11 @@ inside an item; a batch allows 30 lines of at most 250 characters each. Adds are
 sequential and stop at the first uncertain result. Acknowledged lines leave the
 draft; the uncertain line and unattempted lines remain for review. Refresh reads
 the list without replaying additions. Completion/uncompletion addresses a read
-item UID, with displayed checkbox state coming from backend readback.
+item UID, confirming the exact selected entity, UID and desired status from
+backend readback. A stale or missing target remains pending, blocks further
+writes and permits explicit read-only refresh; it never reports confirmed
+completion merely because a refresh returned. Missing/malformed capability
+flags disable mutations.
 
 Unavailable data is not a successful empty list. The UI shows its last
 successful read and retains prior items when refresh fails. After uncertainty,

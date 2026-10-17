@@ -21,17 +21,36 @@ Six native calendar cases passed, including CRUD, exclusive all-day end,
 four recurrence frequencies and weekly DST preservation. A signed-in Nimo
 browser saved a marked event through the new form, saw it in the week view,
 edited it through the native editor and deleted it; UID readback confirmed
-each step. Every owned fixture is removed. Twenty-six Node and four builder
+each step. Every owned calendar fixture is removed. Twenty-six Node and four builder
 checks plus synthetic tablet/phone/landscape browser checks passed. Physical
 phone/Tab A9+ acceptance remains to be confirmed.
 
-Pinned unofficial AnyList 0.8.0 is installed and its native credential flow
-is available. Account authentication, dedicated-list roundtrip and final
-household list binding remain **pending Jeremy's sign-in and selection**.
-Shopping honestly displays setup pending; it does not substitute the old
-shopping list. Keep meal-calendar export off. Selected entity lists constrain
-the frontend, not account-wide upstream reads or the user's broader HA access.
-Keep account/list/event state and recovery evidence outside Git/RAG.
+Pinned unofficial AnyList 0.8.0 is authenticated through the native flow. Final
+setup selects only the owner-selected grocery list, with meal-calendar export
+off and 60-second polling. The settled registry has one to-do entity and two
+settings selects, all explicitly unexposed. Qualification used one isolated test
+list. Seven live HA→AnyList checks passed: comma-preserving add, check/uncheck, rename,
+completed rename preserving status, completed-name add reusing the UID, and
+UID deletion with empty-list readback. Read-only waits observed 6–10-second
+convergence after early cached reads; no write was replayed.
+
+Independent AnyList web sign-in also succeeded. A web-created fixture reached
+HA in 19 seconds, and its web quantity/note change reached HA in about 23 seconds.
+The actual Hub shopping card rendered that same item and quantity/note using the
+unchanged frontend asset. Its checkbox completed the same UID while preserving
+quantity/note. Actual Hub two-line entry created separate items with an embedded
+comma retained. Independent AnyList web showed those additions and a renamed
+completed item; HA confirmed completed rename preserved quantity/note. All three
+owned shopping fixtures were UID-deleted, with HA and AnyList web both empty.
+
+Final binding changed only entity/display-title settings in two Hub shopping
+cards; every other Hub field matched exact native readback. Signed-in Nimo
+rendered the final grocery heading, enabled checkboxes, successful-read time,
+Refresh and Open AnyList without setup pending. No regular-list item mutation
+was issued. Physical phone/Tab A9+ acceptance remains pending.
+Selected entities constrain the frontend, not account-wide upstream reads or
+broader HA access. Account/list identities, contents and recovery evidence remain
+outside Git/RAG.
 
 The Core configuration check and authorized restart succeeded. Voice 0.6.0's
 seventeen files and all four app processes are unchanged; 0.6.1 stays staged.
@@ -42,8 +61,11 @@ to loaded after restart. No repair was applied to it. Source and narrow
 recovery: [Family Hub](../services/home-assistant-family-hub/README.md).
 
 Protected native pre/post backups `e26287b6` / `5dbf67bb` completed with HA,
-database and all four apps, with no reported failures. The final backup follows
-fixture cleanup. Export/offsite coverage and restore of this generation remain
+database and all four apps, with no reported failures. That post-configuration
+checkpoint followed calendar fixture cleanup. Protected backup `53259c99`
+then completed after AnyList authentication, final selection/binding and shopping
+fixture cleanup, with database/all four apps and no reported failures.
+Export/offsite coverage and restore of this generation remain
 unverified; HA backups do not back up the upstream AnyList account.
 
 ## Google Map marker stability: 2026-10-17
