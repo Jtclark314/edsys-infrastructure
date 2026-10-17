@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 from types import SimpleNamespace
 import sys
 import tarfile
@@ -19,6 +20,18 @@ import guest_program as guest
 
 NOW = datetime(2026, 10, 17, 1, 0, tzinfo=timezone.utc)
 FILENAME = 'automatic_backup_2026_10_1_2026-10-16_20.46_13806909.tar'
+
+
+class FakeClock:
+    def __init__(self):
+        self.now, self.delays = 0, []
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.delays.append(seconds)
+        self.now += seconds
 
 
 def metadata():
@@ -266,8 +279,9 @@ def test_transport_fixed_command_and_sanitized_errors(failure):
         return SimpleNamespace(returncode=1 if failure == 'exit' else 0,
                                stdout='private malformed' if failure == 'bad_json' else json.dumps(envelope),
                                stderr='private service credential')
+    clock = FakeClock()
     with pytest.raises(guest.BackupError) as caught:
-        collector.Transport(runner)({'action': 'inventory'})
+        collector.Transport(runner, clock, clock.sleep)({'action': 'inventory'})
     assert 'private' not in str(caught.value)
     assert calls[0][:6] == ['runuser', '-u', 'jeremy', '--', 'ssh', '-o']
     assert 'pve-node3' in calls[0]
@@ -340,3 +354,98 @@ def test_operator_exception_is_not_a_general_stage_owner(monkeypatch, path):
     deployment_paths(monkeypatch)
     with pytest.raises(guest.BackupError):
         collector.secure_directory(Path(path), private=False, create=False)
+
+
+def response(value, returncode=0, **flags):
+    return SimpleNamespace(returncode=returncode,
+                           stdout=json.dumps({'exitcode': 0, 'out-data': json.dumps(value), **flags}),
+                           stderr='private transport diagnostic')
+
+
+@pytest.mark.parametrize('failure', ['nonzero', 'timeout'])
+def test_transient_read_retries_same_request_then_exact_success(failure, capsys):
+    clock, calls = FakeClock(), []
+    data = b'bounded encrypted archive chunk'
+    value = {'offset': 1024, 'length': len(data), 'data': base64.b64encode(data).decode(),
+             'sha256': hashlib.sha256(data).hexdigest()}
+    def runner(command, **kwargs):
+        calls.append((command, kwargs['input']))
+        if len(calls) == 1:
+            if failure == 'timeout':
+                clock.now += kwargs['timeout']
+                raise subprocess.TimeoutExpired('private command', kwargs['timeout'],
+                                                output='private archive', stderr='private credential')
+            return SimpleNamespace(returncode=255, stdout='', stderr='private diagnostic')
+        return response(value)
+    payload = {'action': 'chunk', 'filename': FILENAME, 'fingerprint': [1, 2, 3, 4, 5],
+               'offset': 1024, 'length': len(data)}
+    actual = collector.Transport(runner, clock, clock.sleep)(payload)
+    assert actual == value
+    assert hashlib.sha256(base64.b64decode(actual['data'])).hexdigest() == actual['sha256']
+    assert calls[0] == calls[1]
+    assert clock.delays == [1]
+    assert capsys.readouterr() == ('', '')
+
+
+def test_persistent_nonzero_has_exact_retry_bound(capsys):
+    clock, calls = FakeClock(), []
+    def runner(command, **kwargs):
+        calls.append(kwargs['input'])
+        return SimpleNamespace(returncode=255, stdout='', stderr='private diagnostic')
+    with pytest.raises(guest.BackupError, match='^guest_transport_failed$'):
+        collector.Transport(runner, clock, clock.sleep)({'action': 'inventory'})
+    assert len(calls) == 4 and len(set(calls)) == 1
+    assert clock.delays == [1, 2, 4] and clock.now == 7
+    assert capsys.readouterr() == ('', '')
+
+
+def test_persistent_timeout_respects_total_call_deadline():
+    clock, timeouts = FakeClock(), []
+    def runner(command, **kwargs):
+        timeouts.append(kwargs['timeout'])
+        clock.now += kwargs['timeout']
+        raise subprocess.TimeoutExpired('private command', kwargs['timeout'])
+    with pytest.raises(guest.BackupError, match='^guest_transport_failed$'):
+        collector.Transport(runner, clock, clock.sleep)({'action': 'inventory'})
+    assert timeouts == [110, 110, 17]
+    assert clock.now == 240
+
+
+@pytest.mark.parametrize('value,flags,returncode', [
+    ({'error': 'guest_archive_changed'}, {}, 0),
+    ({'error': 'unsafe_guest_archive'}, {}, 1),
+    ({}, {'out-truncated': True}, 0),
+    ({}, {'out-truncated': True}, 1),
+    ({}, {'err-truncated': True}, 1),
+    ({}, {'exited': False}, 1),
+    ({}, {'exitcode': 1}, 1),
+    ({}, {'out-data': 'incomplete-json'}, 1),
+])
+def test_semantic_or_incomplete_proof_never_retries(value, flags, returncode):
+    clock, calls = FakeClock(), []
+    def runner(command, **kwargs):
+        calls.append(command)
+        return response(value, returncode=returncode, **flags)
+    with pytest.raises(guest.BackupError):
+        collector.Transport(runner, clock, clock.sleep)({'action': 'describe', 'filename': FILENAME})
+    assert len(calls) == 1 and not clock.delays
+
+
+def test_chunk_retry_does_not_restart_the_whole_export(environment):
+    clock, actions = FakeClock(), []
+    failed = False
+    def runner(command, **kwargs):
+        nonlocal failed
+        payload = json.loads(kwargs['input'])
+        actions.append(payload['action'])
+        if payload['action'] == 'chunk' and not failed:
+            failed = True
+            return SimpleNamespace(returncode=255, stdout='', stderr='private transient')
+        return response(guest.operation(payload, environment.source))
+    environment.args['transport'] = collector.Transport(runner, clock, clock.sleep)
+    result = collector.collect(**environment.args)
+    assert result['status'] == 'success'
+    assert actions.count('inventory') == 1
+    assert actions.count('describe') == 2
+    assert actions.count('chunk') == 2
+    assert clock.delays == [1]

@@ -102,37 +102,91 @@ def atomic_json(path, value):
 
 
 class Transport:
-    def __init__(self, runner=subprocess.run):
+    def __init__(self, runner=subprocess.run, clock=time.monotonic, sleeper=time.sleep):
         self.runner = runner
+        self.clock = clock
+        self.sleeper = sleeper
         self.code = Path(guest.__file__).read_text()
 
+    @staticmethod
+    def reject_failure_proof(stdout):
+        """A failed invocation may still carry a complete semantic rejection."""
+        try:
+            envelope = json.loads(stdout)
+        except (ValueError, TypeError):
+            return
+        if not isinstance(envelope, dict):
+            return
+        if (envelope.get('out-truncated') or envelope.get('err-truncated')
+                or envelope.get('exited') is False
+                or ('exitcode' in envelope and envelope['exitcode'] != 0)):
+            raise BackupError('guest_transport_incomplete')
+        if 'out-data' not in envelope:
+            return
+        output = envelope['out-data']
+        if not isinstance(output, str) or len(output) > 2 * guest.CHUNK_BYTES:
+            raise BackupError('guest_response_oversized')
+        try:
+            value = json.loads(output)
+        except (ValueError, TypeError):
+            raise BackupError('guest_transport_incomplete') from None
+        if isinstance(value, dict) and 'error' in value:
+            raise BackupError('guest_operation_failed')
+
+    @staticmethod
+    def decode(stdout):
+        try:
+            envelope = json.loads(stdout)
+            if (not isinstance(envelope, dict) or envelope.get('exitcode') != 0
+                    or envelope.get('exited') is False
+                    or envelope.get('out-truncated') or envelope.get('err-truncated')):
+                raise BackupError('guest_transport_incomplete')
+            output = envelope.get('out-data', '')
+            if not isinstance(output, str) or len(output) > 2 * guest.CHUNK_BYTES:
+                raise BackupError('guest_response_oversized')
+            value = json.loads(output)
+            if isinstance(value, dict) and 'error' in value:
+                raise BackupError('guest_operation_failed')
+            return value
+        except (ValueError, TypeError):
+            raise BackupError('guest_transport_failed') from None
+
     def __call__(self, payload):
+        if not isinstance(payload, dict) or payload.get('action') not in {'inventory', 'describe', 'chunk'}:
+            raise BackupError('invalid_guest_request')
         args = ['qm', 'guest', 'exec', '300', '--pass-stdin', '1', '--timeout', '90',
                 '--', 'docker', 'exec', '-i', 'hassio_supervisor', 'python3', '-c', self.code]
         command = ['runuser', '-u', 'jeremy', '--', 'ssh', '-o', 'BatchMode=yes',
                    '-o', 'ClearAllForwardings=yes', '-o', 'ConnectTimeout=10',
                    '-o', 'StrictHostKeyChecking=yes',
                    'pve-node3', shlex.join(args)]
-        try:
-            result = self.runner(command, input=json.dumps(payload), capture_output=True,
-                                 text=True, timeout=110, check=False)
-            if result.returncode:
-                raise BackupError('guest_transport_failed')
-            envelope = json.loads(result.stdout)
-            if (envelope.get('exitcode') != 0 or envelope.get('exited') is False
-                    or envelope.get('out-truncated') or envelope.get('err-truncated')):
-                raise BackupError('guest_transport_incomplete')
-            output = envelope.get('out-data', '')
-            if len(output) > 2 * guest.CHUNK_BYTES:
-                raise BackupError('guest_response_oversized')
-            value = json.loads(output)
-            if isinstance(value, dict) and 'error' in value:
-                raise BackupError('guest_operation_failed')
-            return value
-        except BackupError:
-            raise
-        except (subprocess.SubprocessError, ValueError, OSError, TypeError):
-            raise BackupError('guest_transport_failed') from None
+        # Same frozen, fixed read request: at most three retries, with an overall
+        # four-minute per-call budget. Semantic/truncation proofs never retry.
+        request = json.dumps(payload)
+        deadline = self.clock() + 240
+        delays = (1, 2, 4)
+        for attempt in range(4):
+            remaining = deadline - self.clock()
+            if remaining <= 0:
+                break
+            try:
+                result = self.runner(command, input=request, capture_output=True,
+                                     text=True, timeout=min(110, remaining), check=False)
+            except subprocess.TimeoutExpired:
+                result = None
+            except (subprocess.SubprocessError, OSError, ValueError, TypeError):
+                raise BackupError('guest_transport_failed') from None
+            if result is not None:
+                if result.returncode == 0:
+                    return self.decode(result.stdout)
+                self.reject_failure_proof(result.stdout)
+            if attempt == len(delays):
+                break
+            delay = delays[attempt]
+            if deadline - self.clock() <= delay:
+                break
+            self.sleeper(delay)
+        raise BackupError('guest_transport_failed')
 
 
 def choose(items, now, maximum_age, backup_id=None):

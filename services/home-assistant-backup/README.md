@@ -62,6 +62,14 @@ and the recovery-key copy. Truncated QGA output, changed files, malformed
 metadata or incomplete transfers fail closed. No guest output, archive bytes or
 key values are printed. `--progress` emits aggregate byte counts only.
 
+Only a nonzero SSH/QGA invocation or `TimeoutExpired` can retry the exact same
+fixed read request, up to three retries after the initial attempt, with 1/2/4
+second backoff and a four-minute total per-call budget. Changed/unsafe content,
+guest semantic failures, incomplete responses and truncation fail immediately.
+Chunks remain one MiB. The export has the existing 30-minute deadline and
+35-minute service timeout; retries do not establish a diagnosis for transient
+QGA failures. Serialize this export with other guest-agent operations.
+
 Outer tar validation rejects links, special members, duplicate names and path
 traversal. It never extracts archive members. It checks encrypted component
 presence and explicit database metadata; it does not claim to decrypt/restore
