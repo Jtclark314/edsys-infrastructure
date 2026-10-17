@@ -99,6 +99,47 @@ watch progress. Keep native LG Plex available independently.
 Owner: Jeremy. Architecture: EdSys-Master `docs/PI5_EDGE_LIVINGROOM.md` and
 `docs/NIMO_HA_VOICE.md`. [Native Kodi integration](https://www.home-assistant.io/integrations/kodi/).
 
+## Manual TV weather controls — October 17, 2026
+
+**Installed; source/configuration verification passed.** Six forecast/radar buttons
+are installed in Player → On the TV, TV screen and Household. Forecast uses the
+existing `briefing` card for 90 seconds; regional NOAA KGSP radar uses encrypted
+`camera_frame.large` imagery for 180 seconds. LG must already show Pi on HDMI 1.
+Back/Dismiss or expiry closes the view without changing power, input or playback. TV
+screen also offers Weather/Radar navigation labeled **on this device**; these open
+the controller's HA dashboard instead of presenting on the LG.
+
+`weather_dashboard.extend(current)` deep-copies and idempotently extends the latest
+live dashboard, preserving unknown cards, metadata and unrelated edits. It revises
+only exact known stale weather notes and labels screen acceptance pending. Preserve
+private before/candidate JSON; compare live configuration again before native
+`lovelace/config/save` and require exact saved readback. The full builder calls the
+transformer for future builds; old full-dashboard deploy scripts are not the update
+path for an existing dashboard.
+
+HA privately binds optional `bedroom_screen.json.weather` version 1 to reviewed
+daily/observed/temperature/humidity/alerts identities with caller read permission.
+The original four sources remain unchanged. The selective overlay covers only
+`bedroom_screen.py`, `weather_tv.py`, `weather_display.py`, preserving active voice
+0.6.0, its original two-method RPC allowlist and the other fourteen files, including
+the manifest. Use private originals/hash checks, HA validation and one normal Core
+restart. The full installer includes staged 0.6.1 changes and belongs to a separate
+activation. No Pi add-on/protocol update or Kodi restart is required.
+
+Forecast data/freshness, bounded radar download/decoding and source configuration
+are detailed in the [weather
+runbook](../home-assistant-weather/README.md#manual-pi-tv-weather--october-17-2026).
+Pre-change protected native database/four-app backup completed; post-change
+protected backup `0cbf09b2` also completed with the database/all four apps. Twelve
+helper, thirteen dashboard and twenty-seven isolated native checks passed; candidate
+checks use fakes with network denied. Native check/restart, exact source/dashboard
+readback and authenticated controller layout passed. New archive
+export/offsite/restore remains unverified. Live voice/playback/screens are held.
+Recovery compares latest before/after state, removes only owned weather cards/links
+and optional weather settings, and restores the original `bedroom_screen.py` and
+removes the two added helpers only after comparing current hashes. Preserve existing
+screen keys, other views and media.
+
 ## Full Bedroom Pi dashboard: 2026-10-14
 
 Sidebar **Bedroom Pi**, `/edsys-pi/player`, now has five native tabs: Player,

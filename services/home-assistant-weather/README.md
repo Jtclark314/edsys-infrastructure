@@ -109,6 +109,66 @@ offline Jinja. Check the real dashboard and radar in an authenticated browser.
 Expose only selected read-only weather entities to Assist. Spoken voice and TV
 presentation acceptance remain separate from data/dashboard verification.
 
+## Manual Pi TV weather — October 17, 2026
+
+**Installed; source/configuration verification passed.** The Pi dashboard extension
+adds forecast (90 seconds) and radar (180 seconds) buttons in Player → On the TV, TV
+screen and Household. These call only the existing
+`edsys_voice_knowledge.bedroom_screen` service with `weather_forecast` or
+`weather_radar`. The existing permission/identity/HDMI 1 gate applies; no implicit
+TV power/input or playback change. Back/Dismiss or fixed expiry closes the view.
+Live screen/voice/playback tests remain held.
+
+Forecast uses the native WU daily forecast (up to five days), actual station
+temperature/humidity/source observation time and NWS-reported alert count.
+Observation age above 15 minutes is stale; unavailable values/counts stay unknown.
+It uses the existing `briefing` card. Radar is fetched only on explicit request from
+the fixed public [NOAA KGSP
+loop](https://radar.weather.gov/ridge/standard/KGSP_loop.gif). The whole 600×550
+source image includes legend, attribution and scan timestamps. `Last-Modified` must
+be at most 20 minutes old; this is source-file freshness, not proof that every
+historical radar scan is recent or a forecast.
+
+HTTP is limited to 4 MiB/10 seconds, without redirects. Decoding runs in HA's
+executor and limits images to 1024 pixels per dimension, 20 frames/8M total pixels,
+and 32,000-byte JPEGs. Existing encrypted `camera_frame`/`large` messages advance
+every two seconds with a fixed expiry. Identity, user read permissions and TV/Pi
+selection are rechecked. Stale input or uncertain send fails without retry; same-key
+clear plus the Pi SequenceGuard cannot clear a replacement view. There is no Pi
+protocol/add-on change, listener, credential or cloud AI task. Preparation is
+serialized with screen mutations; a slow failed replacement can let an existing
+radar preview hit the Pi's six-second stale-frame guard and hide.
+
+Private `bedroom_screen.json` gains an optional, separate `weather` object:
+`version: 1`, fixed `radar_site: KGSP`, and exactly five source keys: `daily`,
+`observed`, `temperature`, `humidity`, `alerts`. Bindings pin native entity/device/
+entry/unique identity, platform and effective area; each caller needs read access.
+The original four household sources remain intact. No URL, coordinates or key is
+accepted as a weather setting.
+
+For this selective rollout, preserve private originals/hashes and overlay only
+`bedroom_screen.py`, `weather_tv.py`, `weather_display.py`; validate HA then use one
+normal Core restart. Retain active voice 0.6.0, its original two-method RPC
+allowlist and the other fourteen component files, including the manifest. The full
+`install_knowledge.py` path includes staged 0.6.1 priority changes and is reserved
+for a separate activation; its future full-package module list is not the selective
+deployment procedure. Build a future priority activation from current main so it
+carries this weather extension; do not replay the older staged bundle. Pre-change
+protected native backup includes the database/four apps; post-change protected
+backup `0cbf09b2` also completed with the database/all four apps.
+
+Use [the Pi dashboard transformer/recovery
+procedure](../home-assistant-pi-plex/README.md#manual-tv-weather-controls--october-17-2026)
+against the latest live dashboard. Recovery restores the original
+`bedroom_screen.py`, removes the two added helpers and reverts only the optional
+weather configuration and owned dashboard additions after comparing current
+hashes/readback; preserve later edits and Pi media state. Twelve helper, thirteen
+dashboard and twenty-seven isolated native checks passed, with candidate device
+networking denied. Native HA check/restart, exact source/dashboard readback and
+authenticated controller layout passed; Pi PID, add-on/profile/media/pause/position
+were unchanged. New archive export/offsite/ restore and physical TV acceptance
+remain unverified.
+
 ## State, networking and recovery
 
 - Private HA configuration lives in native `.storage` entries/registries.

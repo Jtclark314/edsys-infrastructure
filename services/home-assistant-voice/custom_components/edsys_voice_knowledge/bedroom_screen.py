@@ -26,8 +26,9 @@ from jsonrpc_base.jsonrpc import ProtocolError, TransportError
 from . import DOMAIN
 from .pilot_policy import PilotRefusal
 from .screen_protocol import INFO_LABEL,MAX_JPEG,MESSAGE,SENDER,ART_NAMES,seal
+from .weather_tv import WeatherTV
 
-ACTIONS=('camera_popup','camera_large','clear','butler','clock','dark','media','briefing','household','connections','art','art_next')
+ACTIONS=('camera_popup','camera_large','clear','butler','clock','dark','media','briefing','household','connections','art','art_next','weather_forecast','weather_radar')
 ERRORS=(HomeAssistantError,TimeoutError,ProtocolError,TransportError,OSError,ValueError)
 
 
@@ -50,7 +51,10 @@ class BedroomScreen:
         if len(self.key)!=32:raise ValueError('Invalid screen transport key')
         self.pilot.media_bindings.update({'screen_'+k:v for k,v in config['sources'].items()})
         self.lock=asyncio.Lock();self.task=None;self.active=None;self.listeners=[]
+        self.generation=0
         self.status={'view':'starting','visible':False};self.available=False
+        self.weather_errors=ERRORS
+        self.weather=WeatherTV(self,config.get('weather'))
 
     def changed(self):
         for listener in tuple(self.listeners):listener()
@@ -108,6 +112,7 @@ class BedroomScreen:
                 await asyncio.sleep(.2)
 
     async def cancel(self):
+        self.generation+=1
         self.active=None
         if self.task:
             task,self.task=self.task,None;task.cancel()
@@ -191,7 +196,7 @@ class BedroomScreen:
             items=result.get(s.entity_id,{}).get('items',[])
             rows.extend('Reminder · '+str(i.get('summary','Untitled reminder')) for i in items[:2])
             if not items:rows.append('Reminders · Nothing outstanding')
-            rows.append('Weather is not configured. More details are in Home Assistant.')
+            rows.append('Weather forecast and radar are available on the dashboard.' if self.weather.config else 'Weather is not configured. More details are in Home Assistant.')
         return dict(kind=action,heading=heading[:100],body=body[:1200],rows=[r[:160] for r in rows[:8]],timezone=self.hass.config.time_zone)
 
     async def handle(self,call):
@@ -201,6 +206,10 @@ class BedroomScreen:
             try:
                 await self.authorize(call.context,visible=action!='clear')
                 if action.startswith('camera_') and camera not in self.pilot.config['cameras']:raise PilotRefusal('Choose a reviewed camera.')
+                if action in {'weather_forecast','weather_radar'}:
+                    duration=call.data.get('duration',30)
+                    if type(duration) is not int or not 10<=duration<=300:raise PilotRefusal('Choose a duration supported by this screen.')
+                    return await self.weather.open(action,call.context,duration)
                 await self.cancel()
                 if action=='clear':return await self.clear()
                 key=str(uuid4());duration=call.data.get('duration',30)

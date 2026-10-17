@@ -1,6 +1,17 @@
 # Home Assistant conversational voice
 
-## Deployment checkpoint — October 16 evening
+## Weather screen extension — October 17
+
+The installed 0.6.0 component now has 17 files after a selective weather-screen
+extension: only `bedroom_screen.py` changed among its existing files, plus two
+new helpers. Its original two-method RPC scope and all voice routing/reply files
+were retained. One authorized Core restart loaded the extension; it did not
+activate staged 0.6.1. Future priority activation must use current main, including
+the weather helpers, rather than overwrite it with the older 15-file stage.
+Live voice/playback and physical weather-screen acceptance remain held. See the
+[weather rollout](../home-assistant-weather/README.md#manual-pi-tv-weather--october-17-2026).
+
+## Earlier deployment checkpoint — October 16 evening
 
 Priority routing source is version 0.6.1. Its 15 files are staged in
 `/config/edsys_voice_knowledge/staged/priority-0.6.1/component`; active 0.6.0
@@ -397,7 +408,8 @@ services remain deferred until physical voice acceptance.
 The optional `bedroom_screen.json` enables the authenticated
 `edsys_voice_knowledge.bedroom_screen` dashboard service and
 `sensor.bedroom_pi_screen`. Actions: camera_popup, camera_large, clear, butler,
-clock, dark, media, briefing, household, connections; duration 10–300 seconds.
+clock, dark, media, briefing, household, connections, weather_forecast and
+weather_radar; duration 10–300 seconds.
 The native HA Kodi runtime client is reused without reading/exporting its
 credentials. Its qualified runtime interface is checked; an incompatible future
 Core update fails closed. Access rechecks HA user permission, Pi Assist exposure,
