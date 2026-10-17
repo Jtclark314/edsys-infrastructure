@@ -1,0 +1,26 @@
+name: home-assistant-google-maps-trial
+description: On-demand read-only Google Maps view with native HA fallback
+host: HA VM300 and 9950x
+runtime: Native HA module resource and one Tailscale Serve static file
+ports:
+  - "Existing HA frontend; no new listener"
+  - "8450 private tailnet HTTPS; renderer only; no Funnel"
+volumes:
+  - "HA /config/www/edsys-google-maps/v1.0.0: two immutable source files"
+  - "9950x private local-share renderer/v1.0.0: one immutable HTML file"
+environment:
+  configuration: Native admin-only dashboard; exact selected locations and renderer URL stay private
+  client: Current Chromium with credentialless support and Tailscale
+secrets_required:
+  - Dedicated website- and API-restricted Google browser key; pending owner setup
+backup:
+  required: true
+  paths:
+    - Private deployment checkpoint and native HA dashboard/resource backup
+    - Only the dedicated Tailscale Serve route; source rebuilds static files
+monitoring:
+  healthcheck: Trusted renderer HTTPS source hash and native HA readback
+  acceptance: Real restricted-key imagery and Google budget/quota readback pending
+restore_notes: Remove only recorded trial dashboard/resource and port 8450 handler; preserve original Map and all other routes
+owner: Jeremy
+last_verified: "2026-10-17 (empty-key installation; not live Google acceptance)"

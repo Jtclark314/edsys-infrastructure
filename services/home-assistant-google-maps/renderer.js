@@ -1,0 +1,51 @@
+// Runs on a dedicated origin, separate from HA. Receives no HA auth or service access.
+(() => {
+  const CHANNEL="edsys-google-map-v1", nonce=location.hash.slice(1);
+  if(window.credentialless!==true || !document.referrer || parent===window)return;
+  const origin=new URL(document.referrer).origin;
+  if(origin===location.origin)return;
+  const COLORS=["#1976d2","#c62828","#2e7d32","#7b1fa2","#ef6c00","#00838f","#455a64","#ad1457","#5d4037","#4527a0"];
+  let started=false,map,traffic,points=[],paths=[],markers=[],circles=[],history=[],initialFit=false;
+  const post=type=>parent.postMessage({channel:CHANNEL,nonce,type},origin);
+  function validPosition(p){return p && typeof p.lat==="number" && typeof p.lng==="number" && Number.isFinite(p.lat) && Number.isFinite(p.lng) && Math.abs(p.lat)<=90 && Math.abs(p.lng)<=180;}
+  function fit(){const positions=points.filter(p=>validPosition(p.position));if(!positions.length)return;const bounds=new google.maps.LatLngBounds();positions.forEach(p=>bounds.extend(p.position));map.fitBounds(bounds,36);}
+  function controls(data){if(!map)return;if(["roadmap","satellite","hybrid"].includes(data.map_type))map.setMapTypeId(data.map_type);traffic.setMap(data.traffic===true?map:null);}
+  function draw(){
+    if(!map)return;
+    markers.forEach(item=>item.map=null);circles.forEach(item=>item.setMap(null));paths.forEach(item=>item.setMap(null));markers=[];circles=[];paths=[];
+    const list=document.querySelector("#locations");list.replaceChildren();
+    for(const point of points){
+      const li=document.createElement("li");li.textContent=String(point.label||"Location").slice(0,80)+" — "+String(point.state||"unknown").slice(0,80)+(point.age_minutes===null?"":" · HA updated "+point.age_minutes+" min ago");list.append(li);
+      if(!validPosition(point.position))continue;
+      const color=COLORS[point.ref%COLORS.length];
+      const badge=document.createElement("div");badge.textContent=point.zone?"H":String(point.ref+1);badge.style.cssText=`background:${color};color:white;border:2px solid white;border-radius:50%;width:24px;height:24px;display:grid;place-items:center;font:bold 13px system-ui;box-shadow:0 1px 4px #3336`;
+      const marker=new google.maps.marker.AdvancedMarkerElement({map,position:point.position,title:point.label});marker.append(badge);markers.push(marker);
+      const radius=point.zone?point.radius:point.accuracy;
+      if(Number.isFinite(radius) && radius>0 && radius<=100000)circles.push(new google.maps.Circle({map,center:point.position,radius,strokeColor:color,strokeOpacity:.6,strokeWeight:1,fillColor:color,fillOpacity:.08,clickable:false}));
+    }
+    for(const trail of history){for(const segment of trail.segments||[]){const path=segment.filter(validPosition).slice(0,101);if(path.length>1)paths.push(new google.maps.Polyline({map,path,strokeColor:COLORS[trail.ref%COLORS.length],strokeOpacity:.65,strokeWeight:3,clickable:false}));}}
+    if(!initialFit){fit();initialFit=true;}
+  }
+  window.gm_authFailure=()=>post("failed");
+  window.edsysMapReady=()=>{
+    try {
+      const first=points.find(p=>validPosition(p.position));if(!first){post("failed");return;}
+      map=new google.maps.Map(document.querySelector("#map"),{center:first.position,zoom:14,maxZoom:18,mapId:"DEMO_MAP_ID",mapTypeId:"roadmap",streetViewControl:false,mapTypeControl:false,fullscreenControl:true,clickableIcons:false,gestureHandling:"cooperative",keyboardShortcuts:false,renderingType:google.maps.RenderingType.RASTER});
+      traffic=new google.maps.TrafficLayer();controls(window.edsysInitialControls);draw();post("loaded");
+    } catch {post("failed");}
+  };
+  window.addEventListener("message",event=>{
+    const message=event.data;
+    if(event.source!==parent || event.origin!==origin || message?.channel!==CHANNEL || message.nonce!==nonce)return;
+    const data=message.payload;
+    if(message.type==="init" && !started){
+      if(!data || !/^AIza[A-Za-z0-9_-]{35}$/.test(data.api_key) || !Array.isArray(data.points) || data.points.length>10){post("failed");return;}
+      started=true;points=data.points;window.edsysInitialControls={map_type:data.map_type,traffic:data.traffic===true};
+      const url=new URL("https://maps.googleapis.com/maps/api/js");url.search=new URLSearchParams({key:data.api_key,v:"quarterly",libraries:"marker",loading:"async",callback:"edsysMapReady",auth_referrer_policy:"origin"}).toString();
+      const script=document.createElement("script");script.src=url.href;script.async=true;script.referrerPolicy="origin";script.onerror=()=>post("failed");document.head.append(script);
+    } else if(message.type==="data" && map && Array.isArray(data?.points) && data.points.length<=10 && Array.isArray(data.history) && data.history.length<=10){points=data.points;history=data.history;draw();}
+    else if(message.type==="controls")controls(data||{});
+    else if(message.type==="fit" && map)fit();
+  });
+  post("ready");
+})();

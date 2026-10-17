@@ -1,0 +1,8 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><style>body{margin:16px;background:#eee;font:15px system-ui}edsys-google-maps-trial{display:block;max-width:1100px;margin:auto}</style></head><body><edsys-google-maps-trial></edsys-google-maps-trial><script type="module">
+import '../edsys-google-maps-trial.js';
+const card=document.querySelector('edsys-google-maps-trial');
+const now=Date.now();
+const config={type:'custom:edsys-google-maps-trial',renderer_url:'http://localhost:8934/renderer.html',entities:['person.synthetic','zone.synthetic'],api_key:new URL(location.href).searchParams.has('key')?('AI'+'za'+'A'.repeat(35)):''};
+const hass={connected:true,states:{'person.synthetic':{state:'home',last_updated:new Date(now).toISOString(),attributes:{friendly_name:'Synthetic person',latitude:1,longitude:2,gps_accuracy:10}},'zone.synthetic':{state:'0',last_updated:new Date(now).toISOString(),attributes:{friendly_name:'Synthetic home',latitude:1.01,longitude:2.01,radius:100}}},callWS:async command=>{window.__historyCalls=(window.__historyCalls||0)+1;return {'person.synthetic':[{s:'home',lu:(now-60000)/1000,a:{latitude:1,longitude:2}},{s:'home',lu:now/1000,a:{latitude:1.001,longitude:2.001}}]};}};
+card.setConfig(config);card.hass=hass;window.__trial={card,hass,config};
+</script></body></html>

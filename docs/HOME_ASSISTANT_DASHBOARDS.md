@@ -1,5 +1,31 @@
 # Home Assistant Dashboard Design
 
+## Google Maps trial: 2026-10-17
+
+The owner-authorized separate `/google-maps-trial/trial` dashboard is installed
+admin-only with an empty key. It retains the original Map's six explicit
+locations and two-hour history. The existing `/map` configuration, all other
+dashboard metadata/resources, and nine protected HA files matched baseline.
+Only one new module resource, its two immutable HA assets and one dedicated
+9950x static renderer route were added. No device action or HA/Pi restart.
+
+The transparent own-source card loads Google only on request. The SDK is
+isolated from HA in a different HTTPS origin, credentialless sandboxed iframe;
+the private renderer requires Tailscale and current Chromium. Road/Satellite/
+Hybrid, Traffic, bounded selected trails, close/reopen, origin-only referrer,
+parent/storage isolation and narrow layouts passed offline browser checks with
+a fake SDK, including the deployed HTTPS renderer. Ten projection/configuration
+regressions and three build/deployment checks pass. Nimo reached the renderer;
+signed-in HA browser and actual Google imagery acceptance remain pending.
+
+Jeremy selected a **$5/month alert budget**, not a hard spending cap. Google
+Cloud project/billing/key/restrictions/actual editable quotas are still pending
+owner setup; no Google request was made. Do not claim an available daily quota
+or dollar cutoff without console evidence. Existing map is the immediate
+fallback on unsupported browsers, renderer failure or trial closure.
+Setup, privacy, limits and narrow recovery:
+[Google Maps trial runbook](../services/home-assistant-google-maps/README.md).
+
 ## Accepted scope: 2026-10-11
 
 The owner authorized a complete dashboard review and redesign. The live audit
