@@ -1,6 +1,7 @@
 (async (page) => {
   let sdkRequests=0,unexpectedRequests=0,referrer;
   await page.unroute("**/*");
+  const fakeGoogle=await (await page.request.get("http://127.0.0.1:8934/tests/fake-google.js")).text();
   await page.context().addCookies([{name:"fixture_cookie",value:"synthetic-parent-only",domain:"localhost",path:"/"}]);
   await page.goto("http://localhost:8934/tests/fixture.html");
   await page.evaluate(()=>localStorage.setItem("fixture_storage","synthetic-parent-only"));
@@ -13,7 +14,7 @@
     if(url.hostname==="maps.googleapis.com" && url.pathname==="/maps/api/js"){
       sdkRequests++;referrer=(await request.allHeaders()).referer;
       if(url.searchParams.get("libraries")!=="marker" || url.searchParams.get("auth_referrer_policy")!=="origin")throw Error("SDK scope changed");
-      return route.fulfill({contentType:"text/javascript",path:"/home/jeremy/code/worktrees/edsys-infrastructure-google-maps-trial/services/home-assistant-google-maps/tests/fake-google.js"});
+      return route.fulfill({contentType:"text/javascript",body:fakeGoogle});
     }
     unexpectedRequests++;return route.abort();
   });
