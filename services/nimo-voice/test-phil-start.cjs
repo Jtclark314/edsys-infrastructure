@@ -12,7 +12,7 @@ class Target extends EventTarget {
  fire(type){this.dispatchEvent(new Event(type));}
 }
 async function fixture({output='pi'}={}) {
- const sent=[],native=[],begins=[],audible=[],intervals=new Map(),timeouts=new Map();let next=0;
+ const sent=[],native=[],begins=[],audible=[],received=[],intervals=new Map(),timeouts=new Map();let next=0;
  class NativeAudio extends Target {
   constructor(url){super();this.url=url;this.paused=true;this.ended=false;this.readyState=0;this.currentTime=0;audible.push(this);}
   play(){this.paused=false;return Promise.resolve();}
@@ -35,6 +35,7 @@ async function fixture({output='pi'}={}) {
   setInterval:(fn,ms)=>{intervals.set(++next,{fn,ms});return next;},clearInterval:id=>intervals.delete(id)};
  vm.createContext(ctx);vm.runInContext(source,ctx);await window.edsysSetupPhil('named');
  function start(){return connection.subscribeMessage(event=>{
+  received.push(event.type);
   if(event.type==='run-start'){chat._audio=new window.Audio('/native-generated-reply');chat._audio.play();}
  },{type:'assist_pipeline/run',pipeline:'named',start_stage:'stt',end_stage:'tts'},{});}
  async function lease(index,id){begins[index].resolve({active:true,session_id:id,audio_ref:'ref-'+id,output});await flush();}
@@ -42,7 +43,7 @@ async function fixture({output='pi'}={}) {
  async function interval(ms){for(const t of [...intervals.values()])if(t.ms===ms)t.fn();await flush();}
  const counts=()=>({intervals:intervals.size,timeouts:timeouts.size,listeners:connection.count()+window.count()+audible.reduce((n,a)=>n+a.count(),0)});
  const cancellations=()=>sent.filter(m=>m.phase==='cancelled').map(m=>m.session_id);
- return{window,hass,connection,subscriptionResults,sent,native,begins,audible,intervals,timeouts,chat,start,lease,timeout,interval,counts,cancellations};
+ return{window,hass,connection,subscriptionResults,sent,native,begins,audible,received,intervals,timeouts,chat,start,lease,timeout,interval,counts,cancellations};
 }
 function empty(f){assert.deepEqual(f.counts(),{intervals:0,timeouts:0,listeners:0});}
 (async()=>{
@@ -129,6 +130,19 @@ function empty(f){assert.deepEqual(f.counts(),{intervals:0,timeouts:0,listeners:
   assert.equal(proxy.paused,true);assert.equal(errors,1);assert.equal(ended,0);checks++;
  }
  // Native-output and safe-fallback Audio handlers are owned and removed too.
+ // An optional display loss must leave this current native speech pipeline
+ // running; only explicit stop/supersession may retire its native callbacks.
+ for(const failure of ['inactive','rejected']){
+  const f=await fixture({output:'nimo'});const p=f.start();await flush();await f.lease(0,'one');await p;
+  f.native[0].callback({type:'run-start'});
+  f.hass.update=()=>failure==='inactive'?{active:false}:Promise.reject(Error('display-offline'));
+  await f.interval(2000);empty(f);
+  for(const type of ['stt-end','intent-start','intent-end','tts-end','run-end'])f.native[0].callback({type});
+  assert.deepEqual(f.received,['run-start','stt-end','intent-start','intent-end','tts-end','run-end']);
+  assert.equal(f.native.length,1);assert.equal(f.audible.length,1);assert.equal(f.audible[0].paused,false);
+  f.window.edsysStopPhil();f.native[0].callback({type:'run-start'});await flush();
+  assert.equal(f.audible.length,1);empty(f);checks++;
+ }
  {
   const f=await fixture({output:'nimo'});const p=f.start();await flush();await f.lease(0,'one');await p;
   f.native[0].callback({type:'run-start'});assert.equal(f.audible[0].count(),5);

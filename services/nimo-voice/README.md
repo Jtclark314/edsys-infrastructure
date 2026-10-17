@@ -221,7 +221,9 @@ own never-bound session; it cannot dismiss the newer turn. Begin timeout still
 uses ordinary Nimo speech once, and the late optional Pi lease is retired.
 Stop, disconnect, page hide and unload remove the decorator's owned timers and
 connection/window/Audio listeners. A late subscription failure cannot cancel
-the current generation. Native capture, profile, sign-in and Alt+V stay owned
+the current generation. Loss of an optional Nimo display lease leaves that
+current native capture/intent/TTS subscription running; a retired Pi speech
+lease still fails closed. Native capture, profile, sign-in and Alt+V stay owned
 by the existing app and Home Assistant.
 
 Source-only verification uses fake HA, Audio and timers; no real voice or media

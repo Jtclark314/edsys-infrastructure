@@ -313,7 +313,10 @@ window.edsysSetupPhil = async pipelineId => {
     const wire = run?.output === 'pi' ? {...message, type: 'edsys_voice_knowledge/phil_pipeline', phil_session_id: run.session_id} : message;
     try {
       const unsubscribe = await subscribe.call(this, event => {
-        if (!live(generation) || run && !current(run)) return;
+        // Losing the optional Phil display must not suppress the current
+        // native Nimo capture/intent/TTS lifecycle. Pi speech owns its proxy
+        // completion and therefore still fails closed when its lease retires.
+        if (!live(generation) || run?.output === 'pi' && !current(run)) return;
         if (run?.output === 'pi' && current(run) && event?.type === 'run-start') {
           // HA currently constructs its Audio synchronously in run-start. Scope
           // the constructor substitution to that callback and restore it even
