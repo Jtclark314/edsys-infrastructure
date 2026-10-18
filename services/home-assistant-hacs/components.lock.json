@@ -1,0 +1,51 @@
+{
+  "components": [
+    {
+      "artifacts": [
+        {
+          "bytes": 3550042,
+          "sha256": "c94d517f38ec07b78f9f7f596f94ec39a42a49c16c89b223c4daaa97ca710526",
+          "url": "https://github.com/frenck/spook/releases/download/v5.11.1/spook.zip"
+        }
+      ],
+      "commit": "b4efa455822e49d8f4ea1dea8b20053fa15ad535",
+      "name": "spook",
+      "repository": "frenck/spook",
+      "tag": "v5.11.1"
+    },
+    {
+      "artifacts": [
+        {
+          "bytes": 97077,
+          "sha256": "b7327b2fcd39f1fb859b60b53c869760d1d762ab4d4e4617b748971f528bd407",
+          "url": "https://raw.githubusercontent.com/thomasloven/lovelace-auto-entities/v1.16.1/auto-entities.js"
+        }
+      ],
+      "commit": "360722dc512f6f3aea3bbfbe08553b06c37880b6",
+      "name": "auto-entities",
+      "repository": "thomasloven/lovelace-auto-entities",
+      "tag": "v1.16.1"
+    },
+    {
+      "artifacts": [
+        {
+          "bytes": 206335,
+          "sha256": "6445865d7169ba37ff8f48886e3adb00cad5e5261f3a0fcec4884010f7d13896",
+          "url": "https://github.com/alexpfau/calendar-card-pro/releases/download/v4.2.0/calendar-card-pro.js"
+        },
+        {
+          "bytes": 384693,
+          "sha256": "53ca1d1fa17746029cd7b986072eda94e06159acf95efd0cfb95d23deea79c8e",
+          "url": "https://github.com/alexpfau/calendar-card-pro/releases/download/v4.2.0/editor.js"
+        }
+      ],
+      "commit": "7816003d3547096b83f92c8baacc81e7f20c57f4",
+      "name": "calendar-card-pro",
+      "repository": "alexpfau/calendar-card-pro",
+      "tag": "v4.2.0"
+    }
+  ],
+  "qualified_core": "2026.10.2",
+  "qualified_hacs": "2.0.5",
+  "schema": 1
+}

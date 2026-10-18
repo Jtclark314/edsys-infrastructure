@@ -39,14 +39,19 @@ Keep account/list names, IDs and test contents in private receipts. See the
 - `build.py` creates the new `edsys-family` dashboard with Home, Calendar,
   Shopping and Help views. `add_navigation` adds one navigation-only button to
   an explicitly selected existing Sections view without replacing its cards.
+- `upgrade_calendar_agendas` narrowly upgrades an existing Hub using Calendar
+  Card Pro while preserving the native month calendar and every unrelated
+  setting. Use this patch for an existing dashboard, not a fresh builder output.
 - `family-hub-card.js` registers `custom:edsys-family-event-card` and
   `custom:edsys-family-shopping-card`. Cards use HA's supplied `hass` session,
   native WebSocket/service APIs and calendar readback; there is no separate
   login, token field, server, listener or cloud AI integration.
-- Cards add no browser-storage persistence. Drafts, list responses and uncertain
-  write locks live only in each card instance's RAM. Ordinary `hass` updates
-  preserve drafts/focus; navigation, reload or card recreation can discard them.
-  After an uncertain save, inspect the backend before re-entering the draft.
+- The EdSys quick-add and shopping cards add no browser-storage persistence.
+  Their drafts, list responses and uncertain write locks live only in each card
+  instance's RAM. Ordinary `hass` updates preserve drafts/focus; navigation,
+  reload or card recreation can discard them. After an uncertain save, inspect
+  the backend before re-entering the draft. Calendar Card Pro separately caches
+  calendar events in that browser's local storage, as described below.
 
 HA permissions remain the actual authorization boundary. A fixed calendar and
 selected list IDs constrain these cards' UI; they do not restrict the rest of a
@@ -88,6 +93,91 @@ its cards. Preserve existing resources and latest dashboard baselines, compare
 for concurrent edits before native saves, and require exact saved readback.
 Use normal HA sign-in and the existing qualified remote-access route on phones.
 The external Open AnyList link requires its own AnyList sign-in/entitlement.
+
+### Calendar Card Pro agendas
+
+The agenda settings are reviewed against **Calendar Card Pro 4.2.0**, tag commit
+`7816003d3547096b83f92c8baacc81e7f20c57f4`, and its tagged
+[configuration reference](https://github.com/alexpfau/calendar-card-pro/blob/v4.2.0/docs/reference/configuration.md)
+and [expand action](https://github.com/alexpfau/calendar-card-pro/blob/v4.2.0/docs/features/actions.md).
+The exact tagged [configuration/types](https://github.com/alexpfau/calendar-card-pro/blob/v4.2.0/src/config/types.ts),
+[card implementation](https://github.com/alexpfau/calendar-card-pro/blob/v4.2.0/src/calendar-card-pro.ts)
+and [event/cache implementation](https://github.com/alexpfau/calendar-card-pro/blob/v4.2.0/src/utils/events.ts)
+were checked rather than relying on the latest documentation alone.
+Install the reviewed public release through HACS and register its module before
+publishing a candidate. Retain both `calendar-card-pro.js` and its sibling
+`editor.js`; HACS manages those files. This source does not install packages,
+register resources or contact HA. Keep installed versions/hashes and dashboard
+before/after snapshots in private deployment evidence.
+
+- **Home:** seven-day agenda initially shows up to six upcoming events. Its title
+  explicitly offers expansion/collapse; tapping the card or pressing Enter/Space
+  while it is focused toggles the whole seven-day range. No remaining-event
+  indicator is assumed. **More dates & calendar** is a separate native
+  navigation button to the richer Calendar view.
+- **Calendar:** an uncapped fourteen-day agenda, the unchanged native month
+  calendar and existing quick-add form. **Open calendar editor** opens HA's full
+  native calendar panel; select the household calendar there when necessary.
+  Existing events remain editable/deletable through native HA, not the agenda.
+  The native month card and editor button remain available independently if
+  the third-party card cannot load; there is no automatic fallback switch.
+- Both agendas use readable 16px event titles and 14px times/locations, natural
+  card height, wrapping text and the existing responsive Sections layout for
+  phones and the 11-inch tablet. They display only the one supplied calendar,
+  with no weather provider, description expansion, external calendar service,
+  event mutation or AI route. Local HA remains the calendar's authority.
+- The one-minute refresh setting is in **minutes**, not seconds. Reads are
+  cache-aware; `refresh_on_navigate` is enabled but is not a guarantee that every
+  view navigation bypasses a valid cache. A newly added date may take a refresh
+  to appear in this third-party display; the add form's existing native readback
+  remains the save confirmation. Empty data does not hide the card: the normal
+  localized empty-state row remains visible. A failed initial read shows the
+  upstream error state; a later failed refresh can retain previously read events.
+- Upstream 4.2.0 stores raw calendar events in browser `localStorage` and has no
+  supported switch to disable that persistence. With these settings, nonempty
+  cache entries are usable for one minute; empty entries have a fifteen-second
+  lifetime. Expiry controls cache reuse, not a promise of immediate physical
+  deletion. The events remain in HA and on the signed-in device; this creates no
+  external calendar or AI route. The RAM-only draft guarantee applies to the
+  EdSys forms, not this third-party display's event cache.
+- Agenda day boundaries and times follow the device/browser time zone in this
+  upstream version; there is no card setting to force HA's home time zone. The
+  new Calendar section explains that distinction. The existing add form still
+  uses the verified HA home time zone and retains all DST/recurrence guards.
+
+For an **existing** Hub, use the latest native baseline and its already verified
+private Local Calendar binding:
+
+```python
+from build import upgrade_calendar_agendas
+
+candidate = upgrade_calendar_agendas(current_family_config, private_calendar_id)
+```
+
+The pure patch targets only the Home **The next seven days** section and the
+Calendar **Family calendar** location. It replaces the recognized native Home
+`listWeek` card, retains its common HA visibility/layout options, adds the Home
+navigation button when absent, and inserts **Upcoming family dates** immediately
+before the existing native month section. Root dashboard fields, view settings,
+all other cards/views, the exact month card, shopping bindings and quick-add
+recurrence/DST behavior remain unchanged. An already upgraded Hub is returned
+unchanged, preserving later agenda presentation edits. Duplicate/missing owned
+locations, unexpected bindings, partial upgrades and unfamiliar legacy card
+customizations are refused for explicit review instead of being overwritten.
+
+Before saving, compare the live configuration with the captured baseline for
+concurrent edits. Check the intended diff and exact native readback afterward.
+Verify real resource loading, empty/error presentation and expansion through a
+signed-in HA browser at desktop, tablet and phone widths; synthetic source
+checks alone do not prove a production custom card or physical-device behavior.
+
+October 18 qualification used the actual signed-in Nimo browser: both agendas,
+preserved month calendar/forms and native-editor navigation rendered correctly.
+Chrome device emulation at 400×862 and 1280×800 showed single-column phone and
+two-column tablet layouts without card errors. Empty Home agenda expansion and
+collapse worked; no event/list fixture was written. This does not establish
+physical phone/Tab A9+ acceptance. Native calendar bytes and protected existing
+configuration were retained; live voice and playback testing stayed held.
 
 ### Calendar behavior
 
@@ -192,5 +282,9 @@ recovery compares current state with the private after-version, restores only
 owned dashboard/resource changes and connector files when safe, and preserves
 later calendar/list edits. Removing a dashboard does not delete backend data;
 restoring an old HA calendar can overwrite newer dates and is a separate action.
+For the agenda-only upgrade, compare the current Hub with the accepted candidate,
+restore only the owned Home card/button and inserted Calendar agenda section,
+and preserve later edits. Removing Calendar Card Pro must not remove the native
+calendar, calendar database, quick-add/shopping module or AnyList configuration.
 
 Upstream reference: [pinned AnyList source and limitations](https://github.com/moryoav/ha-anylist/tree/80aec613d47a5e8873ae7e2322d357c1a912667a).

@@ -35,6 +35,10 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `../services/home-assistant-family-hub/README.md` - local Family calendar,
   responsive Family Hub and explicitly selected AnyList lists; pinned connector,
   native authenticated cards, test boundaries and scoped recovery.
+- `../services/home-assistant-household-health/README.md` - administrative
+  read-only repair, availability, battery, backup and update reports.
+- `../services/home-assistant-hacs/README.md` - qualified Spook, Auto-Entities
+  and Calendar Card Pro versions, upstream artifact pins and recovery boundaries.
 - `../services/home-assistant-google-maps/README.md` - isolated primary Google Map, saved Hybrid default, original native fallback, restricted key, $5 alerts and quota limits; primary/fallback browser-verified.
 - `ARR_TRANSFER_ARBITER.md` - current concurrent SABnzbd/qBittorrent operation and retained, disabled mutual-exclusion controller.
 - `NETDATA_COMPUTE.md` - authoritative nine-node Netdata Parent/Child deployment and recovery procedure.
