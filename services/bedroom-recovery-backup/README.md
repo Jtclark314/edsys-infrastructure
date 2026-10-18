@@ -65,6 +65,10 @@ Prepare a root-private `expected.json` with exactly `pi` (602 reviewed ZIP membe
 hashes), `nimo` (eleven reviewed owned-file hashes; script pins from current
 source) and `abs_image_id` (the reviewed current immutable Docker image ID).
 Private settings/key/session material never belongs in Git or this README.
+The private Restic selection must include exactly `/opt/edsys-bedroom-recovery`
+to protect this runtime, `expected.json` and `installed.json` alongside the
+completed stage. The sanitized include example contains that exact directory;
+do not expand the selection to all of `/opt`.
 
 ```sh
 python3 -m unittest discover -s services/bedroom-recovery-backup/tests -v

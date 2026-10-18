@@ -241,6 +241,17 @@ it ensures `/srv/edsys-backup/staging` is an exact include and the live
 privately backed up before an atomic edit; symlinked or non-regular selection
 files are refused.
 
+## Bedroom endpoint recovery runtime
+
+The existing local backup refreshes the scoped Pi/Nimo/Audiobookshelf recovery
+stage through `/opt/edsys-bedroom-recovery/collect.py`; no new timer is added.
+Select **exactly** `/opt/edsys-bedroom-recovery` in the private include file so
+the reviewed runtime, private source pins and installed-file manifest recover
+alongside the completed data under the already selected staging tree. Do not
+replace this with a broad `/opt` include. The scoped collector's independent
+endpoint freshness, SQLite logical parity, last-good behavior and restore limits
+are documented in `services/bedroom-recovery-backup/README.md`.
+
 ## Old Google Drive Paths
 
 Earlier attempts may exist:
