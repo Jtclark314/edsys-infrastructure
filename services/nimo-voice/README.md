@@ -1,5 +1,71 @@
 # Nimo Home Assistant voice
 
+## OK Nabu preparation — October 18
+
+The owner requested **prepare OK Nabu on Nimo** while live voice/playback tests
+remain held. The candidate **0.4.0** is prepared alongside active **0.3.0**;
+preparation never starts the candidate or opens audio capture. The active
+executable, three existing scripts, settings, private sign-in profile, remote,
+Alt+V, Startup shortcuts and process are preserved. HA/Pi configuration does not
+need changing. See [the local detector](wake/README.md) for exact package/model
+pins and protocol.
+
+`prepare-wake.ps1` uses existing user-local Python 3.11 x64, creates an isolated
+`wake-runtime`, installs only hashed official wheels, and checks three exact
+upstream TFLite assets with Windows LiteRT and openWakeWord. There is no provider
+key, inbound listener, cloud wake-audio stream, recording, transcript or new task.
+The real detector's `--check` runs synthetic silence and enumerates input metadata;
+it cannot open capture. The worker starts disarmed and accepts explicit local
+parent commands. Two consecutive 80 ms scores at least 0.5 are an initial setting,
+not a physically tuned or accepted wake threshold.
+
+The candidate starts with wake mode **OFF**, including after logon/restart.
+Enable it explicitly through **Nimo Voice tray → Enable OK Nabu (microphone)**.
+Detection releases its input stream before invoking the existing native Assist
+path; say **OK Nabu**, then wait for HA's listening indicator before the command.
+The wake phrase is not forwarded as command audio. Existing HA speech/AI/reply
+routing stays authoritative. Alt+V uses the same guarded handoff and remains the
+fallback. Disable, lock/suspend and process exit retire the local listener.
+
+Wake capture stays off while the native conversation, recorder, reply or camera
+dialog is open. **Close the Assist dialog or Nimo window to rearm for another
+wake**; automatic rearming on pipeline run-end is deliberately unsupported because
+that event precedes reply completion. Closing cancels pending requests and late
+capture; a fresh OK Nabu/Alt+V turn restores admission. Use those entry points
+for a fresh conversation after cancel. Native page microphone actions outside
+an admitted turn are denied while wake mode is enabled. The existing direct
+native behavior remains when wake mode has never been enabled in that session.
+This frontend bridge requires qualification after HA/WebView updates.
+
+Preparation artifact: `%LOCALAPPDATA%\EdSys\NimoVoice\prepared-ok-nabu`.
+The private receipt/activation manifest records exact baselines and candidate
+hashes. Nothing in that directory is a running listener. After the owner releases
+the hold, exit Nimo Voice and its TV remote normally, then run the reviewed
+`activate-wake.ps1` from the matching staged source. It requires exact baselines,
+backs up the executable/source and changed start/stop scripts, installs the
+candidate and guards, and leaves it **OFF**. Launch the ordinary existing shortcut;
+then enable the tray mode for explicit live acceptance. No profile is copied.
+
+Verified preparation: **118 new offline checks** (26 worker, 31 capture,
+16 idle, 23 cancellation, 22 native epoch) and **66 existing Phil/LG/keyboard
+checks** passed. Native Windows compilation, PowerShell parse, dependency
+consistency, all three model hashes and fifty synthetic-silence frames passed;
+maximum silence score was below 0.001. Ten input entries were enumerated without
+capture. Exact readback matched all sixteen staged source files, five candidate
+artifacts and eight protected active files. The active 0.3.0 process/hotkey and
+browser readiness were retained; Windows reported no microphone use. The final
+0.4.0 candidate has not been launched or activated. These are preparation checks.
+
+Remaining acceptance: actual microphone selection/16 kHz opening, nearby/far speech,
+false wakes and TV sound, one reply only, command start timing, cancellation,
+manual Alt+V, lock/sleep/logon/network recovery and the existing LG/Plex return
+checks. None is established by synthetic/model/compilation checks. The owner's
+live voice and playback hold remains in force. Rollback: exit both app modes,
+restore only matching files from `recovery/before-ok-nabu-*`, and launch the old
+client. Private runtime/models may remain inert; do not restore settings/profile
+or overwrite later unrelated changes.
+
+
 ## Fresh frontend and one spoken check — October 17
 
 Nimo Voice was exited through its actual tray **Exit** and launched normally

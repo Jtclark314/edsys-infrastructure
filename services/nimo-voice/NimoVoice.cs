@@ -9,6 +9,7 @@ using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using Microsoft.Win32;
 
 public class VoiceSettings {
     public string home_assistant_url { get; set; }
@@ -28,12 +29,16 @@ public class VoiceWindow : Form {
     readonly string root;
     readonly bool remoteMode;
     readonly Button keyboard = new Button();
+    readonly WakeBridge wake;
+    ToolStripMenuItem wakeMenu;
     readonly Dictionary<string,string> remoteBinding;
     bool remoteBusy;
     string remoteRequest;
     TaskCompletionSource<string> remoteReply;
     bool ready, busy, exiting, hotkey;
     DateTime requested = DateTime.MinValue;
+    long talkGeneration;
+    bool wakeOriginTurn, captureAdmitted;
 
     public VoiceWindow(string directory, bool remote) {
         root = directory;
@@ -68,13 +73,24 @@ public class VoiceWindow : Form {
             Controls.Add(keyboard);
             status.Text="Click Keyboard remote for arrows, Enter and Esc; click the page to release keys.";
         }
+        if(!remoteMode) {
+            wake=new WakeBridge(this,root,WakeIdle,async () => await Talk(true),WakeStatus);
+            SystemEvents.SessionSwitch += SessionChanged;
+            SystemEvents.PowerModeChanged += PowerChanged;
+        }
         var menu = new ContextMenuStrip();
         menu.Items.Add("Talk to Home Assistant (Alt+V)", null, async (s,e) => await Talk());
+        if(!remoteMode) {
+            wakeMenu=new ToolStripMenuItem("Enable OK Nabu (microphone)");
+            wakeMenu.Enabled=wake.Prepared;
+            wakeMenu.Click += async (s,e) => { wakeMenu.Enabled=false;try { await wake.ToggleAsync(); } finally { if(!IsDisposed) wakeMenu.Enabled=wake.Prepared; } };
+            menu.Items.Add(wakeMenu);
+        }
         menu.Items.Add("Open", null, (s,e) => { Show(); WindowState=FormWindowState.Normal; Activate(); });
         menu.Items.Add("Exit", null, (s,e) => { exiting=true; Close(); });
         tray.Icon=Icon; tray.Text="Nimo Voice — Alt+V"; tray.ContextMenuStrip=menu; tray.Visible=!remoteMode;
         tray.DoubleClick += async (s,e) => await Talk();
-        FormClosing += async (s,e) => { if (!remoteMode && !exiting && e.CloseReason==CloseReason.UserClosing) { e.Cancel=true; await StopListening(); Hide(); } };
+        FormClosing += async (s,e) => { if (!remoteMode && !exiting && e.CloseReason==CloseReason.UserClosing) { e.Cancel=true; talkGeneration++; wakeOriginTurn=false; captureAdmitted=false; await StopListening(); if(wake!=null) wake.TurnClosed(); Hide(); } };
         Shown += async (s,e) => await InitializeBrowser();
     }
 
@@ -94,7 +110,13 @@ public class VoiceWindow : Form {
         base.WndProc(ref m);
     }
     protected override void OnFormClosed(FormClosedEventArgs e) {
+        talkGeneration++;
         if (hotkey) UnregisterHotKey(Handle,1);
+        if(wake!=null) {
+            SystemEvents.SessionSwitch -= SessionChanged;
+            SystemEvents.PowerModeChanged -= PowerChanged;
+            wake.Dispose();
+        }
         tray.Dispose(); browser.Dispose();
         base.OnFormClosed(e);
     }
@@ -158,6 +180,7 @@ public class VoiceWindow : Form {
             var options=new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required");
             var env=await CoreWebView2Environment.CreateAsync(null,Path.Combine(root,"browser-profile"),options);
             await browser.EnsureCoreWebView2Async(env);
+            if(!remoteMode) await browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(root,"wake-capture.js")));
             browser.CoreWebView2.Settings.AreDevToolsEnabled=false;
             browser.CoreWebView2.Settings.IsStatusBarEnabled=false;
             browser.CoreWebView2.NavigationStarting += (s,e) => { if(!SameOrigin(e.Uri)) e.Cancel=true; };
@@ -170,6 +193,9 @@ public class VoiceWindow : Form {
                     if(remoteReply!=null && value.StartsWith(prefix,StringComparison.Ordinal)) remoteReply.TrySetResult(value.Substring(prefix.Length));
                     return;
                 }
+                if(value.StartsWith("wake-capture:",StringComparison.Ordinal)) { ReleaseWakeCapture(value.Substring(13));return; }
+                if(value=="wake-dialog-closed") { talkGeneration++;wakeOriginTurn=false;captureAdmitted=false;if(wake!=null) wake.TurnClosed();return; }
+                if(wake!=null && (value=="pipeline-missing" || value=="assist-unavailable" || value=="assist-button-not-ready" || value=="sign-in-or-home-required")) { wakeOriginTurn=false;captureAdmitted=false;wake.TurnStartedOrFailed(); }
                 if (value=="camera-opening") Size=new Size(1100,850);
                 status.Text=value=="requested" ? "Speak after the microphone opens. Alt+V starts another turn."
                     : value=="pipeline-missing" ? "The configured voice assistant is unavailable. Check Home Assistant."
@@ -201,24 +227,70 @@ public class VoiceWindow : Form {
         catch { }
     }
 
-    async Task Talk() {
-        Show(); WindowState=FormWindowState.Normal; Activate();
-        if (busy) return;
-        if (browser.CoreWebView2==null) { status.Text="Opening Home Assistant…"; return; }
-        if (!ready) { browser.CoreWebView2.Reload(); return; }
-        busy=true; requested=DateTime.UtcNow;
+    async Task<bool> WakeIdle() {
+        if(remoteMode || busy || !ready || browser.CoreWebView2==null || IsDisposed) return false;
         try {
+            await browser.CoreWebView2.ExecuteScriptAsync("window.edsysWakeCapture && window.edsysWakeCapture.enable(true)");
+            var result=await browser.CoreWebView2.ExecuteScriptAsync(File.ReadAllText(Path.Combine(root,"wake-idle.js")));
+            return result=="true";
+        } catch { return false; }
+    }
+    async void ReleaseWakeCapture(string request) {
+        if(remoteMode || wake==null || !System.Text.RegularExpressions.Regex.IsMatch(request,@"^[a-f0-9]{32}_[1-9][0-9]{0,9}$")) return;
+        try {
+            long generation=talkGeneration;
+            bool released=await wake.BeforeTalkAsync();
+            if(browser.CoreWebView2==null || IsDisposed) return;
+            browser.CoreWebView2.PostWebMessageAsJson(new JavaScriptSerializer().Serialize(new {type="wake-capture-release",id=request,allow=released && captureAdmitted && Visible && !exiting && generation==talkGeneration}));
+        } catch { /* No grant means the browser denies this capture after timeout. */ }
+    }
+    async void WakeStatus(string value) {
+        if(wakeMenu!=null) wakeMenu.Text=wake.Enabled ? "Disable OK Nabu" : "Enable OK Nabu (microphone)";
+        tray.Text=wake.Enabled ? "Nimo Voice — OK Nabu / Alt+V" : "Nimo Voice — Alt+V";
+        if(!wake.Enabled && browser.CoreWebView2!=null) {
+            if(wakeOriginTurn) { talkGeneration++;wakeOriginTurn=false;captureAdmitted=false;await StopListening(); }
+            try { await browser.CoreWebView2.ExecuteScriptAsync("window.edsysWakeCapture && window.edsysWakeCapture.enable(false)"); } catch { }
+        }
+        if(!IsDisposed) WriteState();
+    }
+    void SessionChanged(object sender,SessionSwitchEventArgs e) {
+        if(e.Reason!=SessionSwitchReason.SessionUnlock && e.Reason!=SessionSwitchReason.SessionLogon) {
+            try { BeginInvoke(new Action(async () => await wake.DisableAsync())); } catch(InvalidOperationException) { }
+        }
+    }
+    void PowerChanged(object sender,PowerModeChangedEventArgs e) {
+        if(e.Mode==PowerModes.Suspend) {
+            try { BeginInvoke(new Action(async () => await wake.DisableAsync())); } catch(InvalidOperationException) { }
+        }
+    }
+    async Task Talk(bool fromWake=false) {
+        if(busy) return;
+        busy=true;
+        long generation=++talkGeneration;
+        wakeOriginTurn=fromWake;
+        try {
+            // The optional detector must release capture before native Assist.
+            if(wake!=null && !await wake.BeforeTalkAsync()) {
+                status.Text="OK Nabu could not release the microphone. Turn it off, then try Alt+V.";return;
+            }
+            if(exiting || IsDisposed || generation!=talkGeneration || (fromWake && (wake==null || !wake.Enabled))) return;
+            Show(); WindowState=FormWindowState.Normal; Activate();
+            if(browser.CoreWebView2==null) { status.Text="Opening Home Assistant…";if(wake!=null) wake.TurnStartedOrFailed();return; }
+            if(!ready) { browser.CoreWebView2.Reload();if(wake!=null) wake.TurnStartedOrFailed();return; }
+            requested=DateTime.UtcNow;captureAdmitted=true;
+            await browser.CoreWebView2.ExecuteScriptAsync("window.edsysWakeCapture && window.edsysWakeCapture.begin()");
+            if(exiting || IsDisposed || generation!=talkGeneration || (fromWake && (wake==null || !wake.Enabled))) return;
             await browser.CoreWebView2.ExecuteScriptAsync(File.ReadAllText(Path.Combine(root,"camera-view.js")));
+            if(exiting || IsDisposed || generation!=talkGeneration || (fromWake && (wake==null || !wake.Enabled))) return;
             var name=new JavaScriptSerializer().Serialize(settings.pipeline_name);
             string js=File.ReadAllText(Path.Combine(root,"start-assist.js")).Replace("__PIPELINE_NAME__",name);
             status.Text="Opening the microphone…";
             await browser.CoreWebView2.ExecuteScriptAsync(js);
-            WriteState();
-        } catch { status.Text="Voice could not start. Check Home Assistant, then press Alt+V."; WriteState(); }
-        finally { busy=false; }
+        } catch { captureAdmitted=false;wakeOriginTurn=false;status.Text="Voice could not start. Check Home Assistant, then press Alt+V.";if(wake!=null) wake.TurnStartedOrFailed(); }
+        finally { busy=false;WriteState(); }
     }
     void WriteState() {
-        var data=new { hotkey_registered=hotkey, browser_ready=ready, status=status.Text, version="0.3.0" };
+        var data=new { hotkey_registered=hotkey, browser_ready=ready, status=status.Text, version="0.4.0", wake_enabled=wake!=null && wake.Enabled, wake_state=wake==null ? "off" : wake.Status };
         File.WriteAllText(Path.Combine(root,remoteMode ? "remote-status.json" : "status.json"),new JavaScriptSerializer().Serialize(data));
     }
 }

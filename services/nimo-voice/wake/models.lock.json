@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "phrase": "OK Nabu",
+  "runtime": "ai-edge-litert 2.3.0 with openwakeword 0.6.0",
+  "license": "CC-BY-NC-SA-4.0; retain upstream attribution and personal household use",
+  "attribution": "openWakeWord by David Scripka; OK Nabu model distributed by Rhasspy/Home Assistant",
+  "models": [
+    {
+      "role": "wakeword",
+      "filename": "ok_nabu_v0.1.tflite",
+      "size": 206380,
+      "sha256": "2982cecde4ee81cc7a2573d2602a7d54f0669425c94a7b64af77e0ff92b03a18",
+      "url": "https://raw.githubusercontent.com/rhasspy/wyoming-openwakeword/v1.10.0/wyoming_openwakeword/models/ok_nabu_v0.1.tflite"
+    },
+    {
+      "role": "melspectrogram",
+      "filename": "melspectrogram.tflite",
+      "size": 1092516,
+      "sha256": "96fa0adccb6e8cf95cb14465409a1a2898ee4a96a85bb9ed3c7eb0e68bf163e8",
+      "url": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.tflite"
+    },
+    {
+      "role": "embedding",
+      "filename": "embedding_model.tflite",
+      "size": 1330312,
+      "sha256": "c0aea21eb84a4ce90a08c870da41b7a7173b45269e6a3207c71d67c40f3a59d8",
+      "url": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.tflite"
+    }
+  ]
+}

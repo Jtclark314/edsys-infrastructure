@@ -19,7 +19,7 @@ foreach($name in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.Win
  $signature=Get-AuthenticodeSignature (Join-Path $root $name)
  if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation'){throw 'WebView2 publisher verification failed'}
 }
-foreach($name in @('NimoVoice.cs','start-assist.js','stop-assist.js','camera-view.js','lg-key.js')){Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $root $name) -Force}
+foreach($name in @('NimoVoice.cs','WakeBridge.cs','wake-idle.js','wake-capture.js','start-assist.js','stop-assist.js','camera-view.js','lg-key.js')){Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $root $name) -Force}
 $config=Join-Path $root 'settings.json'
 if(-not (Test-Path $config)){
  $uri=[Uri]$HomeAssistantUrl
@@ -27,7 +27,7 @@ if(-not (Test-Path $config)){
  @{home_assistant_url=$uri.AbsoluteUri;pipeline_name='EdSys Living Room Voice'} | ConvertTo-Json | Set-Content -LiteralPath $config -Encoding UTF8
 }
 $compiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-& $compiler /nologo /target:winexe /platform:x64 "/out:$root\NimoVoice.exe" "/reference:$root\Microsoft.Web.WebView2.Core.dll" "/reference:$root\Microsoft.Web.WebView2.WinForms.dll" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll (Join-Path $root 'NimoVoice.cs')
+& $compiler /nologo /target:winexe /platform:x64 "/out:$root\NimoVoice.exe" "/reference:$root\Microsoft.Web.WebView2.Core.dll" "/reference:$root\Microsoft.Web.WebView2.WinForms.dll" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll (Join-Path $root 'NimoVoice.cs') (Join-Path $root 'WakeBridge.cs')
 if($LASTEXITCODE -ne 0){throw 'Nimo Voice compilation failed'}
 $shell=New-Object -ComObject WScript.Shell
 foreach($directory in @([Environment]::GetFolderPath('Desktop'),[Environment]::GetFolderPath('Startup'))){

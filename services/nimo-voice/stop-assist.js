@@ -1,4 +1,7 @@
 (() => {
+  // Retire pending pipeline/setup/card awaits before touching any dialog.
+  window.edsysAssistRequestEpoch = (window.edsysAssistRequestEpoch || 0) + 1;
+  window.edsysWakeCapture?.cancel();
   window.edsysStopPhil?.();
   if (window.edsysNimoBinding) window.edsysNimoBinding.sequence++;
   const roots = [document];
