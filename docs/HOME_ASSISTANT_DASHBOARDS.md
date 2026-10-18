@@ -1,5 +1,25 @@
 # Home Assistant Dashboard Design
 
+## Post-show follow-up and cancellation: 2026-10-17
+
+The prepared LG current-address reservation is installed and loaded by one
+dnsmasq-only restart. Syntax, DNS/DHCP listeners, local/external resolution,
+unchanged routes and the LG's current lease/neighbor passed. Acquisition of an
+infinite client lease awaits natural renewal. A fresh router rollback snapshot
+exists; an older baseline was also removed during that operation by `root@pam`.
+Its initiating cause is unproven. Inspected create-snapshot source contains no
+pruning; no deletion was requested by this agent. DNS helper loopback errors
+were recorded despite successful service/DNS checks. No unrelated repair followed.
+
+HA 0.6.1 is now active with its current 17 files/weather helpers; retained
+pipelines/bindings and dashboard metadata/resources matched. One owner-observed
+Nimo microphone check passed: Phil animation, one LG/Polk reply, already-paused
+Plex remaining paused at its exact position. The owner then cancelled testing
+and requested Phil removed. Final native readback confirms Phil/manual cards
+hidden, reply cancelled and Pi video paused. All later live tests remain deferred;
+the dashboard configuration was not changed in this follow-up. See the current
+EdSys-Master Pi/voice records for the scoped acceptance and continuation boundary.
+
 ## Bedroom LG connection and remote readiness: 2026-10-17
 
 The owner reported iPad bedroom Media volume/input errors while the TV was

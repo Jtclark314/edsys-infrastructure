@@ -1,5 +1,20 @@
 # Nimo Home Assistant voice
 
+## Fresh frontend and one spoken check — October 17
+
+Nimo Voice was exited through its actual tray **Exit** and launched normally
+with the existing executable, sign-in/profile, current three scripts and Alt+V
+binding. The fresh 0.3.0 client was signed in with browser/hotkey ready. HA's
+current 17-file 0.6.1 package is loaded; Pi 0.7.1 remains installed.
+
+The owner confirmed Phil animation, one LG/Polk reply and preserved already-paused
+Plex after a real Alt+V time question. Native media identity/time remained exact.
+Further tests were cancelled before playing-video acceptance. The voice window
+was closed to stop capture; the client remains available in the tray. Phil/manual
+overlays and reply audio were cleared, and Pi playback was left paused. Resume
+testing only after a new owner request; no network, logon or edge-case acceptance
+is implied by this one spoken check.
+
 ## Deployment checkpoint — October 16 evening
 
 The corrected three-script priority package is installed on disk with exact

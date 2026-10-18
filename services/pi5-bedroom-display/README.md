@@ -1,5 +1,20 @@
 # Pi5 Master Bedroom display pilot
 
+## First live voice check; remaining tests stopped — October 17
+
+With the current 17-file HA 0.6.1 package active and Nimo's frontend refreshed,
+the owner confirmed a real microphone time question produced Phil animation and
+one audible LG/Polk reply while already-paused Plex stayed paused. Native same-item
+hash/time, actual reply playback and local speaking frames corroborate this
+bounded result. Pi 0.7.1's 602 installed files matched its reviewed package.
+
+The owner cancelled further tests and asked to remove Phil from the LG. Nimo
+capture was closed, native manual clear and local synthetic dismiss acknowledged,
+and final readback showed voice/manual overlays hidden, reply cancelled and video
+paused. No permanent animation feature disable was applied. Playing-video return,
+music/book acceptance, YouTube setup/playback and the prepared 4K source test
+remain deferred. HDMI output remains 1080p60; no 4K output trial occurred.
+
 ## YouTube installed and 4K Plex test prepared — October 16 evening
 
 YouTube **7.4.4** from the official Kodi Omega repository is installed and

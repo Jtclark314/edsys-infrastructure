@@ -1,5 +1,22 @@
 # Home Assistant conversational voice
 
+## Post-show activation and stopped acceptance — October 17
+
+Current main's **17-file 0.6.1** component is active after a scoped component
+backup, 92 installed-Core candidate checks, configuration validation and one
+normal Core restart. Exact source hashes, private bindings, all four pipelines,
+dashboard metadata and resources were retained, including the weather helpers.
+Do not install the older 15-file priority stage over this current package.
+
+The owner completed one real Nimo microphone test with Plex already paused:
+Phil animated, one reply was heard through LG/Polk, and Plex stayed paused.
+Native evidence retained the same media identity and exact position; actual
+reply playback and local speaking frames were observed. The owner then cancelled
+further testing. Playing-video automatic pause/resume and the remaining live
+cases are unaccepted. Cleanup closed Nimo capture, dismissed Phil and manual
+cards, cancelled reply audio, and left Pi playback paused. Current-state details
+and router follow-up are in EdSys-Master `docs/PI5_EDGE_LIVINGROOM.md`.
+
 ## Weather screen extension — October 17
 
 The installed 0.6.0 component now has 17 files after a selective weather-screen
