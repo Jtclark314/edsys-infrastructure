@@ -99,6 +99,29 @@ watch progress. Keep native LG Plex available independently.
 Owner: Jeremy. Architecture: EdSys-Master `docs/PI5_EDGE_LIVINGROOM.md` and
 `docs/NIMO_HA_VOICE.md`. [Native Kodi integration](https://www.home-assistant.io/integrations/kodi/).
 
+## Connection readiness and targeted dashboard repair
+
+The builders hide Pi transport/navigation when HA reports Kodi `off`, `unknown`
+or `unavailable`; native Kodi uses `off` for a lost HTTP connection. LG input,
+volume and mute controls have an independent guard, so an offline LG connection
+does not hide a playing Pi. Disconnected status explains the HA state without
+claiming the physical TV is off. Wake TV and navigation remain available; no
+button automatically runs on page load and no recovery automation is added.
+The LG remote controls TV menus/native apps; Player controls Kodi/Plex on HDMI 1.
+
+For an existing dashboard, use the pure
+`readiness.repair_dashboard(current, player, tv, dashboard="edsys-media")` (or
+`"edsys-pi"`) and review its returned `(candidate, counts)`. Supply the latest
+live configuration and reviewed exact entity IDs. Media scope is `media`,
+`master-bedroom`, `bedroom-pi`; Pi scope is its seven known views. Unknown views,
+other-room targets, unrelated cards/metadata and all action payloads are
+preserved. The transform handles nested native volume/source tiles and buttons,
+leaves ambiguous multi-entity selectors unchanged for review, and is idempotent. It performs no
+network calls or saves. Preserve private before/candidate JSON, recheck for
+concurrent edits before saving, and require exact native dashboard readback.
+Rebuilding the historical full dashboard is not the update path. Source/offline
+checks do not establish iPad or physical-control acceptance.
+
 ## Manual TV weather controls — October 17, 2026
 
 **Installed; source/configuration verification passed.** Six forecast/radar buttons

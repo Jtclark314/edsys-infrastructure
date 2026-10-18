@@ -5,6 +5,7 @@ from pathlib import Path
 
 from build import build_view,button,entity
 from weather_dashboard import extend as extend_weather
+from readiness import repair_dashboard
 
 URL='edsys-pi'
 
@@ -128,7 +129,8 @@ def build(binding):
                    section([heading('Still planned','progress-clock'),note('''Voice-synchronised animation and captions, AI visual answers, full-motion camera inset, weather, real door/temperature readings, personal photo sources, and automatic problem notifications need further setup or qualification.
 
 The controls above use current sources. Missing capabilities are shown here until they have a working connection and a screen test. Camera AI analysis stays off.''')])]}
-    return extend_weather(music_access().extend(add_music_view({'title':'Bedroom Pi','views':[player_view,night,screen_view,household,lg_view,plan]},player),'edsys-pi')[0])
+    dashboard=extend_weather(music_access().extend(add_music_view({'title':'Bedroom Pi','views':[player_view,night,screen_view,household,lg_view,plan]},player),'edsys-pi')[0])
+    return repair_dashboard(dashboard,player,tv,dashboard=URL)[0]
 
 
 def add_link(original):

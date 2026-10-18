@@ -1,5 +1,46 @@
 # Home Assistant Dashboard Design
 
+## Bedroom LG connection and remote readiness: 2026-10-17
+
+The owner reported iPad bedroom Media volume/input errors while the TV was
+physically on and showing the Pi. HA's saved LG address was stale; native
+discovery and the webOS device identity confirmed the same registered TV at
+its current address. Native reconfiguration reused its pairing and restored
+live on/input, HDMI ARC, volume and mute state. After refreshing the iPad page,
+the owner confirmed Volume Down changes the Polk soundbar volume without error,
+then reported no remaining failures noticed. This verifies that physical
+volume path; individual remote functions were not exhaustively exercised.
+
+The latest Media and Bedroom Pi dashboards were repaired in place with
+`services/home-assistant-pi-plex/readiness.py`. Pi transport/navigation now
+requires a connected Kodi state, including treating `off` as disconnected.
+LG input/volume/mute controls have separate readiness conditions. Connection
+messages distinguish HA availability from physical TV power, and labels
+distinguish LG native-app navigation from Pi Kodi/Plex navigation. Wake TV,
+navigation links and sleep cancellation remain available. No control runs on
+page load and no automatic restart/recovery was added.
+
+Twenty-one Pi source checks, Python syntax checks, unchanged action-payload
+and unrelated-view comparisons, idempotence, and exact native dashboard
+readback passed. Dashboard metadata/resources were preserved. Existing Pi
+playback continued; no automated power/input/volume/playback command or
+HA/Pi/Nimo restart was sent. Physical offline-message presentation was not
+tested, and live voice/playback testing remains held.
+
+DHCP inspection found no address reservation. A reservation for the current
+working address is prepared and syntax-qualified, with private recovery
+evidence. Activation is deferred until the show is over because it requires a
+brief router DNS/DHCP service restart. No router configuration, lease or
+service change was applied.
+
+Recovery uses private before/candidate/readback snapshots: compare the latest
+dashboard, remove only the owned readiness wrappers/status cards and reverse
+the owned labels, preserving later edits. For another stale LG address, verify
+the current native device identity and reconfigure the existing entry; do not
+restore an old address solely because it appears in a backup. Source and
+procedure: [Pi dashboard readiness](../services/home-assistant-pi-plex/README.md#connection-readiness-and-targeted-dashboard-repair)
+and [LG remote](../services/home-assistant-lg-remote/README.md).
+
 ## Family Hub: 2026-10-17
 
 The new sidebar **Family Hub** at `/edsys-family/home` has Home, Calendar,
