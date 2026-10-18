@@ -111,6 +111,15 @@ if [[ "${DRY_RUN}" != "true" ]]; then
       --stage-root "${STAGING_DIR}/model-lab" --lock-file /run/edsys-model-lab-stage.lock stage \
       2>&1 | tee -a "${LOG_FILE}" || fail "Model Lab history staging failed"
   fi
+  # Refresh each bedroom endpoint independently before Restic. Sleeping/offline
+  # Nimo preserves its timestamped last good copy; Pi/ABS can still advance.
+  bedroom_stage_helper=/opt/edsys-bedroom-recovery/collect.py
+  if [[ -r "${bedroom_stage_helper}" ]]; then
+    /usr/bin/timeout --signal=TERM --kill-after=5s 420s /usr/bin/python3 "${bedroom_stage_helper}" stage \
+      2>&1 | tee -a "${LOG_FILE}" || echo "Bedroom recovery is degraded; retaining verified last-good endpoint data." | tee -a "${LOG_FILE}"
+  else
+    echo "Bedroom recovery collector unavailable; endpoint freshness is unverified." | tee -a "${LOG_FILE}"
+  fi
 fi
 
 : > "${EXISTING_INCLUDE_FILE}"
@@ -128,7 +137,7 @@ if [[ ! -s "${EXISTING_INCLUDE_FILE}" ]]; then
   fail "no include paths exist; refusing to run empty backup"
 fi
 
-RESTIC_ARGS=(backup --files-from "${EXISTING_INCLUDE_FILE}" --exclude-file "${EXCLUDE_FILE}" --tag edsys-critical --tag "${HOSTNAME_SHORT}" --tag "${RUN_ID}")
+RESTIC_ARGS=(backup --files-from "${EXISTING_INCLUDE_FILE}" --exclude-file "${EXCLUDE_FILE}" --exclude "${STAGING_DIR}/home-assistant/.incoming" --exclude "${STAGING_DIR}/bedroom-recovery/.incoming" --tag edsys-critical --tag "${HOSTNAME_SHORT}" --tag "${RUN_ID}")
 if [[ "${DRY_RUN}" == "true" ]]; then
   RESTIC_ARGS+=(--dry-run)
 fi

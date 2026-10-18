@@ -68,3 +68,7 @@
 # Replaceable ESP32 project build caches; preserve YAML, secrets and exports.
 /home/jeremy/.local/share/edsys-esp32-tools/projects/**/.esphome/**
 /home/jeremy/.local/share/edsys-esp32-tools/projects/**/.pio/**
+
+# Collectors publish completed generations atomically; never select incoming files.
+/srv/edsys-backup/staging/home-assistant/.incoming
+/srv/edsys-backup/staging/bedroom-recovery/.incoming

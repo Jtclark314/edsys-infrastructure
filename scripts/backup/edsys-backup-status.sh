@@ -49,6 +49,15 @@ else
 fi
 echo
 
+echo "## Bedroom Endpoint Recovery Health"
+BEDROOM_HEALTH_HELPER=/opt/edsys-bedroom-recovery/collect.py
+if [[ -r "${BEDROOM_HEALTH_HELPER}" ]]; then
+  /usr/bin/python3 "${BEDROOM_HEALTH_HELPER}" status || true
+else
+  echo '{"bedroom_recovery_health":"degraded","reason":"collector_unavailable"}'
+fi
+echo
+
 echo "## Recent Backup Logs"
 ls -lt "${REPORT_DIR}"/backup-* 2>/dev/null | head -10 || true
 echo
