@@ -129,9 +129,14 @@ rendered repair counts, current dynamic rows and empty states without observed
 card errors at desktop and CSS 400×862 / 1280×800 device emulation. Physical
 phone/Tab A9+ acceptance remains open. Protected calendar, exposure, pipelines,
 existing component files and unrelated dashboards/resources were preserved.
-The required Core restart surfaced an existing iCloud authentication/2FA failure;
-its unavailable data remains visible pending owner-direct sign-in. No account,
-entity repair/update, calendar/list write or live voice/playback test was sent.
+At dashboard qualification the required restart surfaced an existing iCloud
+authentication failure. A later owner-authorized native cache recovery and
+owner-direct verification restored all twenty native entities, six tracker
+positions, seven battery readings and five successful calendar queries. Empty
+thirty-day calendar results were owner-confirmed. Existing Apple/local-calendar
+bindings, calendar bytes, exposure/YAML and pipeline settings remain exact.
+The recovery used no Core patch/restart or event/list/media-control write.
+See `EdSys-Master/docs/HOME_ASSISTANT_HOUSEHOLD_HEALTH.md` for the current record.
 
 Before deployment, protect current dashboard, resources and registration
 metadata. Re-read immediately before each native save and refuse concurrent
