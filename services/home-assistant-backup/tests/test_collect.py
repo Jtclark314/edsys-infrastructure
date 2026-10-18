@@ -1,4 +1,5 @@
 import base64
+import errno
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -270,6 +271,43 @@ def test_failed_promotion_preserves_last_good(environment, monkeypatch):
     assert not list(environment.args['incoming'].iterdir())
 
 
+def test_incoming_below_stage_publishes_new_generation(environment):
+    environment.args['incoming'] = environment.args['stage'] / '.incoming'
+    assert collector.INCOMING == collector.STAGE / '.incoming'
+    collector.collect(**environment.args)
+    last = environment.args['stage'] / 'last-success.json'
+    meta = metadata()
+    meta.update(slug='bbbbbbbb', date='2026-10-17T00:59:00+00:00')
+    archive(environment.source / 'next.tar', meta)
+    result = collector.collect(**environment.args)
+    assert result['backup_id'] == 'bbbbbbbb'
+    assert result['reused'] is False
+    assert json.loads(last.read_text())['backup_id'] == 'bbbbbbbb'
+    assert (environment.args['stage'] / 'ab270a93/native-backup.tar').is_file()
+    assert not list(environment.args['incoming'].iterdir())
+
+
+def test_publication_errno_is_safe_and_last_good_survives(environment, monkeypatch):
+    environment.args['incoming'] = environment.args['stage'] / '.incoming'
+    collector.collect(**environment.args)
+    previous = (environment.args['stage'] / 'last-success.json').read_bytes()
+    meta = metadata()
+    meta.update(slug='bbbbbbbb', date='2026-10-17T00:59:00+00:00')
+    archive(environment.source / 'next.tar', meta)
+    def reject(*args):
+        raise OSError(errno.EXDEV, 'private path and provider text must not escape')
+    monkeypatch.setattr(collector.os, 'rename', reject)
+    with pytest.raises(guest.BackupError, match='^collection_failed$'):
+        collector.collect(**environment.args)
+    current = json.loads((environment.args['stage'] / 'status.json').read_text())
+    assert current['failure_type'] == 'OSError'
+    assert current['failure_errno'] == errno.EXDEV
+    assert 'private path' not in json.dumps(current)
+    assert (environment.args['stage'] / 'last-success.json').read_bytes() == previous
+    assert not (environment.args['stage'] / 'bbbbbbbb').exists()
+    assert not list(environment.args['incoming'].iterdir())
+
+
 def test_existing_generation_tamper_fails_not_overwrites(environment):
     collector.collect(**environment.args)
     path = environment.args['stage'] / 'ab270a93' / 'native-backup.tar'
@@ -325,6 +363,8 @@ def test_service_is_independent_of_main_backup():
     assert 'Requires=edsys-backup' not in unit
     assert 'ExecStartPre=' not in '\n'.join(l for l in unit.splitlines() if not l.startswith('#'))
     assert '01:40:00 America/New_York' in (root / 'edsys-home-assistant-backup.timer').read_text()
+    assert '\nReadWritePaths=/srv/edsys-backup/staging/home-assistant\n' in unit
+    assert '/srv/edsys-backup/.home-assistant-incoming' not in unit
 
 
 def deployment_paths(monkeypatch, changes=None):

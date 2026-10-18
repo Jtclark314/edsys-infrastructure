@@ -19,7 +19,7 @@ ProtectHome=read-only
 ProtectSystem=strict
 RuntimeDirectory=edsys-home-assistant-backup
 RuntimeDirectoryMode=0700
-ReadWritePaths=/srv/edsys-backup/staging/home-assistant /srv/edsys-backup/.home-assistant-incoming
+ReadWritePaths=/srv/edsys-backup/staging/home-assistant
 
 # Independently scheduled: an HA outage must not prevent other critical backups.
 # Do not add this service as Requires= or a fatal ExecStartPre= on edsys-backup.

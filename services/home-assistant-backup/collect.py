@@ -21,7 +21,10 @@ import guest_program as guest
 from guest_program import BackupError
 
 STAGE = Path('/srv/edsys-backup/staging/home-assistant')
-INCOMING = Path('/srv/edsys-backup/.home-assistant-incoming')
+# Both paths must live below the unit's single writable bind mount. Equal
+# st_dev alone does not permit rename across separate systemd bind mounts.
+# The backup runner must explicitly exclude this whole incoming subtree.
+INCOMING = STAGE / '.incoming'
 KEY = Path('/etc/edsys-backup/home-assistant-recovery-key')
 # Verified 9950x deployment boundary: /srv is owned by Jeremy (UID 1000).
 # This trusts only that existing ancestor, not operator-owned backup children.
@@ -351,7 +354,13 @@ def collect(transport, stage=STAGE, incoming=INCOMING, key_path=KEY, now=None,
         return result
     except Exception as error:
         code = str(error) if isinstance(error, BackupError) else 'collection_failed'
-        atomic_json(stage / 'status.json', {'status': 'failed', 'checked_at': now.isoformat(), 'error': code})
+        failure = {'status': 'failed', 'checked_at': now.isoformat(), 'error': code}
+        if isinstance(error, OSError):
+            # Fixed type and bounded errno only, never exception text or paths.
+            failure['failure_type'] = 'OSError'
+            if type(error.errno) is int and 0 < error.errno < 4096:
+                failure['failure_errno'] = error.errno
+        atomic_json(stage / 'status.json', failure)
         if isinstance(error, BackupError):
             raise
         raise BackupError(code) from None

@@ -17,6 +17,23 @@ is recorded in the canonical
 [backup runbook](https://github.com/Jtclark314/EdSys-Master/blob/main/docs/BACKUP_AND_RECOVERY.md#home-assistant-recovery).
 Full HA/MA application restoration remains a separate maintenance gate.
 
+## Publication correction — October 18
+
+The October 17/18 scheduled runs transferred complete newer archives but failed
+before publication. Separate systemd writable bind mounts reproduced `EXDEV`
+despite equal `st_dev`. Incoming work now lives at `STAGE/.incoming`, below the
+same single writable mount as completed generations. The backup runner must
+unconditionally exclude that entire incoming subtree before this version runs;
+the installed `scripts/backup/edsys-backup.sh` supplies that exact exclusion.
+The old external incoming directory is preserved and no write access is added
+to other staging directories or the backup root. An OS failure records only a
+fixed type and bounded errno, never exception text, paths or provider output.
+
+The disposable `tests/sandbox_publication.py` probe exercises two new synthetic
+generations, same-ID reuse and refusal of writes outside staging under the
+unit's filesystem restrictions. Its crypto is explicitly mocked: real native
+key/member validation and current-generation export remain runtime checks.
+
 ## Ownership and selection
 
 HA's native backup configuration owns daily creation at 01:00, app selection,
@@ -59,7 +76,7 @@ required HA/database/apps; selection validates actual coverage.
 | Path | Purpose |
 | --- | --- |
 | `/etc/edsys-backup/home-assistant-recovery-key` | Existing owner-configured native recovery key, root-owned mode 0600; never print it |
-| `/srv/edsys-backup/.home-assistant-incoming/` | Root 0700 incoming work outside the selected staging tree, on the same filesystem |
+| `/srv/edsys-backup/staging/home-assistant/.incoming/` | Root 0700 incoming work, explicitly excluded from Restic and inside the same service writable mount as completed generations |
 | `/srv/edsys-backup/staging/home-assistant/<native-ID>/` | Completed generation, root 0700 |
 | `native-backup.tar` | Exact protected native archive, root 0600 |
 | `recovery-key` | Exact native key copy, root 0600, protected offsite by encrypted Restic |
@@ -106,8 +123,10 @@ does not restore the nested HA database or prove HA/MA application recovery;
 those still require a controlled isolated restore exercise.
 
 Completed files are flushed and verified, then the generation is atomically
-renamed into selected staging. No incomplete generation is selected by the
-existing backup include. Re-running against the same stable source verifies
+renamed into completed staging. The backup runner's mandatory exact `.incoming`
+exclusion keeps incomplete generations out of Restic selection. Equal filesystem
+device IDs alone do not qualify a rename across distinct bind mounts.
+Re-running against the same stable source verifies
 the existing stage and reuses it; a mismatch does not overwrite it. The first
 slice does not delete or prune historical completed generations. Only its own
 failed incoming directory is removed; an interrupted process may leave an
@@ -122,7 +141,9 @@ at the path above without putting its value in a command, log or document.
 ```sh
 sudo install -d -o root -g root -m 0700 \
   /srv/edsys-backup/staging/home-assistant \
-  /srv/edsys-backup/.home-assistant-incoming
+  /srv/edsys-backup/staging/home-assistant/.incoming
+# First deploy/verify the backup runner's unconditional .incoming exclusion.
+# Keep the older external incoming directory unchanged for explicit inspection.
 sudo install -o root -g root -m 0644 \
   services/home-assistant-backup/edsys-home-assistant-backup.service \
   services/home-assistant-backup/edsys-home-assistant-backup.timer \
