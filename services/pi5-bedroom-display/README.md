@@ -33,9 +33,22 @@ within 0.1 second of the captured position and its prior paused state; audio and
 subtitle selections matched. Its 1080p/23.976 video now selects a matching
 1080p23.976 output, while the saved GUI baseline remains 1080p60.
 
-Dropped-frame counters were unavailable through the queried labels. Physical
-picture/sound acceptance, long/high-bitrate playback, Plex 4K Direct Play,
-4K60 and HDR remain separate from this output test. Protected baseline/settings,
+At the owner's request, the 30-second test was repeated, again with 15 samples
+of actual UHD24 output. The owner confirmed **picture and sound were smooth**.
+The original PM4K item, audio/subtitles and latest playing state were restored
+within 0.1 second of the newly captured position. The earlier paused restoration
+above describes the first test; the repeat preserved the latest playing state.
+
+A read-only Plex check matched the exact current episode: its sole attached
+version is 1920×1080 H.264, with no server transcode session. The owner selected
+native 1080p rather than 4K upscaling; genuine 4K requires a 4K source. PM4K's
+installed, unoverridden defaults are local quality index 16 (Original), direct
+play/remux and `allow_4k`, with a 2160-line direct-play maximum. No client quality
+setting needed changing. This does not prove a future 4K Plex network session.
+
+Dropped-frame counters were unavailable through the queried labels.
+Long/high-bitrate playback, Plex 4K Direct Play, 4K60 and HDR remain separate
+from this output test. Protected baseline/settings,
 media identity, logs and restoration receipts stay outside Git; the temporary
 Pi fixture copy was removed, retaining the existing server test library/source.
 

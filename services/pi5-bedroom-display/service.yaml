@@ -30,6 +30,6 @@ display_policy:
   gui: 1920x1080 at 60 Hz
   refresh_switch: On start/stop (native value 2)
   whitelist: Progressive 1080p at 23.976-60 Hz; UHD 2160p at 23.976-30 Hz; 13 actual advertised modes
-  proof: Synthetic 30-second 4K24 SDR source with native and DRM output readback; original PM4K item/paused state restored
-  limits: Physical acceptance and sustained/high-bitrate, Plex 4K transport, HDR and 4K60 are separate
+  proof: Two synthetic 30-second 4K24 SDR runs with native and DRM output readback; owner confirmed smooth picture/sound; original PM4K item/playback state restored
+  limits: Sustained/high-bitrate, Plex 4K transport, HDR and 4K60 are separate; current 1080p episode retained at native quality by owner choice
 last_verified: 2026-10-19
