@@ -39,7 +39,7 @@ if [[ ! -e "$HOME/.gemini/antigravity-cli/settings.json" ]]; then
   install -m 600 "$source_dir/settings.example.json" "$HOME/.gemini/antigravity-cli/settings.json"
 fi
 if [[ ! -e "$bridge_runtime/provider.json" ]]; then
-  printf '%s\n' '{"model":"gemini-3.1-pro-high"}' > "$bridge_runtime/provider.json"
+  printf '%s\n' '{"model":"gemini-4-argon-high"}' > "$bridge_runtime/provider.json"
 fi
 for name in mcp login; do
   entry=server

@@ -71,6 +71,12 @@ Use this repo for deployable definitions and repeatable commands. Do not store r
 
 - `../services/work-laptop-control/README.md` - signed Windows UI Automation,
   interactive desktop worker, and hub MCP/CLI over existing SSH.
+- `../services/codex-operations/README.md` - bounded read-only HA history/state,
+  Frigate/Plex metadata, Ollama inventory and local managed RAG retrieval MCP.
+- `../services/foothills-tools/README.md` - existing Procore browser adapter and
+  production Observation Tracker read-only stdio over trusted Basecamp SSH.
+- `../services/huggingface-hub/README.md` - current official public Hub MCP
+  discovery with an explicit read-tool allowlist.
 
 - `../services/home-assistant-lg-remote/README.md` - native Master Bedroom LG
   keypad and Nimo focused keyboard window; bounded targets and narrow recovery.

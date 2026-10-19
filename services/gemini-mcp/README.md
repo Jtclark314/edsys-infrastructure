@@ -5,6 +5,17 @@ Google's official Antigravity CLI and an authenticated Google account. It is a
 custom EdSys bridge, not an official Google MCP or a replacement Codex model.
 Source of truth: this directory. Hub operations: `EdSys-Master/docs/CODEX_HUB_OPERATIONS.md`.
 
+## Model repair on 2026-10-18
+
+The provider stopped accepting the configured `gemini-3.1-pro-high`. The pinned
+CLI's live model list offered `gemini-4-argon-high`; a private, reversible
+provider-setting change and the fresh-install default now select that model.
+Both a direct synthetic request and the actual `ask_gemini` MCP returned the
+expected markers with zero tool steps. No reauthentication, CLI upgrade,
+permission change or paid fallback was needed. The five existing tests and
+shell/JavaScript syntax checks passed. The original October 1 acceptance below
+remains dated history.
+
 ## Accepted on 2026-10-01
 
 - Official Antigravity CLI `1.2.14`, verified archive and executable hashes.
