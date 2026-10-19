@@ -29,6 +29,24 @@ handle indexing, reranking, and advisory review.
   or included in application logs.
 - There is no LAN, Tailnet, tunnel, reverse-proxy, or public UI route.
 
+## Reviewed source coverage
+
+The allowlist contains fifteen active repositories after the 2026-10-19 addition
+of `bridgeworks` and `homeowner-construction-companion`. Both committed `HEAD`
+inventories passed a source/privacy review and a secrets scan before inclusion.
+Bridgeworks includes code and non-sensitive scenery assets. Homeowner includes
+implementation, documentation and fictional fixtures only; its private project
+records, accounts, attachments, databases and backups remain outside the index.
+This developer source search adds no AI functionality to the Homeowner app and
+does not ingest its records into EdSys RAG, AnythingLLM or TTC tools.
+
+The indexer reads Git `HEAD` directly; do not rely on `git archive` export rules
+to exclude a committed file. Never commit runtime/private records on the
+assumption that `.gitignore` or an export rule will hide them from code search.
+Review any future source-boundary change before extending this allowlist.
+The application golden suite covers exact text and symbols in both additions;
+the retired MailBrain repository remains excluded.
+
 ## Pins and minimal runtime provenance
 
 - Zoekt source revision:

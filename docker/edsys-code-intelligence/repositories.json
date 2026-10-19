@@ -78,6 +78,18 @@
       "source": "/home/jeremy/projects/foothills",
       "branch": "HEAD",
       "enabled": true
+    },
+    {
+      "name": "bridgeworks",
+      "source": "/home/jeremy/code/bridgeworks",
+      "branch": "HEAD",
+      "enabled": true
+    },
+    {
+      "name": "homeowner-construction-companion",
+      "source": "/home/jeremy/code/homeowner-construction-companion",
+      "branch": "HEAD",
+      "enabled": true
     }
   ]
 }
