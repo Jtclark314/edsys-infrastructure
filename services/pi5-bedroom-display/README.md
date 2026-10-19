@@ -1,5 +1,38 @@
 # Pi5 Master Bedroom display pilot
 
+## Real Plex Original-quality UHD accepted — October 19, 2026
+
+The owner authorized a genuine library movie test at Original quality followed
+by return to the current show. The selected source was independently probed as
+**3840×1600 HEVC Main10, 23.976 fps, BT.709 SDR**, about **6.4 Mb/s**, with AAC
+5.1. Its cropped cinema frame was presented within **3840×2160 at 23.976 Hz**
+HDMI output. This was the native PM4K network path, not the local test fixture.
+
+The 45-second run produced **22 native samples** of that exact source and UHD
+output, corroborated by active DRM CRTC readback. **24 authenticated Plex
+samples** identified PM4K on Raspberry Pi, the same source part and
+**`directplay`**, with **no transcode sessions**. Native source URLs matched
+the original library part rather than a transcode resource. Temperatures were
+36.2–38.4 °C, with `throttled=0x0` throughout. The owner confirmed that this
+verified UHD run had **smooth picture and sound**.
+
+Plex search contained two identically titled/year entries with different source
+resolutions. The first was 1080p and was excluded from the UHD result. For
+future tests, verify the preplay **4K** badge, actual source dimensions and
+part/file identity; title and year alone cannot select a specific version.
+
+The automated return stopped at a UI guard; subsequent native UI readback
+confirmed the exact original show playing near its captured position, with
+unchanged audio and subtitle selections. This run does not establish automatic
+exact-position restoration. Do not seek again after the owner resumes playback.
+No new quality/display setting or library configuration change was required.
+Raw URLs, account state, movie/show identities, watch progress and test receipts
+remain in protected private checkpoints, outside Git/RAG.
+
+This qualifies one bounded SDR Original/Direct Play case. Sustained playback,
+high-bitrate/remux sources, reliable dropped-frame counts, HDR and 4K60 remain
+separate. Earlier dated sections below retain their original acceptance scope.
+
 ## 4K movie output enabled — October 19, 2026
 
 The owner authorized 4K output and a 30-second synthetic test followed by
@@ -44,11 +77,12 @@ version is 1920×1080 H.264, with no server transcode session. The owner selecte
 native 1080p rather than 4K upscaling; genuine 4K requires a 4K source. PM4K's
 installed, unoverridden defaults are local quality index 16 (Original), direct
 play/remux and `allow_4k`, with a 2160-line direct-play maximum. No client quality
-setting needed changing. This does not prove a future 4K Plex network session.
+setting needed changing. The later real Plex trial above qualifies one actual
+4K network session separately.
 
 Dropped-frame counters were unavailable through the queried labels.
-Long/high-bitrate playback, Plex 4K Direct Play, 4K60 and HDR remain separate
-from this output test. Protected baseline/settings,
+Long/high-bitrate playback, 4K60 and HDR remain separate from this output test.
+Protected baseline/settings,
 media identity, logs and restoration receipts stay outside Git; the temporary
 Pi fixture copy was removed, retaining the existing server test library/source.
 

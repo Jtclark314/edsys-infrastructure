@@ -30,6 +30,6 @@ display_policy:
   gui: 1920x1080 at 60 Hz
   refresh_switch: On start/stop (native value 2)
   whitelist: Progressive 1080p at 23.976-60 Hz; UHD 2160p at 23.976-30 Hz; 13 actual advertised modes
-  proof: Two synthetic 30-second 4K24 SDR runs with native and DRM output readback; owner confirmed smooth picture/sound; original PM4K item/playback state restored
-  limits: Sustained/high-bitrate, Plex 4K transport, HDR and 4K60 are separate; current 1080p episode retained at native quality by owner choice
+  proof: Two synthetic 30-second UHD24 runs plus a 45-second real Plex Original SDR movie; 22 native/DRM UHD23.976 samples and 24 Plex Direct Play samples without transcoding; owner confirmed smooth picture/sound; original show playing again near saved point with selections retained
+  limits: Sustained/high-bitrate, dropped-frame counts, HDR and 4K60 remain separate; real movie return required native UI follow-up rather than proven automatic exact-position restoration; 1080p sources retain native quality
 last_verified: 2026-10-19
