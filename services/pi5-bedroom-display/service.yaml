@@ -25,4 +25,11 @@ monitoring:
   - physical advancing video plus overlay acceptance
 restore_notes: Stop/disable display; restore only owned files and preserve later changes. Voice remains separately gated.
 owner: Jeremy
-last_verified: 2026-10-14
+display_policy:
+  verified_date: 2026-10-19
+  gui: 1920x1080 at 60 Hz
+  refresh_switch: On start/stop (native value 2)
+  whitelist: Progressive 1080p at 23.976-60 Hz; UHD 2160p at 23.976-30 Hz; 13 actual advertised modes
+  proof: Synthetic 30-second 4K24 SDR source with native and DRM output readback; original PM4K item/paused state restored
+  limits: Physical acceptance and sustained/high-bitrate, Plex 4K transport, HDR and 4K60 are separate
+last_verified: 2026-10-19

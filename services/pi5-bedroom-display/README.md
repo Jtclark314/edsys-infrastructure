@@ -1,5 +1,52 @@
 # Pi5 Master Bedroom display pilot
 
+## 4K movie output enabled — October 19, 2026
+
+The owner authorized 4K output and a 30-second synthetic test followed by
+restoration of the current show. Native Kodi settings now select
+`videoplayer.adjustrefreshrate=2` (**On start/stop**) and a 13-mode whitelist:
+progressive **1920×1080** at 23.976, 24, 25, 29.97, 30, 50, 59.94 and 60 Hz;
+**3840×2160** at 23.976, 24, 25, 29.97 and 30 Hz. All values came from this
+connected LG's actual `Settings.GetSettings` options. GUI remains 1080p60;
+playback can switch to the matching whitelisted resolution/frame rate.
+UHD50/59.94/60, 4096-wide modes, HDR and other new modes are not enabled by
+this trial. The base fresh-profile installer retains its original 1080p
+baseline; this is an explicit native-profile override for the current sink.
+
+Only those two setting values changed. HDMI stereo, sync-to-display off,
+DRM PRIME decoder/render selection, GUI mode and every other returned setting
+value were retained. No Kodi/OS/add-on restart, boot edit or listener change
+was required. The native settings API updates memory; persistence was verified
+separately after opening `systemsettings` (window 10016) and using `Input.Back`,
+whose native category Back action saves settings. `guisettings.xml` contains
+refresh value 2 and all 13 comma-separated modes. Do not edit that file over a
+running Kodi process or infer persistence from API readback alone.
+
+The local, hash-verified synthetic 3840×2160/24 HEVC SDR/AAC stereo source ran
+for its 30-second duration. Fifteen samples showed actual 3840×2160 at 24 Hz,
+corroborated by active DRM CRTC/framebuffer readback and advancing playback.
+Kodi reported `ff-hevc-drm_prime`; this label alone is not a separate hardware
+acceleration qualification. Temperatures were 35.6–37.8 °C and throttling flags
+remained zero. On completion output returned to 1080p60. The unchanged original
+PM4K item was reopened through its selected native UI entry, then restored
+within 0.1 second of the captured position and its prior paused state; audio and
+subtitle selections matched. Its 1080p/23.976 video now selects a matching
+1080p23.976 output, while the saved GUI baseline remains 1080p60.
+
+Dropped-frame counters were unavailable through the queried labels. Physical
+picture/sound acceptance, long/high-bitrate playback, Plex 4K Direct Play,
+4K60 and HDR remain separate from this output test. Protected baseline/settings,
+media identity, logs and restoration receipts stay outside Git; the temporary
+Pi fixture copy was removed, retaining the existing server test library/source.
+
+For narrow rollback, compare current state, restore only the two recorded prior
+values (refresh 0 and empty whitelist) through the authenticated native API,
+then use the same native settings Back/save path and verify durable values.
+Preserve account state, databases and subsequent watch progress. Do not restore
+an old entire profile/database. Resolution switching can briefly blank HDMI at
+playback start/stop. See [Kodi display settings](https://kodi.wiki/view/Settings/System/Display)
+and [the 21.3 native save path](https://github.com/xbmc/xbmc/blob/21.3-Omega/xbmc/settings/windows/GUIWindowSettingsCategory.cpp#L173-L205).
+
 ## First live voice check; remaining tests stopped — October 17
 
 With the current 17-file HA 0.6.1 package active and Nimo's frontend refreshed,
