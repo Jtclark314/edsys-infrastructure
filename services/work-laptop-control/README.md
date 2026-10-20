@@ -109,6 +109,24 @@ decision. Do not infer an endpoint-product cause or add exclusions from these
 observations. Typing/readback and natural reboot/sign-out recovery remain
 unverified. No unrelated windows were closed and no diagnostic was sent to IT.
 
+### Follow-up desktop acceptance — 2026-10-19
+
+A later native WinApp check used the observed Windows Search control: setting
+`Word` and reading it back passed, and invoking the exact `Word, App` result
+opened Word. Its window remained present after more than 30 seconds, and UIA
+inspection returned 20 elements. This verifies desktop input/readback and the
+normal Start-menu app route in the signed-in session; no document was edited.
+
+The separate direct worker child-launch route remains unresolved. An async
+`work_laptop_launch` of disposable Notepad exited within five seconds without
+any WinApp inspection. A limited interactive PowerShell .NET process-start
+diagnostic returned `0xC0000022` (access denied); a shell-execute diagnostic
+returned a successful PowerShell exit while its Notepad child still disappeared.
+These results do not identify the denying component or justify changing
+endpoint controls. Direct child-launch acceptance and natural reboot/sign-out
+recovery remain unverified. The earlier pending typing/readback statement above
+records the state before this follow-up check.
+
 The worker uses a normal user token. Locked/secure desktops and elevated-window
 input are not bypassed. Use administrative SSH for system tasks; unlock Windows
 for visual interaction. Existing work, browser profiles, Sentinel policy and
