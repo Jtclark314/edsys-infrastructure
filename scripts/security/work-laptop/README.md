@@ -36,6 +36,34 @@ The laptop must be powered on, awake, connected to Tailscale, and allowed by
 Tailnet policy. No sleep, reboot, power, or Tailscale key-expiry policy changes
 are made. Configured startup is not proof of successful reboot persistence.
 
+## Domain-token failure diagnosed — 2026-10-19
+
+At home without the company VPN, the existing pinned SSH identity and key
+authenticated successfully, then the connection closed before confirming a
+session channel. SFTP failed at that same stage. `OpenSSH/Admin` recorded
+principal-name lookup error 1355, failure to obtain the domain user's security
+token, and `fork of unprivileged child failed`. The configured account matched
+the private deployment manifest; this was not a demonstrated username drift.
+
+Connecting the existing company VPN restored native administrative PowerShell
+execution through the unchanged SSH route. Tailscale reachability alone had not
+provided the company-domain access required for this logon. Keep both normal
+connections available for this setup when operating from home. Error 1355
+indicates a domain discovery/contact failure; it does not by itself prove a
+broken domain trust. Do not reset trust, change DNS/authentication, substitute
+accounts or regenerate keys based on that error alone.
+
+Read the Admin channel for SSH errors; Operational is the informational channel.
+The initial Operational-only diagnostic missed the relevant error records.
+Default Windows script restrictions were a separate local diagnostic-launch
+issue: all execution-policy scopes were Undefined, and a one-process diagnostic
+launch left persistent policies unchanged. Restoring SSH command execution is
+separate from accepting the interactive desktop worker.
+
+References: [Windows error 1355](https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--1300-1699-),
+[domain-controller discovery](https://learn.microsoft.com/en-us/troubleshoot/windows-server/windows-security/troubleshoot-kerberos-domain-not-found-event-id-5719),
+[OpenSSH log channels](https://github.com/PowerShell/Win32-OpenSSH/wiki/Logging-Facilities).
+
 ## Firewall admission modes
 
 The default `WindowsFirewall` mode still requires enabled profiles, default

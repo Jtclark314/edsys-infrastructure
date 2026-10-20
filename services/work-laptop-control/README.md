@@ -76,6 +76,39 @@ An action may be partial on cancellation/timeout: inspect before retrying.
 
 ## Boundaries and recovery
 
+The fixed SSH transport uses the approved domain account. An online Tailnet peer
+and accepted SSH key do not guarantee Windows can create that account's logon
+token. On 2026-10-19, at-home domain lookup/token errors (1355) were resolved by
+connecting the existing company VPN; native SSH PowerShell execution then
+passed without changing accounts, keys, SSH policy or security controls. See
+[the SSH diagnostic checkpoint](../../scripts/security/work-laptop/README.md#domain-token-failure-diagnosed--2026-10-19).
+Desktop worker/heartbeat/UI acceptance must still be verified separately after
+transport recovery. Read OpenSSH/Admin errors before changing the worker.
+
+### Recovery checkpoint — 2026-10-19
+
+After transport recovery, the existing limited interactive scheduled task was
+present but four owned payload files were missing and the heartbeat was stale.
+Restored only `agent.ps1`, `install.ps1`, `bin/winapp.exe` and
+`bin/libSkiaSharp.dll` from canonical source and the original cached, hash-pinned
+WinApp 0.6.0 package; preserved the matching PDB. All five target hashes and the
+Microsoft signature passed readback. The protected root ACL was unchanged and
+only the existing task was started. No installer, account, task definition or
+security-policy change was used. The cause of the missing files is unconfirmed.
+
+Native desktop status, administrative and limited interactive PowerShell
+markers, and UI window enumeration passed. The task remains Running with a
+valid heartbeat after exact fixture/staging cleanup. GUI action acceptance is
+incomplete: disposable GUI children disappeared without owner closure, and one
+process-launch diagnostic returned `0xC0000022` (access denied) before producing
+its result. This does not identify the denying component. Bounded Windows
+application-control and Defender checks had no matching events; proprietary
+endpoint enforcement telemetry was unavailable through a supported read route.
+IT must correlate the worker/child process telemetry before a targeted policy
+decision. Do not infer an endpoint-product cause or add exclusions from these
+observations. Typing/readback and natural reboot/sign-out recovery remain
+unverified. No unrelated windows were closed and no diagnostic was sent to IT.
+
 The worker uses a normal user token. Locked/secure desktops and elevated-window
 input are not bypassed. Use administrative SSH for system tasks; unlock Windows
 for visual interaction. Existing work, browser profiles, Sentinel policy and
