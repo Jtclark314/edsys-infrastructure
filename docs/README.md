@@ -30,6 +30,7 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `CONTAINER_RECOVERY.md` - ordered 9950x Docker recovery architecture and operations.
 - `REBOOT_ACCEPTANCE.md` - one-shot full-host reboot recovery and acceptance gate.
 - `EDCORE_CONTROL_PLANE.md` - current 9950x-to-pve-node3 Proxmox, HAOS, and isolated-lab control plane.
+- `PROXMOX_FAMILY_SERVICES.md` - VM202's qualified 5 GiB allocation on node2, preserved virtual board, recovery evidence and snapshot-retention exception.
 - `HOME_ASSISTANT_CONTROL.md` - Phil's existing privileged HA API route, bounded reads, explicit actions, disposable-helper verification, privacy and rollback.
 - `HOME_ASSISTANT_DASHBOARDS.md` - accepted native dashboard design, UI/data verification boundaries, private checkpoints, and narrow rollback.
 - `../services/home-assistant-family-hub/README.md` - local Family calendar,
