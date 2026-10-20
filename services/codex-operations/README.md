@@ -87,6 +87,11 @@ authority must remain available; missing access fails without alternate tokens.
 
 Register the launcher as stdio with an explicit 20-tool allowlist and
 300-second tool timeout (actions make four bounded existing-helper calls).
+The hub registration also sets `PYTHONUNBUFFERED=1`. A configuration reload
+after this launch-environment change replaced the existing cached worker;
+all twenty tools became callable in the already-running chat without a
+shared backend restart. Native discovery, invalid-action rejection and actual
+image delivery passed. Reload alone had retained the original twelve-tool worker.
 Four action tools have read-only=false/idempotent=false annotations; the other
 sixteen have read-only=true. Preserve existing approval policy. No tool accepts
 generic commands/URLs/services or manages credentials, generates text,
