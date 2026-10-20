@@ -1,0 +1,10 @@
+--- a/resources/lib/youtube_plugin/youtube/client/request_client.py
++++ b/resources/lib/youtube_plugin/youtube/client/request_client.py
+@@ -93,6 +93,7 @@
+                 'package_id': 'com.google.android.apps.youtube.vr.oculus',
+             },
+             '_auth_type': 'vr',
++            '_use_adaptive': False,
+             '_use_subtitles': False,
+             'json': {
+                 'context': {

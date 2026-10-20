@@ -1,5 +1,85 @@
 # Pi5 Master Bedroom display pilot
 
+## YouTube Premium setup and streaming repair — October 19, 2026
+
+Official YouTube **7.4.4** and InputStream Adaptive **21.5.9** are configured.
+The owner completed all three Google authorizations for the Premium account;
+native browsing shows **Sign Out** and **Subscriptions**. This establishes
+signed-in access, not parity with every official-app Premium benefit.
+
+The saved quality default is **up to 2160p, SDR, at most 30 fps**, with
+MPEG-DASH/InputStream Adaptive and automatic selection. AVC and VP9 are enabled;
+AV1, HDR and high-frame-rate selection are unselected. ISA's
+`overrides.ignore.screen.res=true` allows playback above the retained 1080p60
+GUI. YouTube is the only currently identified ISA consumer; review this global
+ISA option before adding another consumer. Existing HDMI whitelist, stereo PCM,
+Plex Original quality and other Kodi decoder/render settings were retained.
+
+The first VP9 trials failed physical acceptance: the owner reported a frozen
+picture/noise. Both had actual **ANDROID_VR CDN HTTP 403** failures; the 4K run
+also accumulated large audio-sync errors despite advancing player clocks and
+zero throttling. Player time and selected resolution alone did not prove clean
+playback. Kodi was immediately muted/stopped. A repeated sign-in action modal
+was cleared during recovery; use the normal YouTube root/menu for account work,
+not a persistent browser folder at the sign-in action URI.
+
+A narrowly reviewed [upstream PR1482](https://github.com/anxdpanic/plugin.video.youtube/pull/1482)
+workaround adds only `_use_adaptive: False` to AndroidVR's profile. Authentication
+and history code remain intact; adaptive media use an existing alternative
+client. This is a **local one-line patch, not an official released fix**. The
+[patch artifact](patches/youtube-7.4.4-android-vr-adaptive.patch) applies only to
+`resources/lib/youtube_plugin/youtube/client/request_client.py` in stock 7.4.4.
+Stock SHA256 is `816df34a46408456e4f3e95a24c6f4d8c3d267dfd737dfba9a2a3194c42aec0e`;
+patched SHA256 is `5f402c889b49c788f287b7a436c85fd2a33de7195ef79dedbba48f54065df029`.
+Both files parse, and exact forward/reverse application was verified. Reassess
+on an add-on update; never apply blindly to a different version/hash.
+
+After the patch, a two-minute AVC recovery check produced 58 samples of
+1920×804 H.264 at 24 fps with 1080p24 output, no new proxy/audio-sync failures
+and zero throttling. Actual selected video/audio resources used **ANDROID**.
+The owner confirmed moving picture and clean sound. Two startup PRIME filter
+warnings remained, so those warnings alone are not a failure indicator.
+
+**Guarded 4K retest accepted.** After the repair, the two-minute run produced
+58 native samples of **3840×1608 VP9 SDR** and **3840×2160/23.976–24 Hz HDMI**.
+Both video and AAC audio resources used ANDROID; no CDN 403/proxy failures,
+large audio-sync errors, stalls or invalid decoder data occurred during playback.
+Temperatures were 35.1–39.5 °C with zero throttling. The owner confirmed smooth
+moving picture, clean sound and no covering sign-in box. Sound started muted,
+then used volume 20 only after 20 clean seconds. This qualifies one bounded
+network source; it does not qualify HDR, AV1, 4K60 or every future upload.
+
+Normal YouTube root browsing returned with no active player or blocking dialog;
+GUI is 1080p60 and normal Kodi volume 100/unmuted is restored. A video-output
+timeout occurred only after the deliberate stop, during teardown. Startup
+PRIME warnings remain; do not represent the entire log as error-free.
+
+The dedicated Google project/key is separate from Maps. The API key is
+restricted to YouTube Data API v3 and passed a live API read. OAuth uses a TV
+limited-input client. The owner accepted Google's policy and consent screens.
+The personal app remains **External / Testing**: [Google's testing-token
+rules](https://developers.google.com/identity/protocols/oauth2#expiration) can
+require reauthorization after seven days. Production setup is not completed;
+Google currently requires further public branding URLs. No new Maps billing,
+quota or key restriction was changed.
+
+YouTube's helper remains **127.0.0.1:50152**, with its API configuration page
+**disabled**. Credential profiles are owner-only; keys, tokens, codes, raw URLs,
+logs and account receipts stay outside Git/Obsidian/RAG. Temporary transferred
+activation-code files were removed. An unused credential was replaced before
+account linking. A scoped Kodi restart after the earlier manual installation
+loaded its intact English language table and removed untranslated-ID labels;
+no add-on language/source translation patch was needed.
+
+For rollback, first stop playback and capture fresh owner activity. With Kodi
+stopped, restore only the reviewed stock source file or reverse this patch
+against the exact expected hash; preserve current account/profile state. A
+protected known-good 1080p AVC setting snapshot exists for narrow rollback of
+YouTube's quality/features and ISA's ignore-screen option. Do not restore an
+old entire profile or stale watch position. The fresh switch snapshot in this
+session already had no active media, so recovery preserves that stopped state.
+The separately deferred Plex remembered-version selections remain deferred.
+
 ## Native remembered 4K choices selected; live setup held — October 19, 2026
 
 The owner chose PM4K's native per-movie **Choose Version** memory rather than a
