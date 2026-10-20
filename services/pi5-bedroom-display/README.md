@@ -1,5 +1,38 @@
 # Pi5 Master Bedroom display pilot
 
+## Native remembered 4K choices selected; live setup held — October 19, 2026
+
+The owner chose PM4K's native per-movie **Choose Version** memory rather than a
+custom client policy. Local, remote and online quality already default to
+**Original** (index 16); Direct Play, remux and 4K are enabled by installed
+defaults. No setting override or client patch was required for those defaults.
+Native preplay can choose the first Media entry or a remembered version;
+its cached choice can bypass the media decision engine's resolution ranking.
+There is no verified native global "always prefer 4K" setting.
+
+One unmatched UHD copy was verified against its matched 1080p counterpart by
+audio-content comparison, then merged into the existing matched movie using
+Plex's native API. Readback confirmed both exact source parts, unchanged source
+file size/mtime/inode and retained canonical viewing-history fields. Search
+now returns one item with both versions, with UHD first. No other duplicates,
+editions or unmatched items were merged. Private identities/receipts remain
+outside Git/RAG. Use [Plex Merge/Split](https://support.plex.tv/articles/201018248-merge-or-split-items/)
+for narrow recovery; preserve the canonical item and later watch progress.
+
+**Remembered 4K selections are not yet saved.** The owner asked to wait until
+watching finishes. A Back action during investigation stopped playback;
+subsequent readback found the same episode playing with retained audio/subtitles.
+No claim of uninterrupted playback or operator-restored position is made.
+PM4K Back can stop its player: do not navigate the live player to configure
+versions during this hold. No background watcher or scheduled task was added.
+
+After the owner releases the hold, use each confirmed mixed-resolution movie's
+native preplay **Choose Version → 4K**. Verify its stored `media_version`
+preference and fresh native preplay readback without starting a movie unless
+requested. Keep Original quality. A remembered choice is specific to this
+PM4K profile/movie/source ID; new multi-version titles and replaced source IDs
+may require another choice. Do not promise a universal future-title preference.
+
 ## Real Plex Original-quality UHD accepted — October 19, 2026
 
 The owner authorized a genuine library movie test at Original quality followed

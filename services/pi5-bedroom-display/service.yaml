@@ -32,4 +32,5 @@ display_policy:
   whitelist: Progressive 1080p at 23.976-60 Hz; UHD 2160p at 23.976-30 Hz; 13 actual advertised modes
   proof: Two synthetic 30-second UHD24 runs plus a 45-second real Plex Original SDR movie; 22 native/DRM UHD23.976 samples and 24 Plex Direct Play samples without transcoding; owner confirmed smooth picture/sound; original show playing again near saved point with selections retained
   limits: Sustained/high-bitrate, dropped-frame counts, HDR and 4K60 remain separate; real movie return required native UI follow-up rather than proven automatic exact-position restoration; 1080p sources retain native quality
+  version_preference: Native remembered per-movie 4K choices selected; one verified duplicate grouped with files/history preserved; saving choices held until owner finishes watching; no global 4K policy or client patch
 last_verified: 2026-10-19
