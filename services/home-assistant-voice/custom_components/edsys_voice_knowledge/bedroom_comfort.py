@@ -27,6 +27,13 @@ FONT='subtitles.fontsize'
 LABELS=['Player.SubtitleDelay','VideoPlayer.AudioChannels']
 
 
+def stream_details(value):
+    """Kodi may report null when no current audio/subtitle stream exists."""
+    if value is None:return {}
+    if not isinstance(value,dict):raise ValueError('Invalid Kodi stream metadata')
+    return value
+
+
 class BedroomComfort:
     def __init__(self,hass,screen):
         self.hass,self.screen=hass,screen
@@ -60,12 +67,12 @@ class BedroomComfort:
             except ERRORS:
                 player={};video=False
             labels=await self.rpc('XBMC.GetInfoLabels',labels=LABELS)
-            subtitle=player.get('currentsubtitle',{})
+            subtitle=stream_details(player.get('currentsubtitle'))
             self.status={'video_active':video,'night_compression':compression,
                          'subtitle_size':font,'subtitles_enabled':player.get('subtitleenabled',False),
                          'subtitle_track':(' · '.join(str(subtitle.get(k,'')) for k in ['language','name'])).strip(' ·'),
                          'subtitle_delay':labels.get('Player.SubtitleDelay',''),
-                         'audio_channels':player.get('currentaudiostream',{}).get('channels')}
+                         'audio_channels':stream_details(player.get('currentaudiostream')).get('channels')}
             self.available=True
         except ERRORS:self.available=False
         self.update_countdown();self.changed()
@@ -128,7 +135,7 @@ class BedroomComfort:
                     return {'armed':True,'minutes':minutes,'finish_action':self.timer['finish_action']}
                 player=await self.video()
                 if action.startswith('night_'):
-                    if await self.setting('audiooutput.passthrough') or await self.setting('audiooutput.channels')!=1 or player.get('currentaudiostream',{}).get('channels',0)<=2:
+                    if await self.setting('audiooutput.passthrough') or await self.setting('audiooutput.channels')!=1 or stream_details(player.get('currentaudiostream')).get('channels',0)<=2:
                         raise PilotRefusal('Night compression requires multichannel audio downmixed to stereo, with passthrough off.')
                     value=action=='night_on'
                     await self.rpc('Settings.SetSettingValue',setting=COMPRESSION,value=value)
@@ -158,7 +165,7 @@ class BedroomComfort:
                     await self.rpc('Player.SetSubtitle',playerid=1,subtitle=desired,enable=True)
                     actual=await self.video()
                     verified=actual.get('subtitleenabled') is (action!='subtitles_off')
-                    if isinstance(desired,int):verified=verified and actual.get('currentsubtitle',{}).get('index')==desired
+                    if isinstance(desired,int):verified=verified and stream_details(actual.get('currentsubtitle')).get('index')==desired
                 await self.poll()
                 return {'verified':verified,'action':action,'audible_or_visible_effect':'owner_confirmation_required'}
             except ERRORS as error:

@@ -1,5 +1,43 @@
 # Home Assistant conversational voice
 
+## Alt+V agent startup repaired — October 19, 2026
+
+Component **0.6.2 / 17 files** is active on Core **2026.10.2**. Nimo's
+"intent recognition engine conversation.edsys_voice is not found" error came
+from the HA integration failing before conversation registration. Its awaited
+bedroom status poll assumed Kodi's current subtitle was an object; a legal
+`null` response caused `AttributeError`. This was an HA startup failure.
+
+Nullable subtitle/audio metadata now becomes an empty object in status polling,
+night-mode eligibility and subtitle readback. Malformed non-object values use
+the existing bounded failure path; unrelated programming exceptions remain
+visible. Missing audio refuses night compression before writes, and absent
+selected-subtitle readback cannot be reported as a verified selection.
+
+Six regression cases, including awaited setup with null streams, passed within
+**98 isolated installed-Core checks**. A protected scoped checkpoint preceded
+atomic installation of only `bedroom_comfort.py` and `manifest.json`, config
+validation and one normal Core restart. All 17 source hashes match; private
+bindings, pipeline definitions, provider configuration and Andrew voice were
+retained. Registry identities/permissions/options were preserved; ordinary
+icon/capability/timestamp refreshes are not byte-identical registry evidence.
+
+The entry is loaded and the adapter reports `backend_ready=true`. Native time,
+general chat and EdSys lookup each completed the production pipeline with
+valid fetched reply audio; these probes did not play audio on an endpoint.
+The owner then confirmed **Alt+V starts normally and its reply is audible**.
+Passive Pi readback across the Core restart retained its process, media,
+advancing playback and audio/subtitles. This does not newly qualify the broader
+active-movie interruption/resume matrix. The separate Plex version-choice
+configuration remains held until the owner finishes watching.
+
+No null-stream startup errors recurred. The preexisting missing `services.yaml`
+description message remains a separate metadata issue; service registration
+and voice operation are verified. Do not describe all logs as clean.
+Recovery is the protected two-file source checkpoint under the existing private
+recovery directory; preserve current bindings, provider state and later edits.
+Changed Python requires normal Core restart after validation, not entry reload.
+
 ## Post-show activation and stopped acceptance — October 17
 
 Current main's **17-file 0.6.1** component is active after a scoped component

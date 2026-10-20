@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from homeassistant.exceptions import ServiceValidationError
-from custom_components.edsys_voice_knowledge.bedroom_comfort import BedroomComfort,COMPRESSION,FONT
+from custom_components.edsys_voice_knowledge.bedroom_comfort import BedroomComfort,COMPRESSION,FONT,setup_comfort
 import native_media_checks as media_checks
 import native_pilot_checks as pilot_checks
 import native_screen_checks as screen_checks
@@ -91,6 +91,69 @@ class NativeComfortChecks(unittest.IsolatedAsyncioTestCase):
         self.fail_write=True
         with self.assertRaises(ServiceValidationError):await self.comfort.handle(self.call('night_off'))
         self.assertEqual(len(self.writes()),1)
+
+    async def test_null_stream_metadata_keeps_read_only_poll_available(self):
+        self.player.update(currentsubtitle=None,currentaudiostream=None)
+        await self.comfort.poll()
+        self.assertTrue(self.comfort.available)
+        self.assertTrue(self.comfort.status['video_active'])
+        self.assertEqual(self.comfort.status['subtitle_track'],'')
+        self.assertIsNone(self.comfort.status['audio_channels'])
+        self.assertFalse(self.comfort.status['subtitles_enabled'])
+        self.assertEqual(self.writes(),[])
+
+    async def test_setup_comfort_completes_with_null_stream_metadata(self):
+        self.player.update(currentsubtitle=None,currentaudiostream=None)
+        self.hass.data['edsys_voice_knowledge']['bedroom_screen']=self.screen
+        unload=[];entry=SimpleNamespace(async_on_unload=unload.append)
+        fake_rpc=self.comfort.rpc
+        async def rpc(controller,method,**params):return await fake_rpc(method,**params)
+        with patch('custom_components.edsys_voice_knowledge.bedroom_comfort.BedroomComfort.rpc',new=rpc),\
+             patch('custom_components.edsys_voice_knowledge.bedroom_comfort.async_track_time_interval',return_value=lambda:None),\
+             patch.object(self.hass.services,'async_register',create=True) as register:
+            await setup_comfort(self.hass,entry)
+        controller=self.hass.data['edsys_voice_knowledge']['bedroom_comfort']
+        self.assertTrue(controller.available)
+        self.assertTrue(controller.status['video_active'])
+        self.assertEqual(controller.status['subtitle_track'],'')
+        self.assertIsNone(controller.status['audio_channels'])
+        register.assert_called_once()
+        self.assertEqual(register.call_args.args[:2],('edsys_voice_knowledge','bedroom_comfort'))
+        self.assertEqual(self.writes(),[])
+
+    async def test_malformed_stream_metadata_marks_poll_unavailable(self):
+        for key in ['currentsubtitle','currentaudiostream']:
+            original=self.player[key]
+            for malformed in [[],False,'unexpected']:
+                with self.subTest(key=key,value=malformed):
+                    self.player[key]=malformed;self.comfort.available=True
+                    await self.comfort.poll()
+                    self.assertFalse(self.comfort.available)
+            self.player[key]=original
+        self.assertEqual(self.writes(),[])
+
+    async def test_null_audio_refuses_night_compression_before_writes(self):
+        self.player['currentaudiostream']=None
+        with self.assertRaisesRegex(ServiceValidationError,'multichannel'):
+            await self.comfort.handle(self.call('night_on'))
+        self.assertEqual(self.writes(),[])
+
+    async def test_null_selected_subtitle_readback_is_not_reported_verified(self):
+        fake_rpc=self.comfort.rpc
+        async def rpc(method,**params):
+            result=await fake_rpc(method,**params)
+            if method=='Player.SetSubtitle':self.player['currentsubtitle']=None
+            return result
+        self.comfort.rpc=rpc
+        result=await self.comfort.handle(self.call('subtitles_english'))
+        self.assertFalse(result['verified'])
+        self.assertEqual(self.writes(),[('Player.SetSubtitle',{'playerid':1,'subtitle':1,'enable':True})])
+
+    async def test_unrelated_poll_attribute_error_is_not_swallowed(self):
+        self.comfort.video=unittest.mock.AsyncMock(side_effect=AttributeError('unrelated defect'))
+        with self.assertRaisesRegex(AttributeError,'unrelated defect'):
+            await self.comfort.poll()
+        self.assertEqual(self.writes(),[])
 
 
 if __name__=='__main__':unittest.main()
