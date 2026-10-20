@@ -27,6 +27,63 @@ The one-shot `langfuse-minio-init` service and historical AnythingLLM migration
 container are intentionally absent. The legacy 9950x UniFi project is excluded
 because the authoritative controller runs on `edrouter-node0`.
 
+## Container-root socket probe
+
+The 2026-10-20 probe correction resolves `/var/run/docker.sock` inside each
+approved consumer's process root. A plain host-side
+`stat /proc/PID/root/var/run/docker.sock` can follow an absolute `/var/run -> /run`
+symlink into the host root and falsely report a stale consumer as current.
+Hardcoding `/run/docker.sock` is also insufficient when a container has a real
+`/var/run` directory.
+
+The helper now walks pinned `O_PATH` descriptors from `/proc/PID/root`, resolves
+absolute and relative symlinks inside that root, clamps `..` at the root and
+fails closed on missing paths or more than 40 symlink traversals. It reads
+metadata only; it does not connect to or invoke the container's Docker socket.
+The existing nine-consumer allowlist, restart rules, audit-only timer, cooldown,
+maintenance flag and Docker-start hook are unchanged.
+
+Focused tests cover the original false-green host escape with real temporary
+filesystem entries, `/var/run` as absolute/relative links or a real directory,
+nested/final links, root confinement and loop/missing-path failures. Run them in
+the existing test environment:
+
+```bash
+/home/jeremy/code/edsys-ai-portal/.venv/bin/python -m pytest -q \
+  scripts/ops/tests/test_edsys_container_recovery.py
+```
+
+When updating only this helper, first back up the installed
+`/usr/local/sbin/edsys-container-recovery`, validate the candidate and install
+that file alone. Do not rerun the broader installer or actuate recovery just to
+test the probe. A focused read-only consumer audit can identify stale consumers
+without calling `recover`, restarting containers or sending a notification.
+The CLI audit also writes its normal status and invokes the configured
+notification path; use the probe function directly when strictly read-only
+acceptance is required.
+
+The pre-install 2026-10-20 rooted audit found seven current bindings and two
+stale bindings (`telegraf-9950x` and `edsys-portal`); the old concatenated probe
+falsely reported all nine as current. Those findings are distinct from helper
+qualification and are not repaired by installing a Python file. No container
+restart is part of the probe regression test. Those two rebinds remain deferred
+to preserve current use of the Portal.
+
+The installed five-minute timer invokes `audit`, which reports status and uses
+the existing notification path without calling rebind or starting containers.
+Replacing the helper does not invoke either the timer or recovery. At the next
+reviewed Docker daemon start, the existing `ExecStartPost` hook starts `recover`;
+unless suppressed by its existing maintenance flag, it will correctly detect
+and restart stale members of the same nine-consumer allowlist before tier
+checks. Plan that maintenance knowing it can restart those consumers, including
+the presently deferred Portal and Telegraf bindings. No hook or policy expansion
+was added to accomplish the corrected detection.
+
+The private controller rollback checkpoint is
+`/var/backups/edsys-container-recovery/2026-10-20-rooted-socket-probe/`. Restore
+the saved installed helper alone if rollback is required; keep manifest and
+systemd policy untouched. Raw runtime records remain in that private directory.
+
 ## Install
 
 ```bash

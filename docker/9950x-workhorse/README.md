@@ -76,6 +76,84 @@ Smoke test:
 curl -fsS 'http://192.168.50.50:3017/search?q=USA%20FIFA%20World%20Cup%202026%20standings&format=json'
 ```
 
+## Alloy Docker-socket recovery
+
+On 2026-10-20, Alloy was still running after the Docker daemon's 2026-10-17
+restart, but its individual socket bind mount referenced the old, disconnected
+socket inode. The host socket answered `/_ping`; the socket visible inside Alloy
+returned `ECONNREFUSED`. This was a collector connection failure, independent of
+Loki readiness or the Portal's ability to answer HTTP requests.
+
+The scoped repair recreates **only Alloy**, using the same qualified v1.17.0 image
+now pinned by digest. Its existing config, position data, ports and socket access
+remain in place. Explicit `json-file` limits of `10m` and `3` files now bound
+Alloy's own future container logs. Other containers' logging options are unchanged;
+Docker does not apply new logging options retroactively to existing containers.
+
+Check both socket identities before attributing this symptom to API versions or
+permissions:
+
+```bash
+pid=$(sudo docker inspect --format '{{.State.Pid}}' workhorse-alloy)
+sudo stat -Lc '%d:%i' /run/docker.sock "/proc/$pid/root/run/docker.sock"
+sudo curl --max-time 3 --unix-socket /run/docker.sock http://localhost/_ping
+sudo curl --max-time 3 --unix-socket "/proc/$pid/root/run/docker.sock" http://localhost/_ping
+```
+
+Use `/run` in the process-root path: `/var/run` is an absolute symlink inside the
+container and can resolve back to the host's `/run` during a host-side check,
+giving a misleading successful comparison. A running process, valid Alloy config
+or HTTP readiness alone does not prove Docker discovery or log delivery.
+
+If the bind mount is stale, first preserve the exact image, Alloy config and
+`/opt/edsys-workhorse/alloy` position data privately. Preserve the old collector
+log before recreating its container. Then, from the repository root:
+
+```bash
+sudo docker compose -f docker/9950x-workhorse/compose.yaml config --quiet
+sudo docker compose -f docker/9950x-workhorse/compose.yaml up -d \
+  --no-deps --no-build --pull never --force-recreate alloy
+```
+
+Do not restart the Docker daemon, Loki, the Portal or media applications for this
+repair. Do not broaden the bind mount to all of `/run`. A future daemon socket
+replacement can require the same targeted rebind; no automatic host hook was
+added in this repair.
+
+Acceptance requires matching host/container socket identities and successful
+socket reads, a bounded quiet error window, and fresh real log entries from at
+least two unchanged production containers. Match those entries to their Docker
+source, then retrieve them through the authenticated Portal
+`/api/workhorse/logs` endpoint as well as Loki. Preserve the private before/after
+container IDs and start times to demonstrate the isolation of the repair.
+
+Existing Docker history for newly discovered container IDs can replay after
+reconnection. Loki's existing age policy rejects entries older than seven days;
+an initial HTTP 400 replay rejection is not proof of a new connection failure.
+Report rejected history separately from fresh accepted entries, and verify that
+rejection counters stop growing before declaring the collector stable. Original
+source logs and Loki retention settings must remain unchanged.
+
+The 2026-10-20 acceptance check observed 144 seconds with no collector errors,
+no growth in HTTP 400/429, parsing-error or dropped-entry counters, and 283 newly
+accepted entries. Eight fresh Portal entries and two fresh LiteLLM entries
+matched their unchanged production containers' Docker logs exactly and were
+also returned by the authenticated Portal API. These include read-only health
+and access probes; no fixture logs were injected. All 82 other container IDs,
+start times and running states matched the before checkpoint. The initial
+historical replay produced age rejections; this repair does not establish full
+recovery of the ingestion gap or of all historical records.
+
+The private recovery checkpoint for this repair is
+`/var/backups/edsys-alloy/2026-10-20-socket-rebind/`. It contains the original
+Compose/config, stable Alloy state and full original collector log, the exact
+image archive, hashes and an isolated state-restore check. For rollback, stop
+only Alloy, restore only its prior config/stanza and position data, and recreate
+only Alloy using the archived image if necessary. Do not overwrite unrelated
+Compose changes or delete Loki data. Restore the older positions only when
+needed: doing so can replay already ingested entries. Keep archived logs as
+evidence rather than copying them into a new container's active log file.
+
 
 ## LiteLLM broker operations
 

@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
+import errno
 import fcntl
 import json
 import os
 from pathlib import Path
 import shlex
+import stat
 import subprocess
 import sys
 import time
@@ -129,11 +132,68 @@ def live_restore_error(manifest: dict[str, Any]) -> str | None:
     return None
 
 
+def stat_in_root(root: Path, path: str) -> os.stat_result:
+    """Stat an absolute path with symlinks anchored inside a process root.
+
+    A host-side stat of ``/proc/PID/root/var/run/docker.sock`` can follow an
+    absolute /var/run -> /run symlink back into the host root. Walk pinned
+    descriptors instead, resolving both absolute and relative links here.
+    O_PATH observes socket metadata without opening a socket connection.
+    """
+    if not path.startswith("/"):
+        raise ValueError("process-root paths must be absolute")
+    directories = [os.open(root, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)]
+    pending = deque(path.split("/"))
+    links = 0
+    try:
+        while pending:
+            component = pending.popleft()
+            if component in ("", "."):
+                continue
+            if component == "..":
+                if len(directories) > 1:
+                    os.close(directories.pop())
+                continue
+            descriptor = os.open(
+                component,
+                os.O_PATH | os.O_NOFOLLOW | os.O_CLOEXEC,
+                dir_fd=directories[-1],
+            )
+            try:
+                result = os.fstat(descriptor)
+                if stat.S_ISLNK(result.st_mode):
+                    links += 1
+                    if links > 40:
+                        raise OSError(errno.ELOOP, "too many process-root symlinks")
+                    # Empty-path readlinkat reads this pinned link, not a name
+                    # that another process could replace after openat.
+                    target = os.readlink("", dir_fd=descriptor)
+                    if target.startswith("/"):
+                        while len(directories) > 1:
+                            os.close(directories.pop())
+                    pending.extendleft(reversed(target.split("/")))
+                elif pending:
+                    if not stat.S_ISDIR(result.st_mode):
+                        raise NotADirectoryError(errno.ENOTDIR, "process-root path is not a directory")
+                    directories.append(descriptor)
+                    descriptor = -1
+                else:
+                    return result
+            finally:
+                if descriptor >= 0:
+                    os.close(descriptor)
+        return os.fstat(directories[-1])
+    finally:
+        for descriptor in reversed(directories):
+            os.close(descriptor)
+
+
 def docker_socket_consumer_state(
     manifest: dict[str, Any],
     *,
     inspected: list[dict[str, Any]] | None = None,
     stat_fn: Any = None,
+    root_stat_fn: Any = None,
     stopped_is_error: bool = True,
 ) -> tuple[list[str], list[str]]:
     config = manifest.get("docker_socket_rebind") or {}
@@ -142,6 +202,8 @@ def docker_socket_consumer_state(
         return [], []
     if stat_fn is None:
         stat_fn = os.stat
+    if root_stat_fn is None:
+        root_stat_fn = stat_in_root
     if inspected is None:
         result = run(["docker", "inspect", *consumers], timeout=60)
         if result.returncode != 0:
@@ -188,7 +250,7 @@ def docker_socket_consumer_state(
             errors.append(f"approved Docker socket consumer has no running PID: {name}")
             continue
         try:
-            inside_socket = stat_fn(f"/proc/{pid}/root/var/run/docker.sock")
+            inside_socket = root_stat_fn(Path(f"/proc/{pid}/root"), "/var/run/docker.sock")
         except OSError as exc:
             errors.append(f"{name}: container Docker socket stat failed: {type(exc).__name__}")
             continue

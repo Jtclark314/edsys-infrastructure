@@ -196,9 +196,15 @@ services:
       - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/loki:/loki
 
   alloy:
-    image: grafana/alloy:latest
+    # Qualified existing v1.17.0 image; upgrades are separate from socket recovery.
+    image: grafana/alloy@sha256:41c41849989b7e054ccbadc17938ee1e5592fe26bfbc56ef3ffc109c0b0b2739
     container_name: workhorse-alloy
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       - loki
     command:
