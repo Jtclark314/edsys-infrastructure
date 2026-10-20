@@ -1,5 +1,66 @@
 # Pi5 Master Bedroom display pilot
 
+## YouTube authorization recovery and native dashboard — October 20, 2026
+
+An observed YouTube **401 / authError / Invalid Credentials** cleared during
+native account/browsing recovery. The existing personal Data API request passed;
+all three saved TV, personal and VR refresh grants returned valid access tokens.
+Native root browsing returned nineteen items including Sign Out, with no Sign In
+or new authorization error. No key/client replacement, grant revocation, new
+Google consent, add-on update or restart was required. The original failure's
+trigger is unproven; do not attribute it to seven-day Testing expiry when the
+existing grants still refresh. The October 19 console-state observation below
+was not re-audited in this recovery.
+
+The previously accepted real 4K source passed a guarded thirty-second run:
+28 samples of **3840×1608 VP9** with **3840×2160 at 23.976–24 Hz**, no new
+authorization, stream-proxy or large audio-sync failure and no throttling.
+Startup was muted; low-volume audio followed twenty clean seconds. After the
+asynchronous Stop settled, actual idle and restored normal volume/mute were
+verified. The owner then confirmed the error cleared and subsequent YouTube
+picture/sound were smooth without a warning. A different owner-selected video
+began later; further control tests stopped and that playback was left running.
+
+The native **Bedroom Pi → YouTube** tab is `/edsys-pi/youtube`. It adds one
+Player link and one view to the latest dashboard, retaining all seven existing
+views, metadata, resources and the separate Media dashboard. It provides normal
+YouTube root/Search/New uploads/Subscribed channels/Playlists/Recommendations
+folders, Pi transport/navigation/stream details and independent LG HDMI 1,
+volume, wake and full-remote links. Search opens the TV's native search list and
+keyboard. Account, Watch later and History use the current add-on's root menu;
+their remote/local playlist mappings are not guessed. These are controls for
+the TV's add-on, not an embedded signed-in YouTube website or feed on Nimo.
+
+Source: `youtube_dashboard.py` exports pure `extend` and `remove` transforms.
+Supply the latest private dashboard and reviewed distinct Kodi/LG entities;
+preserve private before/candidate files, validate registry identities, compare
+the current dashboard again immediately before save, and require exact native
+readback. Never rebuild the older full dashboard as an update. Seven focused
+tests cover preservation, idempotence, fixed routes/targets, independent
+availability guards, ownership-conflict refusal and narrow recovery. HA/Kodi
+service/schema review found no payload blocker. A native service response is
+not physical acceptance of every control.
+
+Actual signed-in Nimo Chrome rendered the dashboard and its Open YouTube click
+reached the native root. Search keyboard, each subscription/playlist route,
+every transport/TV button and physical phone layout remain unqualified; the
+owner started watching before further tests. Page loading sends no action.
+Pi connection status does not establish Google authorization. No new listener,
+frontend resource, integration or automation was added.
+
+Recovery material is private on the Pi under
+`/var/backups/edsys-bedroom-display/youtube-20261020/`, with a verified off-Pi
+copy on 9950x. All eighteen protected archive files passed hash verification.
+YouTube/ISA settings, API configuration and the exact October 19 source patch
+remain unchanged; all native setting values are preserved, while normal
+volume/mute are confirmed both live and persisted. Kodi's PID is unchanged.
+This was an archive/hash check, not a full application restore or a new verified
+offsite copy. No credential overwrite occurred, so there is no auth rollback to
+apply. To remove the dashboard, run `remove` against the latest configuration;
+it refuses modified owned cards and preserves unrelated later edits. Save only
+after a fresh comparison and verify the exact result. Never restore an old
+entire profile or watch position over current use.
+
 ## YouTube Premium setup and streaming repair — October 19, 2026
 
 Official YouTube **7.4.4** and InputStream Adaptive **21.5.9** are configured.
