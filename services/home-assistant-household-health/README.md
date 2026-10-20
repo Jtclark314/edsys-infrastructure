@@ -138,6 +138,59 @@ bindings, calendar bytes, exposure/YAML and pipeline settings remain exact.
 The recovery used no Core patch/restart or event/list/media-control write.
 See `EdSys-Master/docs/HOME_ASSISTANT_HOUSEHOLD_HEALTH.md` for the current record.
 
+### Native iCloud session recovery — October 20
+
+The October 18 acceptance was superseded by a new native-entry `setup_error`.
+Live traces showed Apple's saved-token rejection followed by two-factor
+authentication inside device setup, before the normal verification flow could
+complete. iCloud3, the independent local Family calendar, AnyList and EdSys Voice
+remained loaded. One supported reload of the existing native entry retained the
+failure.
+
+Recovery then followed [HA's documented native-session troubleshooting](https://www.home-assistant.io/integrations/icloud/#in-case-of-troubleshooting):
+preserve the exact native cache privately, initialize a clean native cache and
+reload only the existing entry. The entry-linked verification prompt returned;
+one owner-authorized verification completed successfully. No account/password
+reset, integration replacement, Core/host/VM restart or repeated authentication
+loop was used.
+
+Five actual thirty-day calendar queries and both native to-do reads succeeded.
+The selected Family, Home and Reminders sources are available and retain their
+reviewed identities. Successful empty calendar responses were distinguished
+from a missing response. A loaded entry or a disappearing verification prompt
+alone was not treated as acceptance. Two older tracker and two battery records
+remain unavailable; retain their honest availability warnings rather than
+interpreting those four device states as another account failure. Available
+coordinates and battery readings do not prove physical location accuracy.
+The upstream library also logged two unsupported date-alarm trigger warnings;
+readable reminder items do not qualify every alarm field or future notification.
+No Core patch or restart was introduced for that parser limitation.
+
+All prior entity/device bindings, native account data/options, other integration
+records, pipelines, exposure, YAML, local-calendar bytes and five private voice
+configuration files are preserved. Native rediscovery added one Apple device
+with its tracker/battery entities; three existing native battery icons refreshed
+as ordinary registry metadata. iCloud3's restore-state file changed through
+normal polling, while its configuration and code stayed exact. No manual
+device remapping or deletion occurred.
+
+The existing bedroom briefing checks reviewed source identity, permissions and
+availability before its local calendar/reminder reads. An unavailable source
+raises an explicit error before the empty-results wording; the briefing is not
+an LLM tool and its household records remain local. No live display, speech,
+calendar/list write, media-control action or OpenAI request was needed for this
+repair.
+
+Exact native-cache/configuration archives remain root-private on HA and off-host
+on 9950x. Archive SHA checks, tar reads and an isolated two-file native-cache
+restore comparison passed. This proves the scoped recovery files, not a full
+HA restore. A supplemental encrypted local checkpoint also passed an isolated
+verified file restore and hash comparisons. The new offsite copy awaits the
+existing mirror schedule; prior offsite backups are retained.
+Roll back only the native cache after preserving its current
+replacement and reviewing live entry state; never restore whole registries,
+configuration or an older HA snapshot over later household edits.
+
 Before deployment, protect current dashboard, resources and registration
 metadata. Re-read immediately before each native save and refuse concurrent
 changes. `reconcile_dashboard(current, previous, desired)` changes only owned
