@@ -2,12 +2,36 @@
 
 ## YouTube authorization recovery and native dashboard — October 20, 2026
 
-An observed YouTube **401 / authError / Invalid Credentials** cleared during
+**Later owner re-login: partial authorization recovered.** After repeated
+device approvals, the profile initially held no completed tokens, then saved TV
+and personal pairs while **VR remained missing**. An in-flight prompt returned
+`authorization_pending`; Google success alone did not establish Kodi completion.
+The two working pairs were preserved, and one bounded native Sign In action
+resumed only the missing VR approval. Its fresh on-TV code was transferred
+privately to Nimo's Google device page; the intended account and existing
+YouTube-only permission were verified. Google completed the VR consent and Kodi
+saved all three access/refresh pairs. Token introspection accepted all three with
+the existing YouTube scope. Native root now returns twenty entries, Sign Out and
+**no Sign In**; Jeremy independently confirmed it stays signed in. Current video
+continued and was returned to full screen without restart, seek or volume change.
+Before/partial/after private account checkpoints are verified on-Pi and off-Pi.
+
+For future diagnosis, **Sign Out alone is insufficient**: this add-on can show it
+while partially signed in. Check all three TV/personal/VR pairs plus the absence
+of Sign In and owner acceptance. Three distinct approvals can be normal; do not
+reset/revoke the good pairs merely because another client is incomplete. The
+native action's HTTP caller can time out while the device flow continues: inspect
+the dialog/token state and do not replay it. **Default** is a local arbitrary
+profile label, not a Google identity result. YouTube-only token metadata exposed
+no email/subject, so it cannot independently prove matching identities across
+all three clients. No additional identity scope or channel creation was used.
+
+Earlier in the session, an observed **401 / authError / Invalid Credentials** cleared during
 native account/browsing recovery. The existing personal Data API request passed;
 all three saved TV, personal and VR refresh grants returned valid access tokens.
 Native root browsing returned nineteen items including Sign Out, with no Sign In
 or new authorization error. No key/client replacement, grant revocation, new
-Google consent, add-on update or restart was required. The original failure's
+Google consent, add-on update or restart was required for that earlier recovery. The original failure's
 trigger is unproven; do not attribute it to seven-day Testing expiry when the
 existing grants still refresh. The October 19 console-state observation below
 was not re-audited in this recovery.
