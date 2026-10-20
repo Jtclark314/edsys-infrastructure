@@ -97,7 +97,7 @@ else
 fi
 
 if [[ "${RUN_COLLECTION}" == "true" && "${REMOTE_COLLECTION_ENABLED}" == "true" && -x "${BACKUP_ROOT}/scripts/edsys-collect-remotes.sh" ]]; then
-  "${BACKUP_ROOT}/scripts/edsys-collect-remotes.sh" "${RUN_ID}" | tee -a "${LOG_FILE}" || true
+  EDSYS_BACKUP_DRY_RUN="${DRY_RUN}" "${BACKUP_ROOT}/scripts/edsys-collect-remotes.sh" "${RUN_ID}" | tee -a "${LOG_FILE}" || true
 fi
 
 if [[ "${DRY_RUN}" != "true" ]]; then
@@ -137,7 +137,7 @@ if [[ ! -s "${EXISTING_INCLUDE_FILE}" ]]; then
   fail "no include paths exist; refusing to run empty backup"
 fi
 
-RESTIC_ARGS=(backup --files-from "${EXISTING_INCLUDE_FILE}" --exclude-file "${EXCLUDE_FILE}" --exclude "${STAGING_DIR}/home-assistant/.incoming" --exclude "${STAGING_DIR}/bedroom-recovery/.incoming" --tag edsys-critical --tag "${HOSTNAME_SHORT}" --tag "${RUN_ID}")
+RESTIC_ARGS=(backup --files-from "${EXISTING_INCLUDE_FILE}" --exclude-file "${EXCLUDE_FILE}" --exclude "${STAGING_DIR}/home-assistant/.incoming" --exclude "${STAGING_DIR}/bedroom-recovery/.incoming" --exclude "${STAGING_DIR}/image-originals/.incoming" --tag edsys-critical --tag "${HOSTNAME_SHORT}" --tag "${RUN_ID}")
 if [[ "${DRY_RUN}" == "true" ]]; then
   RESTIC_ARGS+=(--dry-run)
 fi
@@ -163,6 +163,17 @@ REMOTE_FAILED_COUNT=0
 if [[ -f "${REMOTE_MANIFEST}" ]]; then
   REMOTE_FAILED_COUNT="$(grep -c 'FAILED' "${REMOTE_MANIFEST}" || true)"
 fi
+ORIGINALS_STAGE_STATUS=missing
+ORIGINALS_LAST_SUCCESS=""
+if [[ -f "${STAGING_DIR}/image-originals/status.json" ]]; then
+  ORIGINALS_STAGE_STATUS="$(jq -r '
+    if .status != "healthy" then .status // "invalid"
+    else (try (.last_success_utc | fromdateiso8601) catch null) as $last
+      | if $last != null and (now - $last) >= 0 and (now - $last) <= 93600
+        then "healthy" else "stale" end
+    end' "${STAGING_DIR}/image-originals/status.json" 2>/dev/null || echo invalid)"
+  ORIGINALS_LAST_SUCCESS="$(jq -r '.last_success_utc // ""' "${STAGING_DIR}/image-originals/status.json" 2>/dev/null || true)"
+fi
 
 jq -n \
   --arg status "success" \
@@ -172,11 +183,13 @@ jq -n \
   --arg repository "${RESTIC_REPOSITORY}" \
   --arg snapshot_id "${SNAPSHOT_ID}" \
   --arg offsite_sync_status "not_run" \
+  --arg image_originals_stage_status "${ORIGINALS_STAGE_STATUS}" \
+  --arg image_originals_last_success_utc "${ORIGINALS_LAST_SUCCESS}" \
   --argjson dry_run "${DRY_RUN}" \
   --argjson included_count "${INCLUDED_COUNT}" \
   --argjson missing_count "${MISSING_COUNT}" \
   --argjson remote_failed_count "${REMOTE_FAILED_COUNT}" \
-  '{status:$status,run_id:$run_id,host:$host,timestamp:$timestamp,repository:$repository,snapshot_id:$snapshot_id,offsite_sync_status:$offsite_sync_status,dry_run:$dry_run,included_path_count:$included_count,missing_path_count:$missing_count,remote_collection_failed_count:$remote_failed_count}' \
+  '{status:$status,run_id:$run_id,host:$host,timestamp:$timestamp,repository:$repository,snapshot_id:$snapshot_id,offsite_sync_status:$offsite_sync_status,dry_run:$dry_run,included_path_count:$included_count,missing_path_count:$missing_count,remote_collection_failed_count:$remote_failed_count,image_originals_stage_status:$image_originals_stage_status,image_originals_last_success_utc:$image_originals_last_success_utc}' \
   | tee "${STATUS_JSON}" > "${REPORT_JSON}"
 
 {
@@ -189,6 +202,8 @@ jq -n \
   echo "- Included paths: ${INCLUDED_COUNT}"
   echo "- Missing paths: ${MISSING_COUNT}"
   echo "- Remote collection failures: ${REMOTE_FAILED_COUNT}"
+  echo "- Local/Immich originals stage: ${ORIGINALS_STAGE_STATUS}"
+  echo "- Originals last successful collection: ${ORIGINALS_LAST_SUCCESS:-none}"
   echo "- Repository: ${RESTIC_REPOSITORY}"
   echo "- Offsite sync: not run by this script"
   echo

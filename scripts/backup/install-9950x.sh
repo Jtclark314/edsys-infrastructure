@@ -103,6 +103,7 @@ install -m 0755 "${SCRIPT_DIR}/edsys-offsite-sync.sh" /srv/edsys-backup/scripts/
 install -m 0755 "${SCRIPT_DIR}/edsys-backup-status.sh" /srv/edsys-backup/scripts/edsys-backup-status.sh
 install -m 0755 "${SCRIPT_DIR}/edsys-backup-check.sh" /srv/edsys-backup/scripts/edsys-backup-check.sh
 install -m 0755 "${SCRIPT_DIR}/edsys-collect-remotes.sh" /srv/edsys-backup/scripts/edsys-collect-remotes.sh
+install -m 0755 "${SCRIPT_DIR}/edsys-image-originals.py" /srv/edsys-backup/scripts/edsys-image-originals.py
 install -m 0755 "${SCRIPT_DIR}/edsys-restic-check.sh" /srv/edsys-backup/scripts/edsys-restic-check.sh
 install -m 0755 "${SCRIPT_DIR}/edsys-restore-test.sh" /srv/edsys-backup/scripts/edsys-restore-test.sh
 install -m 0755 "${SCRIPT_DIR}/edsys-codex-state-stage.py" /srv/edsys-backup/scripts/edsys-codex-state-stage.py

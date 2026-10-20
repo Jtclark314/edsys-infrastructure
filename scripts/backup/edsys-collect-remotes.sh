@@ -144,4 +144,21 @@ collect_text "arr-server-docker-baseline" "jeremy" "192.168.50.201" "hostnamectl
 collect_text "family-services-docker-baseline" "jeremy" "192.168.50.78" "hostnamectl; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || true; findmnt"
 collect_text "edsys-ingress-docker-baseline" "jeremy" "192.168.50.4" "hostnamectl; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || true; findmnt"
 
+# Extend the existing daily collection, without a new timer or service restart.
+# Private verified archives bypass broad media/video exclusions; incomplete
+# streams remain under the mandatory Restic-excluded incoming directory.
+originals_helper="${BACKUP_ROOT}/scripts/edsys-image-originals.py"
+if [[ "${EDSYS_BACKUP_DRY_RUN:-false}" == "true" ]]; then
+  log "SKIP image-originals; backup dry-run does not refresh original-file stages"
+elif [[ -r "${originals_helper}" ]] &&
+  /usr/bin/timeout --signal=TERM --kill-after=5s 900s \
+    /usr/bin/nice -n 15 /usr/bin/ionice -c 2 -n 7 /usr/bin/python3 "${originals_helper}" stage \
+      --stage-root "${STAGING_DIR}/image-originals" \
+      --ssh-key "${BACKUP_SSH_KEY}" --known-hosts "${BACKUP_KNOWN_HOSTS}" \
+      2>&1 | tee -a "${MANIFEST}"; then
+  log "OK image-originals; current local/Immich stage independently verified"
+else
+  log "FAILED image-originals; retaining last-good data; current freshness is unverified"
+fi
+
 log "Remote collection complete: ${OUT_DIR}"

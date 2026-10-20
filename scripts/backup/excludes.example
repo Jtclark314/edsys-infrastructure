@@ -72,3 +72,4 @@
 # Collectors publish completed generations atomically; never select incoming files.
 /srv/edsys-backup/staging/home-assistant/.incoming
 /srv/edsys-backup/staging/bedroom-recovery/.incoming
+/srv/edsys-backup/staging/image-originals/.incoming

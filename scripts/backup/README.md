@@ -17,6 +17,132 @@ This directory contains the host-side tooling for EdSys offsite backups.
 
 The scripts are designed to protect critical service state first. They exclude replaceable bulk media by default.
 
+## Local image and Immich originals — deployed October 20, 2026
+
+The deployed `edsys-image-originals.py` extends the existing daily remote
+collector. Live collection and isolated database recovery passed the scoped
+October 20 qualification described below.
+It protects the entire current local image tree and the existing Immich original
+uploads/library/profile files, one consistent PostgreSQL custom-format dump,
+roles, resolved Compose configuration, exact image IDs/digests, extension versions
+and a private reference/hash manifest. It preserves duplicate source paths and
+original videos. It excludes regenerable thumbnails and encoded-video derivatives.
+The owner's principal personal-photo collection is iCloud/iPhone; this local scope
+does **not** establish protection of that broader collection or use Apple access.
+
+PostgreSQL references and `pg_dump --snapshot` use one exported, held read-only
+repeatable-read snapshot. Each source is checked before/after streaming; a second
+file inventory, current reference query and application-config comparison reject
+uploads, deletions, missing references or source/config changes during collection.
+Uploads remain available. The native `pg_restore --file=/dev/null` fully decodes
+the dump without connecting to or changing a database. This qualifies dump
+readability, not a running application/database restoration.
+
+Archives stream over the existing strictly pinned SSH route to root-private
+`/srv/edsys-backup/staging/image-originals/.incoming`. Hashes are recomputed from
+every received archive member without extraction. Only a complete verified
+generation is published through an atomic `CURRENT.json` pointer; the two newest
+completed generations remain staged. A failed attempt retains the last-good
+pointer, records failed freshness in private `status.json`, and emits `FAILED`
+into the existing collection manifest. Other critical backups continue. Existing
+backup JSON/report fields separately expose originals collection status/time;
+overall snapshot success does not imply every collector or offsite copy succeeded.
+Reports treat a last successful collection older than 26 hours (or invalid/future
+time) as stale. A backup dry-run does not invoke this original-file collector.
+
+The existing staging include protects only complete archives; mandatory incoming
+exclusion is also passed directly by `edsys-backup.sh`, independent of customized
+exclude files. Do not weaken `/mnt/media/**` or global video exclusions. No timer,
+offsite policy, source retention or repository retention changes are introduced.
+The existing backup script still has retention/prune behavior; qualification
+uses a narrowly scoped Restic backup under its existing lock, without invoking
+the full script. Do not run the full installer merely to deploy this helper.
+
+The deadline is at most 15 minutes; both sides use nice 15 / best-effort IO class
+2 priority 7. Before collection, the hub requires three estimated complete stages
+plus 1 GiB free reserve (roughly 10 GiB for the currently observed sources), and
+the remote requires twice the estimated database size plus 1 GiB for its private
+temporary dump. Stream/file/manifest sizes and file counts are bounded. Original
+files stream directly; no multi-GiB original-file staging is created on the VM.
+Interrupted `.incoming` data stays excluded; it is never accepted as last-good.
+Private status/archives/config/manifests and actual image filenames must remain
+outside Git, Obsidian and RAG. Ordinary stdout contains counts and fixed reasons.
+
+Qualification and future maintenance:
+
+1. Run the focused offline suite, shell syntax/ShellCheck and whitespace checks.
+   Preserve the deployed collector/backup/helper and selections privately, then
+   deploy only reviewed owned files. Confirm existing exact staging inclusion and
+   incoming exclusion using the actual private selection files.
+2. Run one bounded stage at low CPU/IO priority. Independently run
+   `edsys-image-originals.py verify`; compare source/reference counts and hashes.
+   No app restart, upload, playback action or source modification is needed.
+3. Under the existing backup flock, create a scoped encrypted snapshot with the
+   mandatory incoming exclusion. Do not forget, prune, unlock or invoke the full
+   backup script. Confirm exact archived payload selection, including videos.
+4. Restore that snapshot only into a root-private isolated target. Run the same
+   verifier with `--stage-root` pointing at the restored stage, verify both archive
+   hashes and every member, and decode the restored PostgreSQL dump again with
+   its recorded compatible toolchain. Do not extract over production or start a
+   duplicate application. A fenced database/application restore is a separate gate.
+5. Let the existing offsite schedule copy the snapshot; qualify exact snapshot
+   parity and selected direct-offsite recovery independently. Until then, report
+   new local protection as local-only, with broader iCloud originals unverified.
+
+Encrypted local acceptance: scoped snapshot `28301259` restored all 59 selected
+image/current-repair files with exact size/SHA-256 matches. Both restored image
+archives passed every-member verification and the custom dump decoded with the
+retained exact PostgreSQL image. No full backup/prune/unlock was invoked.
+The new offsite copy awaits the existing mirror schedule; exact offsite parity
+remains unverified. Current acceptance is documented in
+`EdSys-Master/docs/BACKUP_AND_RECOVERY.md`.
+
+Rollback restores the privately preserved collector/backup/helper files and
+stops future collection through that existing hook. Retain published stages,
+source data and encrypted snapshots; rollback does not delete recovery material.
+
+Offline check (no production access):
+
+```bash
+python3 -m unittest discover -s scripts/backup/tests -p 'test_image_originals.py' -v
+```
+
+### Accepted local collection and database recovery
+
+The private completed generation preserves all **18 local image paths** (about
+128 MiB, including duplicates), plus **433 active Immich assets**: 408 images
+and 25 original videos. The Immich archive has 436 original/marker/profile files
+and four recovery members. Full source-stream hashes, received archive-member
+hashes and independent archive verification passed. All original counts/bytes and
+the four production container identities/start times/running states were preserved;
+configured production health checks remain healthy. No upload or service restart
+was performed.
+
+Initial qualification failed closed without publication. Docker's unordered
+mount-response list caused a false configuration-change guard; canonicalizing
+only that collection fixed the issue while preserving exact-value change checks.
+The focused offline suite now passes **25 tests**, including reorder versus real
+configuration changes and snapshot-constructor cleanup. Ruff, shell syntax,
+warning/error-level ShellCheck and whitespace checks pass; older informational
+ShellCheck findings elsewhere in the existing collector are unchanged.
+
+An exact cached PostgreSQL image was transferred internally and retained privately
+with its hash. A hub-only restore used that image, fresh bootstrap credentials,
+no network/ports, 768 MiB RAM and half a CPU. The image needs to generate its
+PostgreSQL configuration: the first read-only-root probe refused that write;
+the successful probe supplied only a private writable configuration directory
+alongside private PGDATA/recovery binds. Its root remained read-only. Restored
+PostgreSQL and extension versions plus all 433 asset ID/path/type tuples match
+the checkpoint exactly. Both archives were verified again. The owned probe and
+all temporary database/configuration/credential data were removed; the qualified
+image/export and content-free receipts remain private recovery material.
+
+This establishes live original-file collection and isolated PostgreSQL recovery.
+The new encrypted snapshot/direct-offsite recovery gates are reported separately
+by the enclosing maintenance closeout. A running Immich application restore,
+new upload/display acceptance and the principal iCloud/iPhone photo collection
+remain outside this accepted local scope.
+
 As of the 2026-07-13 Remotion hardening pass, the default 9950x include set also protects the operator repos under `/home/jeremy/code`, selected shell/Codex hub state, `/opt/edsys-workhorse` runtime state, and durable Remotion deliverables under `/mnt/ai-store/remotion/outputs`. Replaceable Remotion browser caches/temp data, Codex package caches, and Loki/renovate cache-heavy paths remain excluded.
 
 The EdCore SDR archive at `/mnt/ai-store/edsys-sdr` is also selected. Raw IQ
