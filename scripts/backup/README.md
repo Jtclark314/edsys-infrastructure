@@ -46,6 +46,12 @@ Coverage and consistency:
   Unbound prestart/helper code and package-provided service units, FTL/Unbound
   binaries and package versions. Protect `/var/lib/unbound` and follow actual
   configuration includes for any root-key/root-hints path outside selected roots.
+  Include enabled custom jobs and their service-user SSH recovery dependencies.
+  The deployed scope also protects `/usr/local` and the private service-user
+  `.ssh` directory: the primary's enabled Gravity Sync timer needs its separate
+  executable and identity, alongside the already captured `/etc/gravity-sync`.
+  Qualify these paths and their permissions before approving a policy; keep all
+  identity material in private exports and encrypted recovery, never Git/RAG.
   `gravity.db` and an existing `macvendor.db` use read-only SQLite online backups
   with restored-destination integrity checks. The raw DB/WAL/SHM files are not
   tarred. The known-corrupt `pihole-FTL.db*`, forceDisk `pihole-tmp.db*`,

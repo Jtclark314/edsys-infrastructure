@@ -213,6 +213,15 @@
           "label": "dns-data",
           "path": "/usr/share/dns",
           "required": false
+        },
+        {
+          "label": "local",
+          "path": "/usr/local"
+        },
+        {
+          "label": "network-ssh",
+          "path": "/home/REPLACE_SERVICE_USER/.ssh",
+          "required": false
         }
       ],
       "sqlite_databases": [
@@ -354,6 +363,15 @@
         {
           "label": "dns-data",
           "path": "/usr/share/dns",
+          "required": false
+        },
+        {
+          "label": "local",
+          "path": "/usr/local"
+        },
+        {
+          "label": "network-ssh",
+          "path": "/home/REPLACE_SERVICE_USER/.ssh",
           "required": false
         }
       ],
