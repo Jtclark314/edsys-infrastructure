@@ -1,0 +1,529 @@
+{
+  "format": 1,
+  "required_sources": [
+    "router",
+    "router-host",
+    "pihole-primary",
+    "pihole-secondary",
+    "unifi",
+    "aruba"
+  ],
+  "sources": {
+    "router": {
+      "kind": "router",
+      "approved": false,
+      "transport": "ssh",
+      "ssh_target": "backup@router.example.invalid",
+      "expected_hostname": "REPLACE_ROUTER_HOSTNAME",
+      "roots": [
+        {
+          "label": "etc",
+          "path": "/etc"
+        },
+        {
+          "label": "local",
+          "path": "/usr/local"
+        },
+        {
+          "label": "dhcp-leases",
+          "path": "/var/lib/misc/dnsmasq.leases"
+        }
+      ],
+      "commands": [
+        {
+          "name": "nft-ruleset",
+          "argv": [
+            "nft",
+            "-j",
+            "list",
+            "ruleset"
+          ]
+        },
+        {
+          "name": "netplan",
+          "argv": [
+            "netplan",
+            "get"
+          ]
+        },
+        {
+          "name": "interfaces",
+          "argv": [
+            "ip",
+            "-j",
+            "address",
+            "show"
+          ]
+        },
+        {
+          "name": "routes",
+          "argv": [
+            "ip",
+            "-j",
+            "route",
+            "show",
+            "table",
+            "all"
+          ]
+        },
+        {
+          "name": "policy-rules",
+          "argv": [
+            "ip",
+            "-j",
+            "rule",
+            "show"
+          ]
+        },
+        {
+          "name": "services",
+          "argv": [
+            "systemctl",
+            "list-unit-files",
+            "--no-pager"
+          ]
+        },
+        {
+          "name": "packages",
+          "argv": [
+            "dpkg-query",
+            "-W"
+          ],
+          "stable": true
+        }
+      ]
+    },
+    "router-host": {
+      "kind": "router-host",
+      "approved": false,
+      "transport": "ssh",
+      "ssh_target": "root@hypervisor.example.invalid",
+      "expected_hostname": "REPLACE_HYPERVISOR_HOSTNAME",
+      "roots": [
+        {
+          "label": "network",
+          "path": "/etc/network"
+        },
+        {
+          "label": "vm-config",
+          "path": "/etc/pve/nodes/REPLACE_NODE/qemu-server/REPLACE_VM_ID.conf"
+        }
+      ],
+      "commands": [
+        {
+          "name": "vm-config",
+          "argv": [
+            "qm",
+            "config",
+            "REPLACE_VM_ID"
+          ],
+          "stable": true
+        },
+        {
+          "name": "vm-command",
+          "argv": [
+            "qm",
+            "showcmd",
+            "REPLACE_VM_ID",
+            "--pretty"
+          ],
+          "stable": true
+        },
+        {
+          "name": "interfaces",
+          "argv": [
+            "ip",
+            "-j",
+            "address",
+            "show"
+          ]
+        },
+        {
+          "name": "bridges",
+          "argv": [
+            "bridge",
+            "-j",
+            "link",
+            "show"
+          ]
+        },
+        {
+          "name": "packages",
+          "argv": [
+            "pveversion",
+            "-v"
+          ],
+          "stable": true
+        }
+      ]
+    },
+    "pihole-primary": {
+      "kind": "pihole",
+      "approved": false,
+      "transport": "ssh",
+      "ssh_target": "backup@pihole-primary.example.invalid",
+      "expected_hostname": "REPLACE_HOSTNAME",
+      "roots": [
+        {
+          "label": "etc",
+          "path": "/etc"
+        },
+        {
+          "label": "core",
+          "path": "/etc/.pihole"
+        },
+        {
+          "label": "web",
+          "path": "/var/www/html/admin"
+        },
+        {
+          "label": "ftl-binary",
+          "path": "/usr/bin/pihole-FTL"
+        },
+        {
+          "label": "unbound-binary",
+          "path": "/usr/sbin/unbound"
+        },
+        {
+          "label": "dnssec-root-key",
+          "path": "/var/lib/unbound/root.key",
+          "required": false
+        },
+        {
+          "label": "pihole-helpers",
+          "path": "/opt/pihole"
+        },
+        {
+          "label": "pihole-cli",
+          "path": "/usr/local/bin/pihole"
+        },
+        {
+          "label": "unbound-helper",
+          "path": "/usr/libexec/unbound-helper"
+        },
+        {
+          "label": "package-services",
+          "path": "/usr/lib/systemd/system"
+        },
+        {
+          "label": "unbound-state",
+          "path": "/var/lib/unbound"
+        },
+        {
+          "label": "dns-data",
+          "path": "/usr/share/dns",
+          "required": false
+        }
+      ],
+      "sqlite_databases": [
+        {
+          "name": "gravity",
+          "path": "/etc/pihole/gravity.db",
+          "required": true
+        },
+        {
+          "name": "macvendor",
+          "path": "/etc/pihole/macvendor.db",
+          "required": false
+        }
+      ],
+      "commands": [
+        {
+          "name": "pihole-version",
+          "argv": [
+            "pihole-FTL",
+            "--version"
+          ],
+          "stable": true
+        },
+        {
+          "name": "core-version",
+          "argv": [
+            "git",
+            "-C",
+            "/etc/.pihole",
+            "rev-parse",
+            "HEAD"
+          ],
+          "stable": true
+        },
+        {
+          "name": "web-version",
+          "argv": [
+            "git",
+            "-C",
+            "/var/www/html/admin",
+            "rev-parse",
+            "HEAD"
+          ],
+          "stable": true
+        },
+        {
+          "name": "unbound-version",
+          "argv": [
+            "unbound",
+            "-V"
+          ],
+          "stable": true
+        },
+        {
+          "name": "services",
+          "argv": [
+            "systemctl",
+            "show",
+            "pihole-FTL",
+            "unbound"
+          ]
+        },
+        {
+          "name": "packages",
+          "argv": [
+            "dpkg-query",
+            "-W"
+          ],
+          "stable": true
+        }
+      ],
+      "volatile_roots": [
+        "/etc/pihole/tmp",
+        "/etc/pihole/.tmp",
+        "/etc/pihole/temp"
+      ],
+      "exclude_globs": [
+        "/etc/pihole/*.tmp",
+        "/etc/pihole/gravity.db_temp*"
+      ],
+      "query_history_paths": [
+        "/etc/pihole/pihole-FTL.db",
+        "/etc/pihole/pihole-tmp.db",
+        "/tmp/pihole-tmp.db"
+      ]
+    },
+    "pihole-secondary": {
+      "kind": "pihole",
+      "approved": false,
+      "transport": "ssh",
+      "ssh_target": "backup@pihole-secondary.example.invalid",
+      "expected_hostname": "REPLACE_HOSTNAME",
+      "roots": [
+        {
+          "label": "etc",
+          "path": "/etc"
+        },
+        {
+          "label": "core",
+          "path": "/etc/.pihole"
+        },
+        {
+          "label": "web",
+          "path": "/var/www/html/admin"
+        },
+        {
+          "label": "ftl-binary",
+          "path": "/usr/bin/pihole-FTL"
+        },
+        {
+          "label": "unbound-binary",
+          "path": "/usr/sbin/unbound"
+        },
+        {
+          "label": "dnssec-root-key",
+          "path": "/var/lib/unbound/root.key",
+          "required": false
+        },
+        {
+          "label": "pihole-helpers",
+          "path": "/opt/pihole"
+        },
+        {
+          "label": "pihole-cli",
+          "path": "/usr/local/bin/pihole"
+        },
+        {
+          "label": "unbound-helper",
+          "path": "/usr/libexec/unbound-helper"
+        },
+        {
+          "label": "package-services",
+          "path": "/usr/lib/systemd/system"
+        },
+        {
+          "label": "unbound-state",
+          "path": "/var/lib/unbound"
+        },
+        {
+          "label": "dns-data",
+          "path": "/usr/share/dns",
+          "required": false
+        }
+      ],
+      "sqlite_databases": [
+        {
+          "name": "gravity",
+          "path": "/etc/pihole/gravity.db",
+          "required": true
+        },
+        {
+          "name": "macvendor",
+          "path": "/etc/pihole/macvendor.db",
+          "required": false
+        }
+      ],
+      "commands": [
+        {
+          "name": "pihole-version",
+          "argv": [
+            "pihole-FTL",
+            "--version"
+          ],
+          "stable": true
+        },
+        {
+          "name": "core-version",
+          "argv": [
+            "git",
+            "-C",
+            "/etc/.pihole",
+            "rev-parse",
+            "HEAD"
+          ],
+          "stable": true
+        },
+        {
+          "name": "web-version",
+          "argv": [
+            "git",
+            "-C",
+            "/var/www/html/admin",
+            "rev-parse",
+            "HEAD"
+          ],
+          "stable": true
+        },
+        {
+          "name": "unbound-version",
+          "argv": [
+            "unbound",
+            "-V"
+          ],
+          "stable": true
+        },
+        {
+          "name": "services",
+          "argv": [
+            "systemctl",
+            "show",
+            "pihole-FTL",
+            "unbound"
+          ]
+        },
+        {
+          "name": "packages",
+          "argv": [
+            "dpkg-query",
+            "-W"
+          ],
+          "stable": true
+        }
+      ],
+      "volatile_roots": [
+        "/etc/pihole/tmp",
+        "/etc/pihole/.tmp",
+        "/etc/pihole/temp"
+      ],
+      "exclude_globs": [
+        "/etc/pihole/*.tmp",
+        "/etc/pihole/gravity.db_temp*"
+      ],
+      "query_history_paths": [
+        "/etc/pihole/pihole-FTL.db",
+        "/etc/pihole/pihole-tmp.db",
+        "/tmp/pihole-tmp.db"
+      ]
+    },
+    "unifi": {
+      "kind": "unifi",
+      "approved": false,
+      "transport": "ssh",
+      "ssh_target": "backup@controller-host.example.invalid",
+      "expected_hostname": "REPLACE_HOSTNAME",
+      "roots": [
+        {
+          "label": "configuration",
+          "path": "/opt/unifi"
+        }
+      ],
+      "mongo_data_roots": [
+        "/opt/unifi/db",
+        "/REPLACE_ANONYMOUS_CONFIGDB_PATH"
+      ],
+      "expected_container_images": {
+        "REPLACE_CONTROLLER_CONTAINER": "sha256:REPLACE_CONTROLLER_IMAGE",
+        "REPLACE_MONGO_CONTAINER": "sha256:REPLACE_MONGO_IMAGE"
+      },
+      "commands": [
+        {
+          "name": "controller-inspect",
+          "argv": [
+            "docker",
+            "inspect",
+            "REPLACE_CONTROLLER_CONTAINER"
+          ]
+        },
+        {
+          "name": "database-inspect",
+          "argv": [
+            "docker",
+            "inspect",
+            "REPLACE_MONGO_CONTAINER"
+          ]
+        },
+        {
+          "name": "software-images",
+          "argv": [
+            "docker",
+            "image",
+            "inspect",
+            "REPLACE_CONTROLLER_IMAGE",
+            "REPLACE_MONGO_IMAGE"
+          ]
+        }
+      ],
+      "native_export": {
+        "approved": false,
+        "location": "hub",
+        "executable": "/usr/local/libexec/edsys-network-recovery/edsys-unifi-native-export.py",
+        "sha256": "REPLACE_REVIEWED_EXPORTER_SHA256"
+      },
+      "native_backup_roots": [
+        "/opt/unifi/config/data/backup"
+      ],
+      "volatile_roots": [
+        "/opt/unifi/config/logs",
+        "/opt/unifi/config/data/log",
+        "/opt/unifi/config/data/logs",
+        "/opt/unifi/config/data/cache",
+        "/opt/unifi/config/data/tmp",
+        "/opt/unifi/config/tmp"
+      ],
+      "exclude_globs": [
+        "/opt/unifi/config/hs_err_pid*",
+        "/opt/unifi/config/replay_pid*",
+        "/opt/unifi/config/core.*",
+        "/opt/unifi/config/*.hprof*"
+      ]
+    },
+    "aruba": {
+      "kind": "aruba",
+      "approved": false,
+      "transport": "local",
+      "roots": [],
+      "commands": [],
+      "native_export": {
+        "approved": false,
+        "executable": "/usr/local/libexec/edsys-network-recovery/edsys-aruba-native-export.py",
+        "sha256": "REPLACE_REVIEWED_EXPORTER_SHA256"
+      }
+    }
+  }
+}

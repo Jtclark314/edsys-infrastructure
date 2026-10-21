@@ -73,3 +73,11 @@
 /srv/edsys-backup/staging/home-assistant/.incoming
 /srv/edsys-backup/staging/bedroom-recovery/.incoming
 /srv/edsys-backup/staging/image-originals/.incoming
+
+/srv/edsys-backup/staging/network-recovery/.incoming
+
+# Native API/CLI work is ephemeral; only verified completed archives are selected.
+/var/lib/edsys-backup/network-native-work
+
+# Preserve only completed, verified network software recovery bundles.
+/var/lib/edsys-backup/network-software/.incoming

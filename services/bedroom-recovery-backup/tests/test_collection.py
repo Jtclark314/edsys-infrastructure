@@ -83,6 +83,7 @@ class ConsistencyTests(unittest.TestCase):
         f['nimo']=fail
         second=collect.stage(root,status,f)
         self.assertEqual(second['endpoints']['nimo']['status'],'stale');self.assertEqual(second['endpoints']['nimo']['captured_at'],old_nimo)
+        self.assertEqual(second['endpoints']['nimo']['reason'],'endpoint_timeout')
         self.assertEqual(second['endpoints']['pi']['status'],'fresh');self.assertEqual(second['endpoints']['abs']['status'],'fresh')
         self.assertFalse(second['all_endpoints_fresh']);self.assertEqual(list((root/'.incoming').iterdir()),[])
         report=json.loads(status.read_text());self.assertEqual(report['status'],'degraded');self.assertIsNotNone(report['last_success'])
@@ -106,6 +107,56 @@ class ConsistencyTests(unittest.TestCase):
         p=self.root/'transfer'
         with self.assertRaisesRegex(ValueError,'endpoint_output_bound'):
             collect.run_file([sys.executable,'-c','import sys;sys.stderr.write("private");print("x"*1000)'],p,limit=5,timeout=2)
+
+    def test_ssh_exit_255_gets_a_fixed_reason_without_stderr(self):
+        original=subprocess.Popen
+        def local_peer(args,**kwargs):
+            return original([sys.executable,'-c','import sys;sys.stderr.write("private endpoint detail");sys.exit(255)'],**kwargs)
+        with patch.object(collect.subprocess,'Popen',side_effect=local_peer):
+            with self.assertRaisesRegex(ValueError,'^endpoint_ssh_failed$') as error:
+                collect.run_file(['/usr/bin/ssh','not-contacted'],self.root/'ssh-failure',timeout=2)
+        self.assertNotIn('private',str(error.exception))
+
+    def test_non_ssh_exit_255_is_not_reported_as_an_ssh_failure(self):
+        with self.assertRaisesRegex(ValueError,'^endpoint_capture_failed$'):
+            collect.run_file([sys.executable,'-c','import sys;sys.exit(255)'],self.root/'worker-failure',timeout=2)
+
+    def test_fixed_failure_codes_preserve_validation_detail_without_raw_messages(self):
+        self.assertEqual(collect.endpoint_failure_reason(ValueError('nimo_code_drift')),'nimo_code_drift')
+        self.assertEqual(collect.endpoint_failure_reason(ValueError('zip_size')),'zip_size')
+        self.assertEqual(collect.endpoint_failure_reason(zipfile.BadZipFile('private path')),'invalid_archive')
+        self.assertEqual(collect.endpoint_failure_reason(subprocess.TimeoutExpired(['private command'],1)),'endpoint_timeout')
+        self.assertEqual(collect.endpoint_failure_reason(ValueError('private credential detail')),'endpoint_capture_or_validation_failed')
+
+    def test_unknown_failure_text_never_enters_reused_endpoint_status(self):
+        root=self.root/'stage'
+        status=self.root/'status.json'
+        def put(p):
+            p.write_text(json.dumps({'created_at':datetime.now(timezone.utc).isoformat()}))
+        f={k:put for k in ['pi','nimo','abs']}
+        f['validate']=lambda path,kind:{'source':kind,**json.loads(path.read_text())}
+        first=collect.stage(root,status,f)
+        def fail(p):
+            raise ValueError('private credential detail')
+        f['nimo']=fail
+        second=collect.stage(root,status,f)
+        endpoint=second['endpoints']['nimo']
+        self.assertEqual(endpoint['status'],'stale')
+        self.assertEqual(endpoint['captured_at'],first['endpoints']['nimo']['captured_at'])
+        self.assertEqual(endpoint['reason'],'endpoint_capture_or_validation_failed')
+        self.assertNotIn('private credential detail',status.read_text())
+        self.assertEqual(collect.health(status)['endpoints']['nimo']['reason'],endpoint['reason'])
+
+    def test_old_or_untrusted_status_reason_stays_unclassified(self):
+        path=self.root/'status'
+        now=datetime.now(timezone.utc).isoformat()
+        for reason in [None,'private credential detail',['private']]:
+            endpoints={k:{'status':'fresh','captured_at':now} for k in ['pi','nimo','abs']}
+            endpoints['nimo'].update(status='stale',reason=reason,error='ValueError')
+            path.write_text(json.dumps({'status':'degraded','last_success':now,'endpoints':endpoints}))
+            health=collect.health(path)
+            self.assertEqual(health['endpoints']['nimo']['reason'],'unclassified_prior_failure')
+            self.assertNotIn('private',json.dumps(health))
 
     def test_peer_that_does_not_drain_stdin_still_times_out(self):
         with self.assertRaises(TimeoutError):
@@ -147,6 +198,21 @@ class ConsistencyTests(unittest.TestCase):
            'browser_profile_included':False,'files':{n:{'bytes':1,'sha256':common.sha(b'x')} for n in collect.NIMO_NAMES}}
         with self.assertRaisesRegex(ValueError,'nimo_missing_pins'):collect.check_manifest(m,members,'nimo',{})
 
+    def test_nimo_code_drift_is_still_rejected_despite_matching_archive_hashes(self):
+        members={n:('fixture '+n).encode() for n in collect.NIMO_NAMES}
+        expected={n:common.sha(raw) for n,raw in members.items()}
+        members['NimoVoice.exe']=b'changed executable'
+        manifest={'version':1,'kind':'nimo','source':'NIMO-LAPTOP',
+                  'created_at':datetime.now(timezone.utc).isoformat(),'browser_profile_included':False,
+                  'files':{n:{'bytes':len(raw),'sha256':common.sha(raw)} for n,raw in members.items()}}
+        path=self.root/'nimo-code-drift.zip'
+        with zipfile.ZipFile(path,'w') as archive:
+            for name,raw in members.items():
+                archive.writestr(name,raw)
+            archive.writestr('manifest.json',json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError,'^nimo_code_drift$'):
+            collect.validate_archive(path,'nimo',expected)
+
     def test_logical_hash_deadline_is_enforced_in_python_rows(self):
         db=sqlite3.connect(':memory:');db.execute('CREATE TABLE x(a)');db.execute('INSERT INTO x VALUES(1)')
         with self.assertRaises(TimeoutError):common.logical_digest(db,0)
@@ -176,8 +242,12 @@ class ConsistencyTests(unittest.TestCase):
         line=next(s for s in script.read_text().splitlines() if s.startswith('RESTIC_ARGS='))
         code='STAGING_DIR=/fixture\nEXISTING_INCLUDE_FILE=/i\nEXCLUDE_FILE=/e\nHOSTNAME_SHORT=x\nRUN_ID=x\n'+line+'\nprintf "%s\\0" "${RESTIC_ARGS[@]}"'
         args=subprocess.check_output(['bash','-c',code]).decode().split('\0')
-        self.assertEqual(args.count('--exclude'),2)
+        self.assertEqual(args.count('--exclude'),6)
         self.assertIn('/fixture/home-assistant/.incoming',args);self.assertIn('/fixture/bedroom-recovery/.incoming',args)
+        self.assertIn('/fixture/image-originals/.incoming',args)
+        self.assertIn('/fixture/network-recovery/.incoming',args)
+        self.assertIn('/var/lib/edsys-backup/network-native-work',args)
+        self.assertIn('/var/lib/edsys-backup/network-software/.incoming',args)
 
 
 if __name__=='__main__':unittest.main()

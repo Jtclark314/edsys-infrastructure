@@ -161,4 +161,20 @@ else
   log "FAILED image-originals; retaining last-good data; current freshness is unverified"
 fi
 
+# Complete per-source network recovery, on the existing daily schedule only.
+# A blocked/limited source remains explicit while other verified exports advance.
+network_helper="${BACKUP_ROOT}/scripts/edsys-network-recovery.py"
+if [[ "${EDSYS_BACKUP_DRY_RUN:-false}" == "true" ]]; then
+  log "SKIP network-recovery; backup dry-run does not refresh network exports"
+elif [[ -r "${network_helper}" ]] &&
+  /usr/bin/timeout --signal=TERM --kill-after=5s 900s \
+    /usr/bin/nice -n 15 /usr/bin/ionice -c 2 -n 7 /usr/bin/python3 "${network_helper}" stage \
+      --stage-root "${STAGING_DIR}/network-recovery" \
+      --ssh-key "${BACKUP_SSH_KEY}" --known-hosts "${BACKUP_KNOWN_HOSTS}" \
+      2>&1 | tee -a "${MANIFEST}"; then
+  log "OK network-recovery; all required network exports verified"
+else
+  log "FAILED network-recovery; incomplete scope/freshness is explicit; last-good exports retained"
+fi
+
 log "Remote collection complete: ${OUT_DIR}"

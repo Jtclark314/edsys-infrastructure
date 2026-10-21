@@ -137,7 +137,7 @@ if [[ ! -s "${EXISTING_INCLUDE_FILE}" ]]; then
   fail "no include paths exist; refusing to run empty backup"
 fi
 
-RESTIC_ARGS=(backup --files-from "${EXISTING_INCLUDE_FILE}" --exclude-file "${EXCLUDE_FILE}" --exclude "${STAGING_DIR}/home-assistant/.incoming" --exclude "${STAGING_DIR}/bedroom-recovery/.incoming" --exclude "${STAGING_DIR}/image-originals/.incoming" --tag edsys-critical --tag "${HOSTNAME_SHORT}" --tag "${RUN_ID}")
+RESTIC_ARGS=(backup --files-from "${EXISTING_INCLUDE_FILE}" --exclude-file "${EXCLUDE_FILE}" --exclude "${STAGING_DIR}/home-assistant/.incoming" --exclude "${STAGING_DIR}/bedroom-recovery/.incoming" --exclude "${STAGING_DIR}/image-originals/.incoming" --exclude "${STAGING_DIR}/network-recovery/.incoming" --exclude "/var/lib/edsys-backup/network-native-work" --exclude "/var/lib/edsys-backup/network-software/.incoming" --tag edsys-critical --tag "${HOSTNAME_SHORT}" --tag "${RUN_ID}")
 if [[ "${DRY_RUN}" == "true" ]]; then
   RESTIC_ARGS+=(--dry-run)
 fi
@@ -175,6 +175,16 @@ if [[ -f "${STAGING_DIR}/image-originals/status.json" ]]; then
   ORIGINALS_LAST_SUCCESS="$(jq -r '.last_success_utc // ""' "${STAGING_DIR}/image-originals/status.json" 2>/dev/null || true)"
 fi
 
+
+NETWORK_RECOVERY_STATUS='{"status":"missing","healthy_sources":0,"required_sources":6}'
+if [[ -r "${BACKUP_ROOT}/scripts/edsys-network-recovery.py" ]]; then
+  NETWORK_RECOVERY_STATUS="$(/usr/bin/python3 "${BACKUP_ROOT}/scripts/edsys-network-recovery.py" status \
+    --stage-root "${STAGING_DIR}/network-recovery" 2>/dev/null || true)"
+  if ! jq -e 'type == "object" and (.status | type == "string")' >/dev/null 2>&1 <<< "${NETWORK_RECOVERY_STATUS}"; then
+    NETWORK_RECOVERY_STATUS='{"status":"invalid","healthy_sources":0,"required_sources":6}'
+  fi
+fi
+
 jq -n \
   --arg status "success" \
   --arg run_id "${RUN_ID}" \
@@ -185,11 +195,12 @@ jq -n \
   --arg offsite_sync_status "not_run" \
   --arg image_originals_stage_status "${ORIGINALS_STAGE_STATUS}" \
   --arg image_originals_last_success_utc "${ORIGINALS_LAST_SUCCESS}" \
+  --argjson network_recovery "${NETWORK_RECOVERY_STATUS}" \
   --argjson dry_run "${DRY_RUN}" \
   --argjson included_count "${INCLUDED_COUNT}" \
   --argjson missing_count "${MISSING_COUNT}" \
   --argjson remote_failed_count "${REMOTE_FAILED_COUNT}" \
-  '{status:$status,run_id:$run_id,host:$host,timestamp:$timestamp,repository:$repository,snapshot_id:$snapshot_id,offsite_sync_status:$offsite_sync_status,dry_run:$dry_run,included_path_count:$included_count,missing_path_count:$missing_count,remote_collection_failed_count:$remote_failed_count,image_originals_stage_status:$image_originals_stage_status,image_originals_last_success_utc:$image_originals_last_success_utc}' \
+  '{status:$status,run_id:$run_id,host:$host,timestamp:$timestamp,repository:$repository,snapshot_id:$snapshot_id,offsite_sync_status:$offsite_sync_status,dry_run:$dry_run,included_path_count:$included_count,missing_path_count:$missing_count,remote_collection_failed_count:$remote_failed_count,image_originals_stage_status:$image_originals_stage_status,image_originals_last_success_utc:$image_originals_last_success_utc,network_recovery:$network_recovery}' \
   | tee "${STATUS_JSON}" > "${REPORT_JSON}"
 
 {
@@ -204,6 +215,7 @@ jq -n \
   echo "- Remote collection failures: ${REMOTE_FAILED_COUNT}"
   echo "- Local/Immich originals stage: ${ORIGINALS_STAGE_STATUS}"
   echo "- Originals last successful collection: ${ORIGINALS_LAST_SUCCESS:-none}"
+  echo "- Network recovery exports: $(jq -r '[.status, ((.healthy_sources | tostring) + "/" + (.required_sources | tostring) + " required sources healthy")] | join("; ")' <<< "${NETWORK_RECOVERY_STATUS}")"
   echo "- Repository: ${RESTIC_REPOSITORY}"
   echo "- Offsite sync: not run by this script"
   echo

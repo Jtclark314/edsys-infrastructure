@@ -95,6 +95,9 @@ install -d -m 0750 -o root -g root /srv/edsys-backup/restore-tests
 install -d -m 0700 -o root -g root /srv/edsys-backup/restore-tests/codex-state
 install -d -m 0750 -o root -g root /srv/edsys-backup/restic-repo
 install -d -m 0755 -o root -g root /var/lib/edsys-backup
+install -d -m 0700 -o root -g root /var/lib/edsys-backup/network-native-work
+install -d -m 0700 -o root -g root /var/lib/edsys-backup/network-software
+install -d -m 0755 -o root -g root /usr/local/libexec/edsys-network-recovery
 install -d -m 0750 -o root -g root /var/cache/edsys-backup/restic
 
 install -m 0755 "${SCRIPT_DIR}/edsys-init-restic.sh" /srv/edsys-backup/scripts/edsys-init-restic.sh
@@ -104,6 +107,9 @@ install -m 0755 "${SCRIPT_DIR}/edsys-backup-status.sh" /srv/edsys-backup/scripts
 install -m 0755 "${SCRIPT_DIR}/edsys-backup-check.sh" /srv/edsys-backup/scripts/edsys-backup-check.sh
 install -m 0755 "${SCRIPT_DIR}/edsys-collect-remotes.sh" /srv/edsys-backup/scripts/edsys-collect-remotes.sh
 install -m 0755 "${SCRIPT_DIR}/edsys-image-originals.py" /srv/edsys-backup/scripts/edsys-image-originals.py
+install -m 0755 "${SCRIPT_DIR}/edsys-network-recovery.py" /srv/edsys-backup/scripts/edsys-network-recovery.py
+install -m 0755 "${SCRIPT_DIR}/edsys-unifi-native-export.py" /usr/local/libexec/edsys-network-recovery/edsys-unifi-native-export.py
+install -m 0755 "${SCRIPT_DIR}/edsys-aruba-native-export.py" /usr/local/libexec/edsys-network-recovery/edsys-aruba-native-export.py
 install -m 0755 "${SCRIPT_DIR}/edsys-restic-check.sh" /srv/edsys-backup/scripts/edsys-restic-check.sh
 install -m 0755 "${SCRIPT_DIR}/edsys-restore-test.sh" /srv/edsys-backup/scripts/edsys-restore-test.sh
 install -m 0755 "${SCRIPT_DIR}/edsys-codex-state-stage.py" /srv/edsys-backup/scripts/edsys-codex-state-stage.py
@@ -139,6 +145,14 @@ ensure_exact_selection_line \
   /etc/edsys-backup/includes.txt \
   /srv/edsys-backup/staging \
   "SQLite-consistent backup staging is part of the critical backup set."
+ensure_exact_selection_line \
+  /etc/edsys-backup/includes.txt \
+  /var/lib/edsys-backup/network-software \
+  "Verified exact-version network software recovery bundles are part of the critical backup set."
+ensure_exact_selection_line \
+  /etc/edsys-backup/includes.txt \
+  /usr/local/libexec/edsys-network-recovery \
+  "Pinned native network recovery helpers are part of the critical backup set."
 ensure_exact_selection_line \
   /etc/edsys-backup/includes.txt \
   /mnt/ai-store/foothills-project \

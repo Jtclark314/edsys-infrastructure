@@ -17,6 +17,160 @@ This directory contains the host-side tooling for EdSys offsite backups.
 
 The scripts are designed to protect critical service state first. They exclude replaceable bulk media by default.
 
+## Network recovery exports — deployed 2026-10-20
+
+`edsys-network-recovery.py` adds six independent recovery roles to the existing
+collector: router guest, its hypervisor/VM network mapping, primary and secondary
+Pi-hole/Unbound, UniFi Network, and Aruba. Source capture and full archive hash
+verification were qualified at deployment. The aggregate intentionally remains
+degraded because Aruba's read-only exports omit hidden authentication/key
+material. Qualification covers source exports and archive integrity; fenced
+application restoration, future-run freshness and offsite recovery require their
+own evidence.
+The root-owned private policy is `/etc/edsys-backup/network-recovery.json` (0600).
+The sanitized `network-recovery.example.json` has approval disabled for every
+source; replace and review all placeholders before enabling a source. Native
+UniFi/Aruba methods require separate explicit approval and an exact exporter hash.
+Do not run the full installer/backup to qualify this addition.
+
+Coverage and consistency:
+
+- Router: full `/etc` configuration (Netplan/renderer/resolver, nftables includes,
+  dnsmasq, sysctls, chrony, units and drop-ins), custom `/usr/local` service code,
+  DHCP leases, installed package versions and timestamped active firewall,
+  interface/route/policy/service references. Those live references are evidence,
+  not commands to replay. Pair this with the exact VM config/QEMU command and
+  hypervisor bridge/NIC/MAC mapping; guest interface names alone are insufficient.
+- Each Pi-hole: full configuration, Unbound DNSSEC/root-key and service references,
+  Core/Web source revisions/trees, deployed `/opt/pihole` helpers, CLI,
+  Unbound prestart/helper code and package-provided service units, FTL/Unbound
+  binaries and package versions. Protect `/var/lib/unbound` and follow actual
+  configuration includes for any root-key/root-hints path outside selected roots.
+  `gravity.db` and an existing `macvendor.db` use read-only SQLite online backups
+  with restored-destination integrity checks. The raw DB/WAL/SHM files are not
+  tarred. The known-corrupt `pihole-FTL.db*`, forceDisk `pihole-tmp.db*`,
+  and explicitly configured query-history paths/sidecars are never opened or
+  included; follow actual FTL path overrides in the private policy. Teleporter is not used. Only reviewed per-profile volatile paths and
+  globs are excluded; legitimate code named `core`, `log`, `cache` or `tmp` is not
+  silently filtered.
+- UniFi: exact controller/Mongo container image identities, mount/configuration
+  references and complete non-Mongo configuration/keystore/Compose/env/init code.
+  **Live Mongo data roots must be explicitly excluded.** A root-owned,
+  hash-pinned native exporter produces a fresh native Network backup. Its actual
+  native-created timestamp is checked separately from capture time (26 hours
+  maximum); copying an older monthly `.unf` does not make it fresh. When
+  `native_export.location` is `hub`, credentials stay on 9950x: the native API
+  exporter runs locally and the reviewed config-only archive streams over pinned
+  SSH. Private configuration/file-hash and container identity checkpoints bracket
+  the entire native export plus config capture, including container IDs/start
+  times and actual Mongo mount exclusions. Native-backup directories are excluded
+  from config-only selection because the new native artifact is preserved
+  separately. Verified member streams are merged without filesystem extraction. This
+  does not infer statistics/database point-in-time recovery from an opaque file.
+- Aruba: ordinary authenticated read-only running/startup export, all saved
+  configuration-slot and boot/image/version references, and complete prompt/pager
+  handling. Never use `write memory`, change paging/configuration, or enable
+  `include-credentials`. Hidden authentication/key material is a separate recovery
+  limit and must not silently become a complete export claim. Useful topology
+  exports with hidden credentials unavailable are published only through a
+  distinct `LIMITED.json` pointer/status; any complete `CURRENT.json` and its
+  previous generation stay protected. The aggregate remains degraded. A later
+  complete capture becomes current without an older limited pointer masking it.
+
+All SSH uses explicit existing keys and `StrictHostKeyChecking=yes`; host keys
+are not learned or changed. The capture runs at nice15/IO-priority7, within the
+existing collector's 15-minute bound. Each source has an independent lock and
+atomic, manifest-verified last-good pointer under private
+`staging/network-recovery/sources/`. Files, source metadata, directory permissions,
+bounded extended attributes (including ACL/capability metadata when supported)
+and symlink definitions are preserved. Source path components use reversible
+byte-wise percent encoding in tar member names (including literal percent and
+backslash); RECOVERY retains exact original paths. Do not decode/extract them
+blindly on Windows. Links are **metadata only**, never followed
+or materialized by the verifier. Selected file/config changes refuse publication;
+excluded log/tmp churn does not. Network counter changes are timestamped reads,
+while exact software/container configuration changes block publication.
+
+Received archive/member hashes are verified without extraction. Required SQLite
+and native-backup members cannot be omitted. Streams, metadata, file counts,
+subprocess output, deadline and free-space reserve are bounded. Completed stages
+keep current/previous owned copies per complete/limited pointer; original
+sources and Restic retention are unchanged. Failed attempts preserve last-good data, report explicit failed/stale
+freshness and write `FAILED` to the existing collection manifest. Native backup
+creation time remains part of freshness after collection; status also checks the
+published pointer/summary/archive exists. Every required source must be fresh and complete for the aggregate to be healthy; one working
+router export does not imply protected UniFi or Aruba. The existing backup JSON
+adds a separate `network_recovery` result even when the overall encrypted snapshot
+succeeds. A dry-run never collects. Mandatory `.incoming` exclusion is passed
+both in the template and directly to Restic, independent of custom exclusions.
+The separate ephemeral native-work root is also excluded directly and in the
+template, including when a parent directory is selected; completed archives stay
+under the existing network stage and retain the original inclusion semantics.
+
+Retain separately qualified, matching UniFi controller/Mongo image payloads under
+root0700 `/var/lib/edsys-backup/network-software`. That explicit include protects
+completed bundles through the existing daily encrypted backup; `.incoming` is
+excluded in both the template and the direct Restic arguments. This is retained
+recovery software, with no additional recurring image capture. The private policy
+pins the exact running image identities; a future image/version change requires
+a newly qualified matching payload bundle and policy refresh before capture can
+be accepted. A saved image or archive hash alone does not establish a successful
+fenced controller restore or an offsite recovery copy.
+
+Native exporter protocol (only after exact method review):
+
+1. The executable and all ancestors are root-owned and not group/world writable;
+   the private policy pins its SHA-256. It is called only with
+   `--output-directory <new-private-directory>`, with no credential arguments.
+   Native exporters install only under root-owned
+   `/usr/local/libexec/edsys-network-recovery/`. All native work (local Aruba,
+   hub UniFi or native worker mode) uses fixed root0700
+   `/var/lib/edsys-backup/network-native-work`, with strict root-owned,
+   nonwritable ancestry and a free-space reserve. `/srv` ownership and the strict
+   ancestry fence remain unchanged; `/tmp` is not used for native work. Only
+   this attempt's owned temporary directory is cleaned. It reads its own
+   protected credential file; normal Google/desktop
+   sessions are not substituted. The framework bounds/kills only its process
+   group on failure/deadline and never prints native stderr.
+2. It writes regular bounded artifacts beneath that directory and prints one
+   JSON object. Common fields are `native_created_utc` and `artifacts`, mapping
+   safe labels to absolute paths. UniFi requires `method: native-unifi-backup`,
+   `settings_complete: true`, and the `network-backup` artifact. Aruba requires
+   `method: aruba-read-only`, `read_only`, `prompt_complete`,
+   `startup_slots_complete`, a truthful boolean `credentials_complete`, and `running-config`,
+   `startup-config`, `boot-metadata` artifacts. Additional safe artifact labels
+   are allowed. Passwords/cookies/raw responses belong only in protected files,
+   never stdout or command arguments.
+3. The framework checks actual timestamp freshness, required artifact/coverage
+   flags and containment. An Aruba `credentials_complete: false` result with all
+   other export guards passing is retained as LIMITED, not complete protection;
+   missing slot/prompt/read-only proof still fails closed. Archive verification
+   repeats native method/completeness/timestamp checks, rather than assuming a
+   valid hash means complete recovery. It hashes every artifact into the archive
+   manifest.
+   Hash/readability and native export are distinct from a fenced restore test.
+
+Qualification and rollback:
+
+```bash
+python3 -m unittest discover -s scripts/backup/tests -p 'test_network_recovery.py' -v
+python3 scripts/backup/edsys-network-recovery.py status
+```
+
+The operator first preserves deployed helpers/collector/backup files, policy,
+credentials and current known-good artifacts privately. Deploy only the reviewed
+owned files; do not change host keys, timers, source settings or retention. Run
+one bounded source capture, independently verify its archive and exact member
+selection, then qualify a narrowly scoped encrypted snapshot/isolated restore
+under the existing backup lock. UniFi application probes must have no production
+volumes, published ports or network/AP reachability and must never reconnect,
+adopt or provision real devices. Native switch exports must retain documented
+credential/boot-image limitations. No firmware/update/install or service restart
+is part of collection. Exact offsite snapshot parity/direct recovery remain
+separate gates; use the existing offsite schedule. Rollback restores only the
+preserved collector/helper/policy files and retains sources, staged last-good
+exports and encrypted snapshots.
+
 ## Local image and Immich originals — deployed October 20, 2026
 
 The deployed `edsys-image-originals.py` extends the existing daily remote

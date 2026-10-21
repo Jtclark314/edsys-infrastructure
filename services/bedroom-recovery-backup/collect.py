@@ -33,6 +33,32 @@ STATUS = Path('/var/lib/edsys-backup/bedroom-recovery.json')
 FRESH_SECONDS = 26 * 3600
 NIMO_NAMES = {'camera-view.js','start-assist.js','stop-assist.js','lg-key.js','lg-remote.json','settings.json','NimoVoice.exe','NimoVoice.cs','Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.WinForms.dll','WebView2Loader.dll'}
 PI_DATABASES = {'Addons33.db','Epg16.db','MyMusic83.db','MyVideos131.db','TV46.db','Textures13.db','ViewModes6.db'}
+ENDPOINT_REASONS = frozenset({
+    'endpoint_input_bound','endpoint_output_bound','endpoint_error_bound',
+    'endpoint_deadline','endpoint_ssh_failed','endpoint_capture_failed',
+    'endpoint_timeout','endpoint_capture_or_validation_failed','invalid_archive',
+    'manifest_kind','manifest_source','manifest_time','manifest_members',
+    'manifest_hash','manifest_missing','nimo_scope','nimo_missing_pins',
+    'nimo_code_drift','zip_scope','zip_member','zip_size','zip_path',
+    'archive_total','validation_deadline','unclassified_prior_failure',
+})
+
+
+def endpoint_failure_reason(error):
+    """Publish fixed reason codes only, never endpoint stderr or exception text."""
+    reason=error.args[0] if len(error.args)==1 else None
+    if isinstance(reason,str) and reason in ENDPOINT_REASONS:
+        return reason
+    if isinstance(error,(TimeoutError,subprocess.TimeoutExpired)):
+        return 'endpoint_timeout'
+    if isinstance(error,(zipfile.BadZipFile,tarfile.TarError)):
+        return 'invalid_archive'
+    return 'endpoint_capture_or_validation_failed'
+
+
+def status_failure_reason(endpoint):
+    reason=endpoint.get('reason')
+    return reason if isinstance(reason,str) and reason in ENDPOINT_REASONS else 'unclassified_prior_failure'
 
 
 def secure_dir(path):
@@ -99,8 +125,12 @@ def run_file(args, destination, *, payload=None, limit=MAX_TOTAL+2*1024*1024, ti
                         errors+=len(chunk)
                         if errors>65536:raise ValueError('endpoint_error_bound')
             target.flush();os.fsync(target.fileno())
-        if proc.wait(timeout=max(.1,deadline-time.monotonic()))!=0:
-            raise ValueError('endpoint_capture_failed')
+        returncode=proc.wait(timeout=max(.1,deadline-time.monotonic()))
+        if returncode!=0:
+            # OpenSSH uses 255 for SSH-layer failure. It does not identify
+            # sleep, routing, authentication or host-key failure individually.
+            reason='endpoint_ssh_failed' if returncode==255 and '/usr/bin/ssh' in args else 'endpoint_capture_failed'
+            raise ValueError(reason)
     finally:
         selector.close()
         if proc.poll() is None:
@@ -303,7 +333,7 @@ def stage(root=STAGE, status_path=STATUS, captures=None):
                 except Exception:
                     path.unlink(missing_ok=True);m=None
                 outcomes[kind]={'status':'stale' if m else 'missing','captured_at':m['created_at'] if m else None,
-                                'error':type(endpoint_error).__name__}
+                                'error':type(endpoint_error).__name__,'reason':endpoint_failure_reason(endpoint_error)}
             if m is not None:
                 manifests[kind]=m
                 files[name]={'bytes':path.stat().st_size,'sha256':sha(path.read_bytes())}
@@ -343,6 +373,8 @@ def health(path=STATUS):
             try:seconds=(datetime.now(timezone.utc)-datetime.fromisoformat(v['captured_at'].replace('Z','+00:00'))).total_seconds()
             except Exception:seconds=None
             endpoints[k]={'status':v['status'],'captured_at':v.get('captured_at'),'age_seconds':round(seconds) if seconds is not None else None}
+            if v.get('status')!='fresh':
+                endpoints[k]['reason']=status_failure_reason(v)
             if v.get('status')!='fresh' or seconds is None or not 0<=seconds<=FRESH_SECONDS:healthy=False
         return {'bedroom_recovery_health':'healthy' if healthy else 'degraded','last_success':s.get('last_success'),
                 'age_seconds':round(age),'generation':s.get('generation'),'latest_attempt':s.get('status'),'endpoints':endpoints}

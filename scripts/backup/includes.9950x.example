@@ -27,6 +27,8 @@
 /mnt/ai-store/foothills-project
 /mnt/ai-store/foothills-schedule-procurement
 /srv/edsys-backup/staging
+/var/lib/edsys-backup/network-software
+/usr/local/libexec/edsys-network-recovery
 /opt/edsys-bedroom-recovery
 /srv/sentinel
 /mnt/data-500g/docker/volumes/the-last-relay_relay-data/_data

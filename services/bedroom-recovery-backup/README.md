@@ -54,6 +54,24 @@ any failed/reused source or source older than 26 hours is degraded. Collector
 failure is nonfatal to unrelated Restic backup. Status:
 `/var/lib/edsys-backup/bedroom-recovery.json` and `collect.py status`.
 
+Failed endpoint records now retain a fixed, allowlisted `reason` code alongside
+the exception class. The status command exposes only those fixed codes, never
+endpoint stderr, arbitrary exception text, private paths or settings. Examples
+include `endpoint_ssh_failed` for an SSH process exiting 255,
+`endpoint_capture_failed` for other unsuccessful capture commands,
+`endpoint_timeout`, `nimo_code_drift` and bounded ZIP/manifest validation codes.
+An SSH failure alone does not distinguish sleep, routing, authentication or a
+host-key problem. Older failed records without a safe reason remain
+`unclassified_prior_failure`; they are not retrospectively assigned a cause.
+
+The 2026-10-20 Nimo investigation found the original collector could still
+complete an in-memory Windows capture and validate all eleven reviewed files
+against the unchanged private pins. Machine/user identity and all file hashes
+also matched independently. The historical `ValueError` was not reproduced, so
+this change improves future failure diagnosis rather than claiming a confirmed
+functional defect or silently refreshing source pins. Sleeping/offline devices
+remain untouched; refresh while Nimo is ordinarily awake and reachable.
+
 Generation pruning is deliberately not added in this slice; existing historical
 rollback packages stay untouched. The Restic repository's existing retention
 policy remains authoritative. Monitor completed-stage disk growth and select a
