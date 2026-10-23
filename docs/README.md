@@ -74,6 +74,8 @@ Use this repo for deployable definitions and repeatable commands. Do not store r
   interactive desktop worker, and hub MCP/CLI over existing SSH.
 - `../services/codex-operations/README.md` - bounded read-only HA history/state,
   Frigate/Plex metadata, Ollama inventory and local managed RAG retrieval MCP.
+- `../services/media-cleanup/README.md` - dedicated Codex skill, CLI and stdio
+  tools for checked movie/whole-series removal, managed exclusions and physical-space verification.
 - `../services/foothills-tools/README.md` - existing Procore browser adapter and
   production Observation Tracker read-only stdio over trusted Basecamp SSH.
 - `../services/huggingface-hub/README.md` - current official public Hub MCP

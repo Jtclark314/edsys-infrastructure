@@ -1,0 +1,5 @@
+interface:
+  display_name: "Media Cleanup"
+  short_description: "Remove selected movies and shows with verified space"
+policy:
+  allow_implicit_invocation: true
