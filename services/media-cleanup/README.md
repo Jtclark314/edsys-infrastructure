@@ -36,11 +36,17 @@ and explicit `$media-cleanup` invocation.
   identity or complete SHA-256 equality identifies video copies; arbitrary
   title substrings do not authorize file deletion. Sidecars are included only
   in safely identified release directories.
+  Release directories positively owned by unselected catalogue titles are
+  pruned before traversal; unreadable unknown or selected directories still block.
+  Full-content copy verification allows up to 12 minutes and 64 GiB of reads
+  per preview; exceeding either limit stops before deletion.
 - ARR: existing `arr-server` SSH route and private Radarr/Sonarr stores. The
   fixed remote helper uses only bounded, predefined operations and never
   returns credentials. Native deletion adds Radarr import exclusions or Sonarr
   import-list exclusions. Whole-collection requests also disable the selected
   Radarr collection's automatic additions.
+  Post-delete confirmation polls read-only record/exclusion endpoints for up
+  to 10 seconds to accommodate asynchronous ARR events; DELETE is sent once.
 - Plex: fixed loopback API using the existing Preferences credential under
   `/srv/plex-config`. Exact selected entries are removed; unrelated library
   entries and global trash settings are preserved.
@@ -63,6 +69,9 @@ outside the selected library/download scope are retained and reported.
 `allocated_bytes_unlinked` is not proof that every block became free.
 `observed_available_bytes_delta` is measured across distinct backing
 filesystems and includes concurrent writes or delayed release from open files.
+When requested, the skill maintains task-scoped running totals in private
+`~/.local/state/edsys-media-cleanup/totals/` ledgers, deduplicated by plan ID;
+uncaptured measurements from interrupted calls remain unknown.
 
 ## Install and register
 

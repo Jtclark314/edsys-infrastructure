@@ -108,8 +108,10 @@ def _display(value) -> str:
 # The only remote program dispatched over the existing SSH route. Its stdin is
 # bounded JSON data; no request can add a URL, path, program or API operation.
 REMOTE_HELPER = r'''
-import json,os,stat,subprocess,sys,urllib.request,urllib.parse,urllib.error,xml.etree.ElementTree as ET
+import json,os,stat,subprocess,sys,time,urllib.request,urllib.parse,urllib.error,xml.etree.ElementTree as ET
 MAX=16*1024*1024
+POST_DELETE_VERIFY_SECONDS=10.0
+POST_DELETE_VERIFY_INTERVAL=0.25
 PORTS={'radarr':7878,'sonarr':8989}
 ROOTS={'radarr':'/movies','sonarr':'/tv'}
 attempted=False
@@ -122,7 +124,7 @@ container_pids={}
 def integer(v):
  if isinstance(v,bool) or not isinstance(v,int) or not 0<v<10**10:raise Error('Invalid numeric identifier')
  return v
-def api(service,path,method='GET',body=None,query=None,missing=False):
+def api(service,path,method='GET',body=None,query=None,missing=False,timeout=30):
  global attempted
  if service not in PORTS:raise Error('Unsupported ARR service')
  if service not in keys:
@@ -135,7 +137,7 @@ def api(service,path,method='GET',body=None,query=None,missing=False):
  if data is not None:headers['Content-Type']='application/json'
  if method!='GET':attempted=True
  try:
-  with opener.open(urllib.request.Request(url,headers=headers,data=data,method=method),timeout=30) as r:
+  with opener.open(urllib.request.Request(url,headers=headers,data=data,method=method),timeout=min(30,timeout)) as r:
    b=r.read(MAX+1)
    if len(b)>MAX:raise Error('ARR response exceeded the bounded limit')
    return r.status,json.loads(b) if b else None
@@ -224,6 +226,24 @@ def preflight(items,files=False):
    if sorted(canonical,key=lambda x:x['path'])!=file_set(target):raise Error('ARR media files changed after preview; create a new plan')
   checked.append(item['ref'])
  return {'blockers':[],'checked':checked}
+def verify_deleted(service,path,external):
+ # Native ARR deletion events and import exclusions can settle asynchronously.
+ # Dispatch DELETE exactly once, then poll GETs only within one shared budget.
+ deadline=time.monotonic()+POST_DELETE_VERIFY_SECONDS
+ gone=False
+ while time.monotonic()<deadline:
+  remaining=deadline-time.monotonic()
+  if remaining<=0:break
+  gone=api(service,path,missing=True,timeout=remaining)[0]==404
+  remaining=deadline-time.monotonic()
+  if gone and remaining>0:
+   exclusions=api(service,'/exclusions' if service=='radarr' else '/importlistexclusion',timeout=remaining)[1]
+   field='tmdbId' if service=='radarr' else 'tvdbId'
+   if any(x.get(field)==external for x in exclusions):return
+  remaining=deadline-time.monotonic()
+  if remaining>0:time.sleep(min(POST_DELETE_VERIFY_INTERVAL,remaining))
+ if gone:raise Error('ARR deletion was dispatched but its import exclusion was not verified within 10 seconds; inspect status before retrying')
+ raise Error('ARR deletion was dispatched but its record disappearance was not verified within 10 seconds; inspect status before retrying')
 def execute(req):
  operation=req.get('operation')
  if operation=='catalog':
@@ -247,10 +267,7 @@ def execute(req):
   preflight(items,files=True)
   query={'deleteFiles':'true','addImportExclusion':'true'} if service=='radarr' else {'deleteFiles':'true','addImportListExclusion':'true'}
   status,_=api(service,path,method='DELETE',query=query)
-  if api(service,path,missing=True)[0]!=404:raise Error('ARR deletion was dispatched but its record is still present')
-  exclusions=api(service,'/exclusions' if service=='radarr' else '/importlistexclusion')[1]
-  field='tmdbId' if service=='radarr' else 'tvdbId'
-  if not any(x.get(field)==item['external_id'] for x in exclusions):raise Error('ARR deletion completed without a verified import exclusion')
+  verify_deleted(service,path,item['external_id'])
   return {'ref':item['ref'],'http_status':status,'arr_removed':True,'import_exclusion_verified':True}
  if operation=='disable_collections':
   results=[]

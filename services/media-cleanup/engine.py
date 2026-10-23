@@ -16,7 +16,7 @@ import stat
 import time
 import unicodedata
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from backend import BackendError
 
@@ -117,7 +117,8 @@ class FileSystem:
         no_symlinks(root)
         require(not root.exists() or root.is_dir(), "The selected library root is not a directory")
 
-    def walk(self, root: Path, *, maximum: int = 50000) -> list[Path]:
+    def walk(self, root: Path, *, maximum: int = 50000,
+             exclude_directory: Callable[[Path], bool] | None = None) -> list[Path]:
         no_symlinks(root)
         if not root.exists():
             return []
@@ -125,8 +126,13 @@ class FileSystem:
         def onerror(_):
             raise CleanupError("A media directory could not be inventoried completely")
         for d, dirs, files in os.walk(root, followlinks=False, onerror=onerror):
-            for name in dirs:
-                no_symlinks(Path(d) / name)
+            for name in list(dirs):
+                directory = Path(d) / name
+                no_symlinks(directory)
+                if exclude_directory is not None and exclude_directory(directory):
+                    # Prune top-down before os.walk tries to enumerate the
+                    # contents. Symlink checks still apply even to exclusions.
+                    dirs.remove(name)
             for name in files:
                 p = Path(d) / name
                 no_symlinks(p)
@@ -169,7 +175,15 @@ class FileSystem:
 
     def copies(self, sources: list[dict], items: list[dict], catalog: list[dict] | None = None) -> tuple[list[dict], list[str]]:
         """Exact ownership plus physical identity/full SHA256; never substrings."""
-        candidates = self.walk(self.staging_root, maximum=250000)
+        selected_refs = {item["ref"] for item in items}
+        other_items = [item for item in (catalog or []) if item["ref"] not in selected_refs]
+
+        def unselected_directory(directory: Path) -> bool:
+            return any(self._release_directory(directory.name, other)
+                       or self.staging_context(directory, other) for other in other_items)
+
+        candidates = self.walk(self.staging_root, maximum=250000,
+                               exclude_directory=unselected_directory)
         by_size: dict[int, list[dict]] = {}
         known = {}
         for f in sources:
@@ -180,7 +194,7 @@ class FileSystem:
                 known[(p["device"], p["inode"])] = f
         hashes = {}
         consumed = 0
-        deadline = time.monotonic() + 180
+        deadline = time.monotonic() + 720
         def sha(p: str) -> str:
             nonlocal consumed
             st = fingerprint(p)
@@ -201,7 +215,6 @@ class FileSystem:
         selected: dict[str, dict] = {}
         directory_anchors: dict[Path, dict] = {}
         warnings = []
-        other_items = [x for x in (catalog or []) if x["ref"] not in {i["ref"] for i in items}]
         for p in candidates:
             if p.suffix.lower() not in VIDEO:
                 continue

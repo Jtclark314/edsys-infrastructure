@@ -28,4 +28,6 @@ If the MCP tools are unavailable, `/home/jeremy/.local/bin/edsys-media-cleanup` 
 
 Report which titles were removed and whether verification completed. Distinguish `expected_reclaimed_bytes` (deduplicated physical allocation) from `observed_available_bytes_delta` (affected by concurrent writes and open files). Never claim freed space from logical file-size totals alone. Mention retained links or copies when reported.
 
+When the user requests a running total, count each completed deletion once by `plan_id` and report both its observed space change and the cumulative change. Keep expected allocation separate. Reconcile interrupted calls with status; record uncaptured space measurements as unknown, not invented zeroes. Keep a task-scoped ledger under `/home/jeremy/.local/state/edsys-media-cleanup/totals/`, outside Git/RAG; seed earlier deletions only from verified evidence.
+
 Claim automatic re-download prevention only for ARR-managed titles with verified exclusions; Plex-only titles have no ARR exclusion. Keep screenshots, private title inventories, plans, journals, and credentials outside Git/RAG.

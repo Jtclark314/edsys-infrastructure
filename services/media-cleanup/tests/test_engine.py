@@ -268,6 +268,114 @@ class EngineTests(unittest.TestCase):
         self.assertFalse(duplicate.exists())
         self.assertTrue(sidecar.exists())
 
+    def test_unreadable_known_unselected_staging_directory_is_pruned_before_entry(self):
+        item, source = self.add_item(title="Alpha", year=2001)
+        self.add_item(title="Harbor Watch", year=2011, kind="show", number=2,
+                      make_file=False)
+        blocked = (self.media / "downloads" / "usenet" / "complete" / "complete" / "tv"
+                   / "Harbor.Watch.S04.1080p.Bluray.DTS-HD.x265-GROUP")
+        blocked.mkdir(parents=True)
+        retained = blocked / "unrelated.rar"
+        retained.write_bytes(b"Existing unrelated archive")
+        selected_folder = self.media / "downloads" / "Alpha.2001.1080p-GROUP"
+        selected_folder.mkdir()
+        selected_copy = selected_folder / source.name
+        selected_copy.write_bytes(source.read_bytes())
+        original_scandir = os.scandir
+        attempts = []
+
+        def deny_unselected(path):
+            attempts.append(Path(path))
+            if Path(path) == blocked:
+                raise PermissionError(13, "Simulated unreadable unrelated directory", str(path))
+            return original_scandir(path)
+
+        with mock.patch.object(engine_module.os, "scandir", side_effect=deny_unselected):
+            preview = self.plan(item)
+            self.assertTrue(preview["ready"])
+            self.assertEqual(1, preview["download_copy_and_sidecar_count"])
+            self.assertEqual("complete", self.execute(preview)["state"])
+        self.assertNotIn(blocked, attempts, "Known unselected staging must be pruned before enumeration")
+        self.assertTrue(retained.exists())
+        self.assertEqual(b"Existing unrelated archive", retained.read_bytes())
+        self.assertFalse(source.exists())
+        self.assertFalse(selected_copy.exists())
+
+    def test_unreadable_unknown_staging_directory_still_blocks(self):
+        item, source = self.add_item()
+        blocked = self.media / "downloads" / "Unknown.2002"
+        blocked.mkdir()
+        (blocked / "unknown.rar").write_bytes(b"Unknown ownership")
+        original_scandir = os.scandir
+        attempted = []
+
+        def deny_unknown(path):
+            if Path(path) == blocked:
+                attempted.append(Path(path))
+                raise PermissionError(13, "Simulated unreadable unknown directory", str(path))
+            return original_scandir(path)
+
+        with mock.patch.object(engine_module.os, "scandir", side_effect=deny_unknown):
+            with self.assertRaises(CleanupError):
+                self.plan(item)
+        self.assertEqual([blocked], attempted)
+        self.assertTrue(source.exists())
+        self.assertEqual([], self.backend.calls)
+
+    def test_unreadable_selected_staging_directory_still_blocks(self):
+        item, source = self.add_item(title="Alpha", year=2001)
+        blocked = self.media / "downloads" / "Alpha.2001.1080p-GROUP"
+        blocked.mkdir()
+        (blocked / "selected.rar").write_bytes(b"Selected ownership")
+        original_scandir = os.scandir
+        attempted = []
+
+        def deny_selected(path):
+            if Path(path) == blocked:
+                attempted.append(Path(path))
+                raise PermissionError(13, "Simulated unreadable selected directory", str(path))
+            return original_scandir(path)
+
+        with mock.patch.object(engine_module.os, "scandir", side_effect=deny_selected):
+            with self.assertRaises(CleanupError):
+                self.plan(item)
+        self.assertEqual([blocked], attempted)
+        self.assertTrue(source.exists())
+        self.assertEqual([], self.backend.calls)
+
+    def test_library_walk_stays_strict_despite_unselected_named_subdirectory(self):
+        item, source = self.add_item(title="Alpha", year=2001)
+        self.add_item(title="Beta", year=2002, number=2, make_file=False)
+        blocked = Path(item["root"]) / "Beta.2002"
+        blocked.mkdir()
+        (blocked / "unknown.rar").write_bytes(b"Inside selected library root")
+        original_scandir = os.scandir
+
+        def deny_library(path):
+            if Path(path) == blocked:
+                raise PermissionError(13, "Simulated unreadable library directory", str(path))
+            return original_scandir(path)
+
+        with mock.patch.object(engine_module.os, "scandir", side_effect=deny_library):
+            with self.assertRaises(CleanupError):
+                self.plan(item)
+        self.assertTrue(source.exists())
+        self.assertEqual([], self.backend.calls)
+
+    def test_known_unselected_staging_symlink_is_not_hidden_by_pruning(self):
+        item, source = self.add_item()
+        self.add_item(title="Beta", year=2002, number=2, make_file=False)
+        outside = self.root / "outside-staging"
+        outside.mkdir()
+        (outside / "keep.mkv").write_bytes(b"Unselected outside media")
+        link = self.media / "downloads" / "Beta.2002"
+        link.symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(CleanupError):
+            self.plan(item)
+        self.assertTrue(source.exists())
+        self.assertTrue((outside / "keep.mkv").exists())
+        self.assertEqual([], self.backend.calls)
+
     def test_external_hardlink_is_retained_and_not_counted_as_reclaimable(self):
         item, source = self.add_item()
         outside = self.root / "keep-this-link.mkv"

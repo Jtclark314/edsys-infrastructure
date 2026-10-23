@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from unittest import mock
 import urllib.error
@@ -106,6 +107,8 @@ class RemoteDeletionTests(unittest.TestCase):
         self.deleted = False
         self.recycle = ""
         self.other_records = []
+        self.verify_clock = 0.0
+        self.ns["time"] = types.SimpleNamespace(monotonic=lambda: self.verify_clock, sleep=self.advance_verify_clock)
         self.current = {"id": 12, "tmdbId": 99, "path": "/movies/Example (2001)", "hasFile": True}
         self.ns["api"] = self.api
         self.ns["container_path"] = lambda service, path: str(self.root)
@@ -117,7 +120,10 @@ class RemoteDeletionTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def api(self, service, path, method="GET", body=None, query=None, missing=False):
+    def advance_verify_clock(self, seconds):
+        self.verify_clock += seconds
+
+    def api(self, service, path, method="GET", body=None, query=None, missing=False, timeout=30):
         self.calls.append((service, path, method, query))
         if path == "/config/mediamanagement":
             return 200, {"recycleBin": self.recycle}
@@ -151,6 +157,73 @@ class RemoteDeletionTests(unittest.TestCase):
         self.assertTrue(result["import_exclusion_verified"])
         query = next(x[3] for x in self.calls if x[2] == "DELETE")
         self.assertEqual(query, {"deleteFiles": "true", "addImportListExclusion": "true"})
+
+    def test_delayed_import_exclusion_is_polled_without_repeating_delete(self):
+        native_api = self.ns["api"]
+        exclusion_reads = []
+        def delayed(service, path, **kwargs):
+            if self.deleted and path == "/exclusions":
+                exclusion_reads.append(kwargs["timeout"])
+                if len(exclusion_reads) < 3:
+                    return 200, []
+            return native_api(service, path, **kwargs)
+        self.ns["api"] = delayed
+        self.assertTrue(self.delete()["import_exclusion_verified"])
+        self.assertEqual(len(exclusion_reads), 3)
+        self.assertTrue(all(0 < timeout <= 10 for timeout in exclusion_reads))
+        self.assertEqual(sum(x[2] == "DELETE" for x in self.calls), 1)
+
+    def test_delayed_record_disappearance_is_polled_without_repeating_delete(self):
+        native_api = self.ns["api"]
+        record_reads = []
+        def delayed(service, path, **kwargs):
+            if self.deleted and path == "/movie/12" and kwargs.get("method", "GET") == "GET":
+                record_reads.append(kwargs["timeout"])
+                if len(record_reads) < 3:
+                    return 200, dict(self.current)
+            return native_api(service, path, **kwargs)
+        self.ns["api"] = delayed
+        self.assertTrue(self.delete()["import_exclusion_verified"])
+        self.assertEqual(len(record_reads), 3)
+        self.assertEqual(sum(x[2] == "DELETE" for x in self.calls), 1)
+
+    def test_missing_exclusion_times_out_and_never_retries_delete(self):
+        native_api = self.ns["api"]
+        def never_appears(service, path, **kwargs):
+            if self.deleted and path == "/exclusions":
+                return 200, []
+            return native_api(service, path, **kwargs)
+        self.ns["api"] = never_appears
+        with self.assertRaisesRegex(self.ns["Error"], "import exclusion.*within 10 seconds"):
+            self.delete()
+        self.assertEqual(self.verify_clock, 10.0)
+        self.assertEqual(sum(x[2] == "DELETE" for x in self.calls), 1)
+
+    def test_record_that_remains_times_out_and_never_retries_delete(self):
+        native_api = self.ns["api"]
+        def remains_visible(service, path, **kwargs):
+            if self.deleted and path == "/movie/12" and kwargs.get("method", "GET") == "GET":
+                return 200, dict(self.current)
+            return native_api(service, path, **kwargs)
+        self.ns["api"] = remains_visible
+        with self.assertRaisesRegex(self.ns["Error"], "record disappearance.*within 10 seconds"):
+            self.delete()
+        self.assertEqual(self.verify_clock, 10.0)
+        self.assertEqual(sum(x[2] == "DELETE" for x in self.calls), 1)
+
+    def test_verification_http_error_fails_closed_without_poll_or_delete_retry(self):
+        native_api = self.ns["api"]
+        exclusion_reads = []
+        def unavailable(service, path, **kwargs):
+            if self.deleted and path == "/exclusions":
+                exclusion_reads.append(path)
+                raise self.ns["Error"]("radarr API returned HTTP 503")
+            return native_api(service, path, **kwargs)
+        self.ns["api"] = unavailable
+        with self.assertRaisesRegex(self.ns["Error"], "HTTP 503"):
+            self.delete()
+        self.assertEqual(len(exclusion_reads), 1)
+        self.assertEqual(sum(x[2] == "DELETE" for x in self.calls), 1)
 
     def test_missing_unavailable_title_removal_can_exclude_without_files(self):
         self.path.unlink()
