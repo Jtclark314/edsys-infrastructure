@@ -57,6 +57,9 @@ async def main(movie_query: str, show_query: str):
                 ("media_execute", {"plan_id": "0" * 32, "selection_hash": "0" * 64, "user_requested_delete": False}),
                 ("media_execute", {"plan_id": preview["plan_id"], "selection_hash": "0" * 64, "user_requested_delete": True}),
                 ("media_status", {"plan_id": "../config"}),
+                ("media_plan", {"recovery_plan_id": "../config"}),
+                ("media_plan", {"target_refs": selected, "recovery_plan_id": preview["plan_id"]}),
+                ("media_plan", {"recovery_plan_id": preview["plan_id"]}),
             ]
             for name, args in controls:
                 result = await session.call_tool(name, args, read_timeout_seconds=30)

@@ -11,7 +11,7 @@ listener, timer, or background deletion job is added.
 | Tool | Behavior |
 | --- | --- |
 | `media_find(queries, kind="any", offset=0)` | Read-only batch lookup of 1–25 titles; returns exact refs, title/year/type, management and collection information. Follow each query's `next_offset` until null for complete results. |
-| `media_plan(target_refs, include_collections=false, include_download_copies=true)` | Builds a private 30-minute preview for 1–50 exact refs; no media changes |
+| `media_plan(target_refs, include_collections=false, include_download_copies=true)` | Builds a private 30-minute preview for 1–50 exact refs; no media changes. For checked staging recovery, omit `target_refs` and pass `recovery_plan_id=SOURCE_PLAN_ID`. |
 | `media_execute(plan_id, selection_hash, user_requested_delete)` | Applies the checked, explicitly requested deletion once, then verifies files, library records, and managed exclusions |
 | `media_status(plan_id)` | Reads completion/uncertainty and remaining files without retrying writes |
 
@@ -72,6 +72,9 @@ filesystems and includes concurrent writes or delayed release from open files.
 When requested, the skill maintains task-scoped running totals in private
 `~/.local/state/edsys-media-cleanup/totals/` ledgers, deduplicated by plan ID;
 uncaptured measurements from interrupted calls remain unknown.
+Execution persists its initial space reading before destructive work and
+records an available stopped-state reading when execution ends early. These
+readings cannot reconstruct historical measurements that were never captured.
 
 ## Install and register
 
@@ -112,7 +115,10 @@ PYTHONUNBUFFERED = "1"
 Preserve existing approval settings and unrelated MCP registrations. A client
 configuration reload or a fresh Codex chat may be needed to discover the new
 catalogue. Media services do not need restarting. The tools mark lookup/status
-read-only, planning as a private nondestructive write, and execution as a
+read-only. After source updates, use a fresh MCP session or the CLI to load
+the updated Python modules. The CLI loads current source on every invocation.
+The remaining annotations mark
+planning as a private nondestructive write, and execution as a
 destructive write. See official [MCP configuration](https://learn.chatgpt.com/docs/extend/mcp)
 and [skills guidance](https://learn.chatgpt.com/docs/skills-and-plugins).
 
@@ -124,6 +130,7 @@ The CLI uses the same engine, checks, private plans, and journal:
 /home/jeremy/.local/bin/edsys-media-cleanup find --kind movie 'Example Title (2001)'
 /home/jeremy/.local/bin/edsys-media-cleanup plan movie:radarr:123
 /home/jeremy/.local/bin/edsys-media-cleanup status PLAN_ID_FROM_PREVIEW
+/home/jeremy/.local/bin/edsys-media-cleanup recover-plan SOURCE_PLAN_ID
 /home/jeremy/.local/bin/edsys-media-cleanup execute PLAN_ID_FROM_PREVIEW SELECTION_HASH_FROM_PREVIEW --user-requested-delete
 ```
 
@@ -161,8 +168,22 @@ evidence separately when required; no cleanup timer is installed.
 Execution takes a global lock and records intent before each destructive
 operation. A completed plan returns its recorded result when called again.
 Partial, uncertain, or interrupted execution requires `media_status` and live
-inspection before replanning; writes are never blindly retried. File deletion
-is permanent: a plan/journal is evidence, not a backup or a media restore.
+inspection; writes are never blindly retried. A checked recovery plan is
+available only when a signed partial/uncertain source plan has verified that
+all selected library files and Plex/ARR records are absent and required managed
+exclusions are present, leaving only original staging files.
+
+Call `media_plan(recovery_plan_id=SOURCE_PLAN_ID)` without `target_refs`, or
+`edsys-media-cleanup recover-plan SOURCE_PLAN_ID`. Recovery revalidates the
+original full-content proof, virtual and physical file identities, media pool,
+ownership, overlaps, playback, and queues. A new signed 30-minute preview names
+its source as `recovery_of`; check its exact remaining files and `ready=true`,
+then execute its own plan ID/hash. The original clear deletion request covers
+these same files. Recovery removes only validated remaining staging files;
+it does not repeat any ARR, Plex, or collection write. Other incomplete states
+require inspection and cannot use this shortcut.
+
+File deletion is permanent: a plan/journal is evidence, not a backup or a media restore.
 Existing media backups retain their own recovery procedures and are outside
 this tool's deletion scope.
 

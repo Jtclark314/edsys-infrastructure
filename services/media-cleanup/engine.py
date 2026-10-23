@@ -77,6 +77,16 @@ def fingerprint(path: str | Path) -> dict:
             "allocated": s.st_blocks * 512, "links": s.st_nlink}
 
 
+def strictly_absent(path: str | Path) -> bool:
+    """An unreadable or stale path is unknown, never evidence of absence."""
+    no_symlinks(path)
+    try:
+        os.lstat(path)
+    except FileNotFoundError:
+        return True
+    return False
+
+
 def identity(f: dict) -> tuple:
     return f["device"], f["inode"], f["size"], f["mtime_ns"]
 
@@ -474,12 +484,108 @@ class Engine:
 
     def _summary(self, p: dict, signature: str) -> dict:
         return {"plan_id": p["plan_id"], "selection_hash": signature, "ready": not p["blockers"],
+                "recovery_of": p.get("recovery_of"),
                 "expires_unix": p["expires"], "titles": self.public_items(p["items"]),
                 "title_count": len(p["items"]), "whole_series": any(x["kind"] == "show" for x in p["items"]),
                 "library_file_count": p["library_file_count"], "download_copy_and_sidecar_count": p["download_file_count"],
                 "expected_reclaimed_bytes": p["expected_reclaimed_bytes"], "expected_reclaimed_GB": round(p["expected_reclaimed_bytes"] / 1e9, 3),
                 "retained_external_hardlink_bytes": p["retained_link_bytes"], "warnings": p["warnings"], "blockers": p["blockers"],
                 "requires_user_delete_request": True, "collection_expansion": bool(p["collections"])}
+
+    def _recovery_inventory(self, source_plan_id: str) -> tuple[dict, list[dict]]:
+        """Re-use only signed, previously proven staging identities after settled removal.
+
+        Library metadata/files must already be gone. This never relaxes unlink's
+        normal physical-copy guards or retries an upstream write.
+        """
+        source = self.store.plan(source_plan_id)
+        journal = self.store.read(source_plan_id + ".journal.json")
+        require(not source.get("recovery_of") and journal["state"] in {"uncertain", "partial"},
+                "Recovery requires an original partial or uncertain removal plan")
+        require(source["items"] and all(x.get("arr_service") in {"radarr", "sonarr"}
+                                       for x in source["items"]),
+                "Recovery supports only previously managed library titles")
+        require(self.fs.mount_identity() == source["mount"], "The original media mount changed; inspect state")
+        verification = self.backend.verify(source["items"])
+        require(all(verification.get(k) is True for k in ["arr_removed", "plex_removed", "exclusions_verified"]),
+                "Recovery requires verified ARR/Plex removal and import exclusions")
+        live = self.backend.catalog()
+        for item in source["items"]:
+            self.fs.validate_item(item)
+            require(self.fs.tree(item) == [], "Library files remain or arrived after removal; inspect state")
+            for other in live:
+                same_identity = (other.get("ref") == item["ref"] or
+                                 (other.get("kind") == item["kind"] and item.get("external_id") is not None
+                                  and other.get("external_id") == item["external_id"]))
+                overlaps = (other.get("root") == item["root"] or descendant(other.get("root", ""), item["root"])
+                            or descendant(item["root"], other.get("root", "")))
+                require(not same_identity and not overlaps, "A library record was recreated after removal; inspect state")
+        for f in source["files"]:
+            if f["role"] == "library":
+                for path in [f["path"], *[x["path"] for x in f["physical"]]]:
+                    require(strictly_absent(path), "An original library copy has not settled absent; inspect state")
+        files = []
+        seen = set()
+        for old in source["files"]:
+            if old["role"] not in {"download_copy", "download_sidecar"}:
+                continue
+            path = Path(old["path"])
+            require(source.get("include_download_copies") is True and descendant(path, self.fs.staging_root)
+                    and old["path"] not in seen, "The original staging proof is invalid")
+            seen.add(old["path"])
+            if strictly_absent(path):
+                require(all(strictly_absent(x["path"]) for x in old["physical"]),
+                        "A hidden original staging copy remains; inspect state")
+                continue
+            require(not any(self.fs.staging_context(path, other) for other in live),
+                    "An original staging file now belongs to another catalogue title")
+            now = self.fs.file(path, old["role"])
+            physical = lambda f: sorted((x["path"], identity(x)) for x in f["physical"])
+            require(identity(now) == identity(old) and physical(now) == physical(old),
+                    "An original staging identity changed; its earlier copy proof cannot be reused")
+            files.append(now)
+        active = self.backend.active_paths()
+        roots = [x["root"] for x in source["items"]]
+        require(not any(p == root or descendant(p, root) for p in active for root in roots)
+                and not any(p == f["path"] for p in active for f in files),
+                "A recovery target is currently playing; inspect state")
+        queued = self.backend.active_download_refs()
+        require(not any(x["ref"] in queued for x in source["items"]),
+                "An original title has active or pending downloads; inspect state")
+        return source, files
+
+    def recovery_plan(self, source_plan_id: str) -> dict:
+        require(len(list(self.store.root.glob("*.plan.json"))) < 128,
+                "The private audit store has reached 128 plans; archive reviewed evidence before creating more")
+        require(sum(x.stat().st_size for x in self.store.root.iterdir() if x.is_file()) < 256 * 1024**2,
+                "The private audit store reached its 256 MiB quota; archive reviewed evidence before creating more")
+        source, files = self._recovery_inventory(source_plan_id)
+        require(bool(files), "No original download copies or sidecars remain to recover")
+        inodes: dict[tuple, dict[str, dict]] = {}
+        for f in files:
+            for physical in f["physical"]:
+                inodes.setdefault((physical["device"], physical["inode"]), {})[physical["path"]] = physical
+        reclaimable = retained = 0
+        for paths in inodes.values():
+            first = next(iter(paths.values()))
+            if len(paths) == first["links"]:
+                reclaimable += first["allocated"]
+            else:
+                retained += first["allocated"]
+        warnings = ["Recovery removes only unchanged download files proven by the original signed plan; library metadata is already absent"]
+        if retained:
+            warnings.append("External hard links remain; their allocated data will be retained")
+        plan_id = secrets.token_hex(16)
+        value = {"version": 1, "plan_id": plan_id, "created": self.clock(), "expires": self.clock() + 1800,
+                 "recovery_of": source_plan_id, "source_selection_hash": self.store.sign(source),
+                 "items": source["items"], "collections": [], "files": files, "mount": source["mount"],
+                 "include_download_copies": True, "blockers": [], "warnings": warnings,
+                 "expected_reclaimed_bytes": reclaimable, "retained_link_bytes": retained,
+                 "library_file_count": 0, "download_file_count": len(files)}
+        signature = self.store.sign(value)
+        self.store.write(plan_id + ".plan.json", {**value, "signature": signature})
+        self.store.write(plan_id + ".journal.json", {"state": "planned", "actions": [], "result": None})
+        return self._summary(value, signature)
 
     def status(self, plan_id: str) -> dict:
         p = self.store.plan(plan_id)
@@ -502,6 +608,13 @@ class Engine:
         require(self.clock() <= p["expires"], "This preview has expired; create a new plan")
         require(not p["blockers"], "This preview has blockers; resolve them and create a new plan")
         require(self.fs.mount_identity() == p["mount"], "The media mount changed after preview; create a new plan")
+        if p.get("recovery_of"):
+            source, files = self._recovery_inventory(p["recovery_of"])
+            require(hmac.compare_digest(p["source_selection_hash"], self.store.sign(source)),
+                    "The original signed recovery proof changed")
+            require(p["items"] == source["items"] and not p["collections"] and files == p["files"],
+                    "Recovery targets changed after preview; create a new recovery plan")
+            return
         live = {x["ref"]: x for x in self.backend.catalog()}
         selected = {x["ref"] for x in p["items"]}
         for item in p["items"]:
@@ -550,6 +663,7 @@ class Engine:
         self._revalidate(p)
         before = self.fs.space(p["mount"])
         j["state"] = "running"
+        j["space_before"] = before
         self.store.write(journal_name, j)
 
         def action(name, target, function):
@@ -562,10 +676,10 @@ class Engine:
             return value
 
         try:
-            if p["collections"]:
+            if not p.get("recovery_of") and p["collections"]:
                 action("disable_collections", p["collections"], lambda: self.backend.disable_collections(p["collections"]))
             for item in p["items"]:
-                if item.get("arr_service"):
+                if not p.get("recovery_of") and item.get("arr_service"):
                     action("remove_arr", item["ref"], lambda item=item: self.backend.delete_arr(item))
             # ARR normally removes library files. Exact-manifest cleanup also covers unmanaged Plex titles.
             def cleanup_files():
@@ -575,14 +689,16 @@ class Engine:
             require(all(not Path(x["path"]).exists() for f in p["files"] for x in f["physical"]),
                     "Some physical media files remain")
             for item in p["items"]:
-                action("remove_plex", item["ref"], lambda item=item: self.backend.delete_plex(item))
+                if not p.get("recovery_of"):
+                    action("remove_plex", item["ref"], lambda item=item: self.backend.delete_plex(item))
             verification = self.backend.verify(p["items"])
             require(verification.get("arr_removed") is True and verification.get("plex_removed") is True
                     and verification.get("exclusions_verified") is True, "Library removal verification is incomplete")
             after = self.fs.space(p["mount"])
             delta = sum(x["available"] for x in after) - sum(x["available"] for x in before)
             result = {"plan_id": p["plan_id"], "state": "complete", "titles": self.public_items(p["items"]),
-                      "titles_removed": len(p["items"]), "library_files_removed": p["library_file_count"],
+                      "titles_removed": 0 if p.get("recovery_of") else len(p["items"]), "library_files_removed": p["library_file_count"],
+                      "recovery_of": p.get("recovery_of"),
                       "download_files_removed": p["download_file_count"],
                       "allocated_bytes_unlinked": sum({(x["device"], x["inode"]): x["allocated"] for f in p["files"] for x in f["physical"]}.values()),
                       "expected_reclaimed_bytes": p["expected_reclaimed_bytes"],
@@ -599,5 +715,12 @@ class Engine:
             reason = str(exc)[:400] if isinstance(exc, (CleanupError, BackendError)) else "Private upstream details were suppressed"
             j["result"] = {"plan_id": p["plan_id"], "state": j["state"],
                            "message": "Removal stopped; inspect media_status before any further action.", "reason": reason}
+            try:
+                if self.fs.mount_identity() == p["mount"]:
+                    stopped = self.fs.space(p["mount"])
+                    j["space_stopped"] = stopped
+                    j["result"]["observed_available_bytes_delta"] = sum(x["available"] for x in stopped) - sum(x["available"] for x in before)
+            except Exception:
+                pass
             self.store.write(journal_name, j)
             return j["result"]

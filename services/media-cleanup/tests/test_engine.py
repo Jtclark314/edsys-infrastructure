@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import errno
 import json
 import os
 from pathlib import Path
@@ -692,6 +693,249 @@ class EngineTests(unittest.TestCase):
             self.engine.status("../outside")
         self.assertTrue(path.exists())
         self.assertEqual([], self.backend.calls)
+
+    def interrupted_copy_removal(self, *, sidecar=False):
+        """ARR and its Plex integration finished, but manifest unlink stopped."""
+        item, source = self.add_item()
+        folder = self.media / "downloads" / "Alpha.2001.1080p-GROUP"
+        folder.mkdir()
+        duplicate = folder / "renamed.mkv"
+        duplicate.write_bytes(source.read_bytes())
+        if sidecar:
+            (folder / "English.srt").write_text("subtitles")
+        preview = self.plan(item)
+        native_delete = self.backend.delete_arr
+        def remove_library(record):
+            native_delete(record)
+            source.unlink()
+            self.backend.plex_present.difference_update(record["plex_keys"])
+        normal_unlink = self.fs.unlink
+        def stop_before_copy(f):
+            if f["role"] != "library":
+                raise CleanupError("Simulated stop before unchanged staging unlink")
+            normal_unlink(f)
+        with mock.patch.object(self.backend, "delete_arr", side_effect=remove_library), \
+                mock.patch.object(self.fs, "unlink", side_effect=stop_before_copy):
+            result = self.execute(preview)
+        self.assertEqual("uncertain", result["state"])
+        self.assertFalse(source.exists())
+        self.assertTrue(duplicate.exists())
+        return item, source, duplicate, preview
+
+    def test_recovery_deletes_only_original_unchanged_copies_without_api_retries(self):
+        item, source, duplicate, original = self.interrupted_copy_removal(sidecar=True)
+        calls = list(self.backend.calls)
+        unrelated = duplicate.parent / "new-unplanned.txt"
+        unrelated.write_text("must stay")
+        # The old preview may expire after its uncertain execution. Its signed
+        # copy proof remains usable only through a newly guarded recovery plan.
+        self.now[0] += 1900
+        with mock.patch.object(self.fs, "copies", side_effect=AssertionError("must reuse original proof")):
+            recovery = self.engine.recovery_plan(original["plan_id"])
+            self.assertTrue(recovery["ready"])
+            self.assertEqual(original["plan_id"], recovery["recovery_of"])
+            self.assertEqual(0, recovery["library_file_count"])
+            self.assertEqual(2, recovery["download_copy_and_sidecar_count"])
+            result = self.execute(recovery)
+        self.assertEqual("complete", result["state"])
+        self.assertEqual(0, result["titles_removed"])
+        self.assertEqual(2, result["download_files_removed"])
+        self.assertFalse(duplicate.exists())
+        self.assertFalse((duplicate.parent / "English.srt").exists())
+        self.assertTrue(unrelated.exists())
+        self.assertEqual(calls, self.backend.calls)
+        self.assertEqual(result, self.execute(recovery))
+        self.assertEqual(calls, self.backend.calls)
+        with self.assertRaises(CleanupError):
+            self.execute(original)
+
+    def test_recovery_rejects_changed_copy_before_any_write(self):
+        _, _, duplicate, original = self.interrupted_copy_removal()
+        duplicate.write_bytes(b"x" * duplicate.stat().st_size)
+        calls = list(self.backend.calls)
+        with self.assertRaises(CleanupError):
+            self.engine.recovery_plan(original["plan_id"])
+        self.assertTrue(duplicate.exists())
+        self.assertEqual(calls, self.backend.calls)
+
+    def test_recovery_revalidates_changed_copy_after_preview(self):
+        _, _, duplicate, original = self.interrupted_copy_removal()
+        recovery = self.engine.recovery_plan(original["plan_id"])
+        duplicate.write_bytes(b"different bytes")
+        calls = list(self.backend.calls)
+        with self.assertRaises(CleanupError):
+            self.execute(recovery)
+        self.assertTrue(duplicate.exists())
+        self.assertEqual(calls, self.backend.calls)
+
+    def test_recovery_rejects_new_staging_owner_at_plan_and_execution(self):
+        item, _, duplicate, original = self.interrupted_copy_removal(sidecar=True)
+        recovery = self.engine.recovery_plan(original["plan_id"])
+        other = copy.deepcopy(item)
+        other.update(ref="movie:radarr:2", arr_id=2, external_id=999,
+                     root=str(self.media / "movies" / "Elsewhere (2001)"), plex_keys=[])
+        self.backend.items.append(other)
+        calls = list(self.backend.calls)
+        with self.assertRaises(CleanupError):
+            self.engine.recovery_plan(original["plan_id"])
+        with self.assertRaises(CleanupError):
+            self.execute(recovery)
+        self.assertTrue(duplicate.exists())
+        self.assertTrue((duplicate.parent / "English.srt").exists())
+        self.assertEqual(calls, self.backend.calls)
+
+    def test_recovery_rejects_metadata_recreated_under_new_identifier(self):
+        item, _, duplicate, original = self.interrupted_copy_removal()
+        recovery = self.engine.recovery_plan(original["plan_id"])
+        other = copy.deepcopy(item)
+        other.update(ref="movie:radarr:9", arr_id=9,
+                     root=str(self.media / "movies" / "Different root (2001)"), plex_keys=[])
+        self.backend.items.append(other)
+        calls = list(self.backend.calls)
+        with self.assertRaises(CleanupError):
+            self.execute(recovery)
+        self.assertTrue(duplicate.exists())
+        self.assertEqual(calls, self.backend.calls)
+
+    def test_recovery_rejects_library_arrival_and_unverified_absence(self):
+        _, source, duplicate, original = self.interrupted_copy_removal()
+        recovery = self.engine.recovery_plan(original["plan_id"])
+        source.write_bytes(b"new library arrival")
+        with self.assertRaises(CleanupError):
+            self.execute(recovery)
+        source.unlink()
+        self.backend.verify_ok = False
+        with self.assertRaises(CleanupError):
+            self.engine.recovery_plan(original["plan_id"])
+        self.assertTrue(duplicate.exists())
+
+    def test_recovery_blocks_activity_without_retrying_api(self):
+        item, _, duplicate, original = self.interrupted_copy_removal()
+        recovery = self.engine.recovery_plan(original["plan_id"])
+        calls = list(self.backend.calls)
+        self.backend.playing = [str(duplicate)]
+        with self.assertRaises(CleanupError):
+            self.execute(recovery)
+        self.backend.playing = []
+        self.backend.queued.add(item["ref"])
+        with self.assertRaises(CleanupError):
+            self.engine.recovery_plan(original["plan_id"])
+        self.assertTrue(duplicate.exists())
+        self.assertEqual(calls, self.backend.calls)
+
+    def test_recovery_recomputes_new_external_hardlink_retention(self):
+        _, _, duplicate, original = self.interrupted_copy_removal()
+        retained = self.root / "external-copy.mkv"
+        os.link(duplicate, retained)
+        recovery = self.engine.recovery_plan(original["plan_id"])
+        self.assertEqual(0, recovery["expected_reclaimed_bytes"])
+        self.assertGreater(recovery["retained_external_hardlink_bytes"], 0)
+        self.assertEqual("complete", self.execute(recovery)["state"])
+        self.assertFalse(duplicate.exists())
+        self.assertTrue(retained.exists())
+
+    def test_recovery_rejects_changed_physical_copy_even_when_virtual_file_is_unchanged(self):
+        physical = self.root / "other-branch-copy.mkv"
+        physical.write_bytes(b"media" * 2000)
+        normal_physical = self.fs.physical
+        def copies(path):
+            rows = normal_physical(path)
+            if Path(path).name == "renamed.mkv":
+                rows.append(engine_module.fingerprint(physical))
+            return rows
+        with mock.patch.object(self.fs, "physical", side_effect=copies):
+            _, _, duplicate, original = self.interrupted_copy_removal()
+            physical.write_bytes(b"changed physical data")
+            with self.assertRaises(CleanupError):
+                self.engine.recovery_plan(original["plan_id"])
+            self.assertTrue(duplicate.exists())
+            self.assertTrue(physical.exists())
+
+    def test_recovery_missing_virtual_copy_does_not_hide_unreadable_physical_copy(self):
+        physical = self.root / "hidden-branch-copy.mkv"
+        physical.write_bytes(b"media" * 2000)
+        normal_physical = self.fs.physical
+        def physical_copies(path):
+            rows = normal_physical(path)
+            if Path(path).name == "renamed.mkv":
+                rows.append(engine_module.fingerprint(physical))
+            return rows
+        with mock.patch.object(self.fs, "physical", side_effect=physical_copies):
+            _, _, duplicate, original = self.interrupted_copy_removal(sidecar=True)
+        duplicate.unlink()
+        normal_lstat = os.lstat
+        for code in [errno.EACCES, errno.EIO, errno.ESTALE]:
+            def inaccessible(path, *args, **kwargs):
+                if Path(path) == physical:
+                    raise OSError(code, "Simulated physical branch read failure")
+                return normal_lstat(path, *args, **kwargs)
+            with self.subTest(errno=code), mock.patch.object(engine_module.os, "lstat", side_effect=inaccessible):
+                with self.assertRaises(OSError):
+                    self.engine.recovery_plan(original["plan_id"])
+        self.assertTrue(physical.exists())
+        self.assertTrue((duplicate.parent / "English.srt").exists())
+        self.assertEqual(1, len(self.backend.calls))
+
+    def test_recovery_requires_explicit_settled_library_absence_even_if_tree_is_empty(self):
+        _, source, duplicate, original = self.interrupted_copy_removal()
+        source.write_bytes(b"stale or restored virtual source")
+        with mock.patch.object(self.fs, "tree", return_value=[]):
+            with self.assertRaisesRegex(CleanupError, "settled absent"):
+                self.engine.recovery_plan(original["plan_id"])
+        self.assertTrue(duplicate.exists())
+
+    def test_recovery_revalidates_mount_and_original_signed_proof(self):
+        _, _, duplicate, original = self.interrupted_copy_removal()
+        recovery = self.engine.recovery_plan(original["plan_id"])
+        mount = self.fs.mount_identity()
+        mount["inode"] += 1
+        with mock.patch.object(self.fs, "mount_identity", return_value=mount):
+            with self.assertRaises(CleanupError):
+                self.execute(recovery)
+        source_path = self.engine.store.root / (original["plan_id"] + ".plan.json")
+        value = json.loads(source_path.read_text())
+        value["files"][-1]["mtime_ns"] += 1
+        source_path.write_text(json.dumps(value))
+        with self.assertRaises(CleanupError):
+            self.execute(recovery)
+        self.assertTrue(duplicate.exists())
+
+    def test_recovery_requires_original_signed_started_proof(self):
+        item, _ = self.add_item()
+        not_started = self.plan(item)
+        with self.assertRaises(CleanupError):
+            self.engine.recovery_plan(not_started["plan_id"])
+        _, _, duplicate, original = self.interrupted_copy_removal()
+        path = self.engine.store.root / (original["plan_id"] + ".plan.json")
+        value = json.loads(path.read_text())
+        value["files"][-1]["size"] += 1
+        path.write_text(json.dumps(value))
+        with self.assertRaises(CleanupError):
+            self.engine.recovery_plan(original["plan_id"])
+        self.assertTrue(duplicate.exists())
+
+    def test_partial_journal_has_space_before_and_safe_stop_telemetry(self):
+        _, _, _, original = self.interrupted_copy_removal()
+        journal = self.engine.store.read(original["plan_id"] + ".journal.json")
+        self.assertIn("space_before", journal)
+        self.assertIn("space_stopped", journal)
+        self.assertIn("observed_available_bytes_delta", journal["result"])
+
+    def test_space_before_is_durable_before_first_backend_mutation(self):
+        item, _ = self.add_item()
+        preview = self.plan(item, include_download_copies=False)
+        native_delete = self.backend.delete_arr
+        observed = []
+        def inspect_then_delete(record):
+            journal = self.engine.store.read(preview["plan_id"] + ".journal.json")
+            self.assertEqual("running", journal["state"])
+            self.assertTrue(journal["space_before"])
+            self.assertEqual("attempting", journal["actions"][-1]["state"])
+            observed.append(True)
+            return native_delete(record)
+        with mock.patch.object(self.backend, "delete_arr", side_effect=inspect_then_delete):
+            self.assertEqual("complete", self.execute(preview)["state"])
+        self.assertEqual([True], observed)
 
 
 if __name__ == "__main__":

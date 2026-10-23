@@ -18,6 +18,8 @@ def main():
     plan.add_argument("refs", nargs="+")
     plan.add_argument("--include-collections", action="store_true")
     plan.add_argument("--omit-download-copies", action="store_true")
+    recovery = commands.add_parser("recover-plan", help="Preview unchanged staging files left after verified metadata removal")
+    recovery.add_argument("source_plan_id")
     execute = commands.add_parser("execute", help="Execute an exact user-authorized preview")
     execute.add_argument("plan_id")
     execute.add_argument("selection_hash")
@@ -31,6 +33,8 @@ def main():
             result = engine.find(args.titles, args.kind, args.offset)
         elif args.command == "plan":
             result = engine.plan(args.refs, args.include_collections, not args.omit_download_copies)
+        elif args.command == "recover-plan":
+            result = engine.recovery_plan(args.source_plan_id)
         elif args.command == "execute":
             result = engine.execute(args.plan_id, args.selection_hash, args.user_requested_delete)
         else:
