@@ -43,6 +43,12 @@ foreach ($raw in Get-Content -LiteralPath $environmentFile -Encoding UTF8) {
     if ($key) { [Environment]::SetEnvironmentVariable($key, $value, 'Process') }
 }
 $env:OBSERVATION_ENV_FILE = $environmentFile
+# A separately issued named-human read grant is optional. The application
+# validates it on every call; its value never appears in launcher configuration.
+$grantFile = Join-Path $root 'config\codex-jeremy-read-grant.txt'
+if (Test-Path -LiteralPath $grantFile -PathType Leaf) {
+    $env:OBSERVATION_MCP_GRANT_FILE = $grantFile
+}
 $env:BUILD_ID = $releaseId
 $env:PYTHONUTF8 = '1'
 $env:PYTHONIOENCODING = 'utf-8'

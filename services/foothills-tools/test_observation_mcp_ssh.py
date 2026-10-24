@@ -35,6 +35,14 @@ class TransportTests(unittest.TestCase):
         self.assertNotIn('Invoke-Expression', script)
         self.assertNotIn('Copy-Item', script)
 
+    def test_optional_grant_is_a_fixed_private_file_not_a_value(self):
+        script = launcher.REMOTE_SCRIPT
+        self.assertIn("config\\codex-jeremy-read-grant.txt", script)
+        self.assertIn("$env:OBSERVATION_MCP_GRANT_FILE = $grantFile", script)
+        self.assertIn("Test-Path -LiteralPath $grantFile -PathType Leaf", script)
+        self.assertNotIn("Get-Content -LiteralPath $grantFile", script)
+        self.assertNotIn("Write-Output", script)
+
     def test_argument_injection_is_rejected_before_ssh(self):
         with patch.object(launcher.sys, 'argv', ['launcher', '--host=other']), \
                 patch.object(launcher.os, 'execv') as execute:
