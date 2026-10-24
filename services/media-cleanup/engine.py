@@ -42,6 +42,10 @@ def title_names(item: dict) -> list[str]:
     return [item["title"], *[name for name in aliases if isinstance(name, str)]]
 
 
+def library_paths(item: dict) -> list[str]:
+    return [item["root"], *item.get("additional_roots", [])]
+
+
 def canonical(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
 
@@ -127,17 +131,25 @@ class FileSystem:
 
     def validate_item(self, item: dict) -> None:
         require(item.get("kind") in self.library_roots, "Unsupported media kind")
-        root = Path(item.get("root", ""))
+        additional = item.get("additional_roots", [])
+        require(isinstance(additional, list) and len(additional) <= 8 and all(isinstance(path, str) for path in additional),
+                "Unsupported additional library folders")
+        require(not additional or (item["kind"] == "movie" and item.get("arr_service") == "radarr"
+                                   and not item.get("standalone_file")), "Additional folders require a managed movie")
+        paths = library_paths(item)
+        require(len(set(paths)) == len(paths), "Duplicate library folders")
         base = self.library_roots[item["kind"]]
-        require(root.is_absolute() and root.parent == base and root.name not in {"", ".", ".."},
-                "A title must map to one directory immediately below its movie or TV library")
-        no_symlinks(root)
-        if item.get("standalone_file"):
-            require(item["kind"] == "movie" and not item.get("arr_service") and root.suffix.lower() in VIDEO,
-                    "Only Plex-only movie video files support direct library placement")
-            require(not root.exists() or root.is_file(), "The selected library file is not a regular file")
-        else:
-            require(not root.exists() or root.is_dir(), "The selected library root is not a directory")
+        for path in paths:
+            root = Path(path)
+            require(root.is_absolute() and root.parent == base and root.name not in {"", ".", ".."},
+                    "A title must map directly below its movie or TV library")
+            no_symlinks(root)
+            if item.get("standalone_file"):
+                require(item["kind"] == "movie" and not item.get("arr_service") and root.suffix.lower() in VIDEO,
+                        "Only Plex-only movie video files support direct library placement")
+                require(not root.exists() or root.is_file(), "The selected library file is not a regular file")
+            else:
+                require(not root.exists() or root.is_dir(), "The selected library root is not a directory")
 
     def walk(self, root: Path, *, maximum: int = 50000,
              exclude_directory: Callable[[Path], bool] | None = None) -> list[Path]:
@@ -192,7 +204,9 @@ class FileSystem:
                     no_symlinks(sibling)
                     paths.append(sibling)
             return [self.file(path, "library") for path in sorted(paths)]
-        return [self.file(p, "library") for p in self.walk(Path(item["root"]), maximum=20000)]
+        paths = sorted(path for root in library_paths(item) for path in self.walk(Path(root), maximum=20000))
+        require(len(paths) <= 20000, "The file inventory exceeds the supported batch size; select fewer titles")
+        return [self.file(path, "library") for path in paths]
 
     @staticmethod
     def _release_directory(name: str, item: dict) -> bool:
@@ -466,8 +480,8 @@ class Engine:
                 if x.get("collection_id") in collections and x["ref"] not in {i["ref"] for i in items}:
                     items.append(dict(x))
         require(len(items) <= 100, "Collection expansion exceeds 100 titles; use smaller explicit batches")
-        require(not any(item.get("standalone_file") for item in items),
-                "Direct-library movie files use the one-step delete command")
+        require(not any(item.get("standalone_file") or item.get("additional_roots") for item in items),
+                "Movies with standalone files or additional folders use the one-step delete command")
         # A shared or nested root with an unselected record cannot be deleted safely.
         chosen = {x["ref"] for x in items}
         for item in items:

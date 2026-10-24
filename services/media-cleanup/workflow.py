@@ -10,7 +10,7 @@ import secrets
 import time
 
 from backend import BackendError
-from engine import CleanupError, PLAN_ID, descendant, no_symlinks, normalize, require, strictly_absent, title_names
+from engine import CleanupError, PLAN_ID, descendant, no_symlinks, normalize, require, strictly_absent, title_names, library_paths
 
 
 def label(item):
@@ -173,15 +173,16 @@ class Deletion:
                     self.fs.validate_item(item)
                     require(not item.get("mapping_blocker"), "Ambiguous library folder mapping")
                     require(not any(other["ref"] != item["ref"] and
-                                    (other["root"] == item["root"] or descendant(other["root"], item["root"])
-                                     or descendant(item["root"], other["root"])) for other in catalog),
+                                    any(a == b or descendant(a, b) or descendant(b, a)
+                                        for a in library_paths(other) for b in library_paths(item)) for other in catalog),
                             "Library folder is shared with another title")
                     library = self.fs.tree(item)
                     downloads, roots, warnings = owned_downloads(self.fs, item, catalog)
                     entry.update(files=library + downloads, download_roots=roots, warnings=warnings)
                     relative_root = Path(item["root"]).parent if item.get("standalone_file") else Path(item["root"])
                     entry["item"]["relative_files"] = [{"path": str(Path(f["path"]).relative_to(relative_root)),
-                                                       "size": f["size"], "mtime_ns": f["mtime_ns"]} for f in library]
+                                                       "size": f["size"], "mtime_ns": f["mtime_ns"]} for f in library
+                                                      if item.get("standalone_file") or descendant(f["path"], item["root"])]
                     self.guard(entry["item"], kind)
                     self.backend.preflight([entry["item"]])
                 except (CleanupError, BackendError, OSError) as exc:
@@ -219,7 +220,7 @@ class Deletion:
             return None
 
     def guard(self, item, kind):
-        require(not any(p == item["root"] or descendant(p, item["root"]) for p in self.backend.active_paths()),
+        require(not any(p == root or descendant(p, root) for p in self.backend.active_paths() for root in library_paths(item)),
                 "Currently playing; left in place")
         require(item["ref"] not in self.backend.active_download_refs(kind), "Download pending; left in place")
 
@@ -244,7 +245,7 @@ class Deletion:
                 self.guard(item, manifest["kind"])
                 if resuming:
                     others = [x for x in catalog if x["ref"] != ref]
-                    require(not any(x["root"] == item["root"] or
+                    require(not any(set(library_paths(x)) & set(library_paths(item)) or
                                     (x["kind"] == item["kind"] and item.get("external_id") is not None
                                      and x.get("external_id") == item["external_id"]) for x in others),
                             "The title was recreated under another record; left in place")
@@ -273,6 +274,8 @@ class Deletion:
                     progress["step"] = "files_pending"
                     self.save(record)
                 if progress["step"] == "files_pending":
+                    if item.get("additional_roots"):
+                        self.backend.check_library_ownership(item)
                     for f in files:
                         try:
                             self.fs.unlink(f)
@@ -313,7 +316,7 @@ class Deletion:
                         "Files appeared after deletion; left in place")
                 require(not any(self.fs.walk(Path(root)) for root in entry["download_roots"]),
                         "New download files appeared; left in place")
-                for root in [item["root"], *entry["download_roots"]]:
+                for root in [*library_paths(item), *entry["download_roots"]]:
                     remove_empty_directories(root)
                 progress["step"] = "complete"
             except Exception as exc:

@@ -231,6 +231,191 @@ class StandaloneMovieTests(unittest.TestCase):
         self.assertEqual("DELETE", plex.call_args_list[1].kwargs["method"])
 
 
+class MultipleMovieDirectoryTests(unittest.TestCase):
+    def setUp(self):
+        self.primary = "/mnt/media/movies/Example (2001)"
+        self.extra = "/mnt/media/movies/Example.2001.UHD.REMUX-GROUP"
+        self.item = movie(root=self.primary, plex_keys=["900"], additional_roots=[self.extra])
+
+    def raw(self, **changes):
+        result = {"kind": "movie", "arr_service": "radarr", "arr_id": 12, "external_id": 99,
+                  "title": "Example", "year": 2001, "container_root": "/movies/Example (2001)"}
+        result.update(changes)
+        return result
+
+    def listing(self, year=2001, guid="tmdb://99", extra=None, additional_video=""):
+        extra = extra or "/media/movies/Example.2001.UHD.REMUX-GROUP"
+        return ET.fromstring(f'<MediaContainer><Video ratingKey="900" type="movie" title="Example" year="{year}"><Guid id="{guid}"/><Media><Part file="/media/movies/Example (2001)/film.mkv" size="10"/></Media><Media><Part file="{extra}/film.mkv" size="20"/></Media></Video>{additional_video}</MediaContainer>')
+
+    def catalog(self, listing=None, raw=None):
+        sections = ET.fromstring('<MediaContainer><Directory key="1" type="movie"><Location path="/media/movies"/></Directory></MediaContainer>')
+        b = backend.LiveBackend()
+        with mock.patch.object(backend, "_run_remote", return_value=raw if raw is not None else [self.raw()]), mock.patch.object(b, "_plex", side_effect=[(200, sections), (200, listing if listing is not None else self.listing())]):
+            return b.catalog("movie")
+
+    def test_catalog_accepts_confirmed_versions_for_one_managed_movie(self):
+        result = self.catalog()
+        self.assertEqual(1, len(result))
+        self.assertEqual(self.primary, result[0]["root"])
+        self.assertEqual([self.extra], result[0]["additional_roots"])
+        self.assertEqual(["900"], result[0]["plex_keys"])
+        self.assertFalse(result[0].get("mapping_blocker"))
+        self.assertIs(result[0], backend._item(result[0]))
+
+    def test_catalog_rejects_foreign_guid_year_or_directory_identity(self):
+        for listing in [self.listing(guid="tmdb://100"), self.listing(guid="imdb://tt12345"),
+                        self.listing(year=2002), self.listing(extra="/media/movies/Other (2001)"),
+                        self.listing(extra="/media/movies/Example (2002)")]:
+            with self.subTest(xml=ET.tostring(listing)):
+                result = self.catalog(listing=listing)
+                self.assertTrue(result[0].get("mapping_blocker"))
+                self.assertNotIn("additional_roots", result[0])
+
+    def test_catalog_rejects_another_arr_owner_or_shared_plex_root(self):
+        other_arr = self.raw(arr_id=13, external_id=100, title="Other", container_root="/movies/Example.2001.UHD.REMUX-GROUP")
+        result = self.catalog(raw=[self.raw(), other_arr])
+        self.assertTrue(all(item.get("mapping_blocker") for item in result))
+        shared = '<Video ratingKey="901" type="movie" title="Other" year="2001"><Guid id="tmdb://100"/><Media><Part file="/media/movies/Example.2001.UHD.REMUX-GROUP/other.mkv"/></Media></Video>'
+        result = self.catalog(listing=self.listing(additional_video=shared))
+        self.assertTrue(result[0].get("mapping_blocker"))
+        self.assertNotIn("additional_roots", result[0])
+
+    def test_catalog_rejects_unmanaged_or_flat_multiple_root_shapes(self):
+        unmanaged = self.catalog(raw=[])
+        self.assertTrue(unmanaged[0].get("mapping_blocker"))
+        self.assertNotIn("additional_roots", unmanaged[0])
+        listing = self.listing()
+        listing.findall(".//Part")[1].set("file", "/media/movies/Example.2001.mkv")
+        managed = self.catalog(listing=listing)
+        self.assertTrue(managed[0].get("mapping_blocker"))
+        self.assertNotIn("additional_roots", managed[0])
+
+    def test_item_rejects_duplicate_unsupported_or_unbounded_additional_roots(self):
+        self.assertIs(self.item, backend._item(self.item))
+        for changed in [dict(self.item, additional_roots=[self.primary]),
+                        dict(self.item, additional_roots=[self.extra, self.extra]),
+                        dict(self.item, additional_roots=["/mnt/media/movies"]),
+                        dict(self.item, additional_roots=[self.extra + "/Nested"]),
+                        dict(self.item, additional_roots=["/mnt/media/movies/Other (2001)"]),
+                        dict(self.item, additional_roots=["/mnt/media/movies/Example (2002)"]),
+                        dict(self.item, additional_roots=[self.extra] * 9),
+                        dict(self.item, additional_roots=self.extra),
+                        dict(self.item, ref="movie:plex:900", arr_service=None, arr_id=None),
+                        dict(self.item, ref="show:sonarr:12", kind="show", arr_service="sonarr"),
+                        dict(self.item, standalone_file=True)]:
+            with self.subTest(changed=changed), self.assertRaises(backend.BackendError):
+                backend._item(changed)
+
+    def test_preflight_rechecks_full_root_set_guid_and_year(self):
+        b = backend.LiveBackend()
+        with mock.patch.object(b, "_plex", return_value=(200, self.listing())) as plex:
+            b._verify_plex_mapping(self.item)
+        plex.assert_called_once_with("/library/metadata/900?includeGuids=1", missing=True)
+        for listing in [self.listing(guid="tmdb://100"), self.listing(year=2002),
+                        self.listing(extra="/media/movies/Example.2001.Other-Version")]:
+            with self.subTest(xml=ET.tostring(listing)), mock.patch.object(b, "_plex", return_value=(200, listing)), self.assertRaises(backend.BackendError):
+                b._verify_plex_mapping(self.item)
+
+    def test_native_remote_selection_keeps_primary_relative_files_only(self):
+        self.item["relative_files"] = [{"path": "film.mkv", "size": 10, "mtime_ns": 123}]
+        selected = backend._remote_items([self.item])
+        self.assertEqual("/movies/Example (2001)", selected[0]["container_root"])
+        self.assertEqual(self.item["relative_files"], selected[0]["relative_files"])
+        self.assertNotIn("additional_roots", selected[0])
+
+    def test_playback_in_additional_root_blocks_both_native_deletes(self):
+        b = backend.LiveBackend()
+        for method in [b.delete_arr, b.delete_plex]:
+            with self.subTest(method=method.__name__), mock.patch.object(b, "_verify_plex_mapping"), mock.patch.object(b, "active_paths", return_value=[self.extra + "/film.mkv"]), mock.patch.object(backend, "_run_remote") as remote, mock.patch.object(b, "_plex") as plex:
+                with self.assertRaisesRegex(backend.BackendError, "playing"):
+                    method(self.item)
+                remote.assert_not_called()
+                plex.assert_not_called()
+
+    def test_plex_delete_refuses_files_remaining_in_any_additional_root(self):
+        b = backend.LiveBackend()
+        with mock.patch.object(b, "_verify_plex_mapping"), mock.patch.object(b, "active_paths", return_value=[]), mock.patch.object(backend.os.path, "lexists", side_effect=lambda path: path == self.extra), mock.patch.object(backend.os.path, "islink", return_value=False), mock.patch.object(backend.os.path, "isdir", return_value=True), mock.patch.object(backend.os, "walk", return_value=[(self.extra, [], ["film.mkv"])]), mock.patch.object(b, "_plex") as plex:
+            with self.assertRaisesRegex(backend.BackendError, "files remain"):
+                b.delete_plex(self.item)
+            plex.assert_not_called()
+
+    def test_verification_detects_a_recreated_record_on_an_additional_root(self):
+        b = backend.LiveBackend()
+        recreated = movie(ref="movie:plex:901", arr_service=None, arr_id=None, root=self.extra, plex_keys=["901"])
+        arr = [{"ref": self.item["ref"], "arr_removed": True, "import_exclusion_verified": True}]
+        with mock.patch.object(backend, "_run_remote", return_value=arr), mock.patch.object(b, "catalog", return_value=[recreated]), mock.patch.object(b, "_plex", return_value=(404, None)):
+            verified = b.verify([self.item])
+        self.assertTrue(verified["arr_removed"])
+        self.assertFalse(verified["plex_removed"])
+
+    def test_fresh_ownership_guard_blocks_new_arr_owner_of_extra_directory(self):
+        b = backend.LiveBackend()
+        foreign = movie(ref="movie:radarr:13", arr_id=13, external_id=100,
+                        title="Foreign", root=self.extra, plex_keys=[])
+        with mock.patch.object(b, "catalog", return_value=[self.item, foreign]) as catalog:
+            with self.assertRaisesRegex(backend.BackendError, "Another library record"):
+                b.check_library_ownership(self.item)
+        catalog.assert_called_once_with("movie")
+
+    def test_fresh_ownership_guard_blocks_foreign_plex_later_root(self):
+        b = backend.LiveBackend()
+        foreign = movie(ref="movie:plex:901", arr_service=None, arr_id=None, title="Foreign",
+                        root="/mnt/media/movies/Foreign (2001)", plex_keys=["901"],
+                        mapped_roots=["/mnt/media/movies/Foreign (2001)", self.extra])
+        with mock.patch.object(b, "catalog", return_value=[self.item, foreign]), self.assertRaisesRegex(backend.BackendError, "Another library record"):
+            b.check_library_ownership(self.item)
+
+    def test_fresh_ownership_guard_preserves_foreign_managed_plex_later_root_after_arr_removal(self):
+        foreign_arr = self.raw(arr_id=13, external_id=100, title="Foreign",
+                               container_root="/movies/Foreign (2001)")
+        foreign_video = ('<Video ratingKey="901" type="movie" title="Foreign" year="2001">'
+                         '<Guid id="tmdb://100"/>'
+                         '<Media><Part file="/media/movies/Foreign (2001)/own.mkv" size="10"/></Media>'
+                         '<Media><Part file="/media/movies/Example.2001.UHD.REMUX-GROUP/other.mkv" size="20"/></Media>'
+                         '</Video>')
+        # Original ARR record is gone; its same-key Plex entry still exists.
+        catalog = self.catalog(raw=[foreign_arr], listing=self.listing(additional_video=foreign_video))
+        foreign = next(item for item in catalog if item["ref"] == "movie:radarr:13")
+        self.assertTrue(foreign["mapping_blocker"])
+        self.assertEqual([self.extra, "/mnt/media/movies/Foreign (2001)"], foreign["mapped_roots"])
+        self.assertNotIn("additional_roots", foreign)
+        b = backend.LiveBackend()
+        with mock.patch.object(b, "catalog", return_value=catalog), self.assertRaisesRegex(backend.BackendError, "Another library record"):
+            b.check_library_ownership(self.item)
+
+    def test_fresh_ownership_guard_allows_expected_same_key_after_arr_removal(self):
+        b = backend.LiveBackend()
+        expected = movie(ref="movie:plex:900", arr_service=None, arr_id=None, external_id=None,
+                         root=self.primary, plex_keys=["900"], mapped_roots=[self.primary, self.extra],
+                         mapping_blocker="Plex record spans multiple library directories")
+        with mock.patch.object(b, "catalog", return_value=[expected]):
+            b.check_library_ownership(self.item)
+
+    def test_fresh_ownership_guard_rejects_changed_same_arr_identity_or_root(self):
+        b = backend.LiveBackend()
+        for current in [dict(self.item, external_id=100),
+                        dict(self.item, root="/mnt/media/movies/Example.2001.New-Root"),
+                        dict(self.item, additional_roots=[]),
+                        dict(self.item, mapping_blocker="New overlap")]:
+            with self.subTest(current=current), mock.patch.object(b, "catalog", return_value=[current]), self.assertRaisesRegex(backend.BackendError, "mapping changed"):
+                b.check_library_ownership(self.item)
+
+    def test_fresh_ownership_guard_is_run_by_preflight_and_before_native_delete(self):
+        b = backend.LiveBackend()
+        for method in [lambda: b.preflight([self.item]), lambda: b.delete_arr(self.item)]:
+            with mock.patch.object(b, "_verify_plex_mapping"), mock.patch.object(b, "active_paths", return_value=[]), mock.patch.object(b, "check_library_ownership", side_effect=backend.BackendError("New owner")) as ownership, mock.patch.object(backend, "_run_remote") as remote:
+                with self.assertRaisesRegex(backend.BackendError, "New owner"):
+                    method()
+                ownership.assert_called_once_with(self.item)
+                remote.assert_not_called()
+
+    def test_single_directory_does_not_need_another_catalog_read(self):
+        b = backend.LiveBackend()
+        with mock.patch.object(b, "catalog") as catalog:
+            b.check_library_ownership(movie())
+        catalog.assert_not_called()
+
+
 class RemoteScopeTests(unittest.TestCase):
     def setUp(self):
         self.ns = {}

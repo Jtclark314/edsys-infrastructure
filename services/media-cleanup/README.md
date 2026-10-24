@@ -37,12 +37,21 @@ when useful, and specific missing/skipped/failed titles or retained files.
 ## Files and execution
 
 - Fixed library roots are `/mnt/media/movies` and `/mnt/media/tv`; managed
-  titles own one direct directory. A Plex-only movie may instead map to one
+  titles normally own one direct directory. A Plex-only movie may instead map to one
   exact top-level video file, including matching same-stem sidecars with supported
   language/accessibility suffixes. The library base is never a deletion target
   or recursively traversed for a standalone movie. Flat TV files are unsupported.
   Movie requests read the movie catalog without enumerating TV libraries.
   A normal request reads its catalog once.
+- Additional library versions of one ARR movie are included only when Plex's
+  sole TMDB GUID and year match that record, every direct directory name matches
+  its canonical/Plex title and release year, and no other ARR/Plex record owns
+  those roots. Ownership is read again before native deletion and local file
+  cleanup, including resumed work. All confirmed versions are removed. Native ARR inventory and
+  deletion stay anchored to the primary directory; exact-manifest cleanup
+  removes the additional versions. Shared or unsupported multi-folder mappings
+  remain reported exceptions. This does not enable multiple roots for TV or
+  unmanaged Plex movies.
 - Associated downloads are exact normalized title/year release directories
   below `/mnt/media/downloads`, including folders under up to four wrapper
   levels. Whole-series releases use title/season names. The search indexes
@@ -92,8 +101,8 @@ The old `find`, `plan`, `execute`, and `recover-plan` CLI commands remain for
 existing signed plans and diagnostics. They are not the normal assistant workflow
 and are no longer exposed as MCP tools. Their 30-minute plans and historical
 quotas do not apply to new one-step operations.
-Legacy `plan` refuses standalone movie files and directs them to the one-step
-`delete` command.
+Legacy `plan` refuses standalone movie files and multi-folder movies, directing
+them to the one-step `delete` command.
 
 ## Install and qualify
 
@@ -117,9 +126,9 @@ loads current source on every call. No shared backend restart is required.
 and proves that a non-dry-run request is rejected. Destructive tests use only
 disposable files and fake services. A separate explicit owner deletion request
 is necessary for any real-media execution.
-The isolated suite now covers 133 tests, including Plex display aliases and
-exact standalone movie/sidecar handling. These fixture tests never delete real
-library media.
+The isolated suite now covers 156 tests, including Plex display aliases,
+exact standalone movie/sidecar handling, and confirmed additional movie versions.
+These fixture tests never delete real library media.
 
 ## Source and removal
 

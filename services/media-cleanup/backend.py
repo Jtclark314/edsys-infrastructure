@@ -20,6 +20,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import unicodedata
 import xml.etree.ElementTree as ET
 
 
@@ -33,6 +34,7 @@ PLEX_ROOTS = {"movie": "/media/movies", "show": "/media/tv"}
 ARR_ROOTS = {"radarr": "/movies", "sonarr": "/tv"}
 REF = re.compile(r"(movie:radarr|show:sonarr|movie:plex|show:plex):([1-9][0-9]{0,9})\Z")
 MOVIE_VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".m4v", ".mov", ".ts", ".m2ts", ".wmv", ".mpg", ".mpeg"}
+MAX_ADDITIONAL_ROOTS = 8
 
 
 class BackendError(RuntimeError):
@@ -102,6 +104,32 @@ def _check_standalone_file(path: str) -> None:
             raise BackendError("Standalone movie media is not a regular file")
 
 
+def _library_paths(item: dict) -> list[str]:
+    return [item["root"], *item.get("additional_roots", [])]
+
+
+def _movie_directory_name(path: str, titles: list[str], year: int) -> bool:
+    def normalized(value):
+        return "".join(c for c in unicodedata.normalize("NFKD", value).casefold() if c.isalnum())
+    if type(year) is not int or not 1000 <= year <= 9999:
+        return False
+    name = PurePosixPath(path).name
+    return any(normalized(name[:match.start()]) == normalized(title)
+               for match in re.finditer(rf"(?<!\d){year}(?!\d)", name)
+               for title in titles if isinstance(title, str) and title)
+
+
+def _confirmed_movie_roots(item: dict, descriptor: dict) -> bool:
+    return (item["kind"] == "movie" and item.get("arr_service") == "radarr"
+            and not descriptor["standalone_file"]
+            and 2 <= len(descriptor["roots"]) <= MAX_ADDITIONAL_ROOTS + 1
+            and item["root"] in descriptor["roots"]
+            and descriptor["tmdb_ids"] == [item["external_id"]]
+            and descriptor["year"] == item.get("year")
+            and all(_movie_directory_name(root, [item["title"], descriptor["title"]], item.get("year"))
+                    for root in descriptor["roots"]))
+
+
 def _item(item: dict) -> dict:
     if not isinstance(item, dict) or not isinstance(item.get("ref"), str):
         raise BackendError("Invalid media selection")
@@ -119,6 +147,19 @@ def _item(item: dict) -> dict:
             raise BackendError("Only unmanaged Plex movies can use standalone files")
         _flat_movie_path(item["root"])
         _check_standalone_file(item["root"])
+    additional = item.get("additional_roots", [])
+    if not isinstance(additional, list) or len(additional) > MAX_ADDITIONAL_ROOTS:
+        raise BackendError("Invalid additional movie directories")
+    if additional:
+        if kind != "movie" or service != "radarr" or standalone:
+            raise BackendError("Additional directories require one managed movie")
+        if (any(not isinstance(root, str) or _root(root, kind) != root for root in additional)
+                or len(set(additional)) != len(additional) or item["root"] in additional):
+            raise BackendError("Additional movie directories must be distinct direct library roots")
+        aliases = item.get("aliases", [])
+        titles = [item["title"], *(aliases if isinstance(aliases, list) else [])]
+        if not all(_movie_directory_name(root, titles, item.get("year")) for root in _library_paths(item)):
+            raise BackendError("Additional movie directories do not match the title and year")
     if service != "plex":
         if item.get("arr_service") != service or item.get("arr_id") != int(identity):
             raise BackendError("Media selection identity changed")
@@ -476,7 +517,9 @@ class LiveBackend:
             raise BackendError("Plex record has no exact supported library directory")
         return {"key": key, "title": _display(element.get("title")), "year": int(element.get("year")) if element.get("year", "").isdigit() else None,
                 "roots": sorted(roots), "estimated_bytes": size, "has_files": has_files,
-                "standalone_file": standalone}
+                "standalone_file": standalone,
+                "tmdb_ids": sorted({int(g.get("id")[7:]) for g in element.findall("Guid")
+                                    if re.fullmatch(r"tmdb://[1-9][0-9]{0,9}", g.get("id", ""))})}
 
     def catalog(self, kind: str = "any") -> list[dict]:
         requested_kind = _kind(kind)
@@ -529,8 +572,17 @@ class LiveBackend:
         for kind, d in descriptors:
             matches = [x for root in d["roots"] for x in by_root.get((kind, root), [])]
             blocker = "Plex record spans multiple library directories" if len(d["roots"]) != 1 else "Multiple ARR records share the library directory" if len(matches) > 1 else ""
+            if len(d["roots"]) > 1 and len(matches) == 1 and _confirmed_movie_roots(matches[0], d):
+                shared_plex_root = any(other["key"] != d["key"] and set(other["roots"]).intersection(d["roots"])
+                                       for other_kind, other in descriptors if other_kind == kind)
+                if not shared_plex_root:
+                    matches[0]["additional_roots"] = sorted(root for root in d["roots"] if root != matches[0]["root"])
+                    blocker = ""
             if matches:
                 for item in matches:
+                    # Keep every reported location as ownership evidence even
+                    # when this mapping is blocked; these are not delete roots.
+                    item["mapped_roots"] = sorted(set(item.get("mapped_roots", [])) | set(d["roots"]))
                     item["plex_keys"].append(d["key"])
                     if d["title"] and d["title"] != item["title"]:
                         item["aliases"].append(d["title"])
@@ -542,7 +594,9 @@ class LiveBackend:
                 result.append({"ref": kind + ":plex:" + d["key"], "kind": kind, "title": d["title"], "year": d["year"], "root": d["roots"][0],
                                "arr_service": None, "arr_id": None, "external_id": None, "collection_id": None, "collection_title": None,
                                "plex_keys": [d["key"]], "estimated_bytes": d["estimated_bytes"], "has_files": d["has_files"], "mapping_blocker": blocker,
-                               "aliases": [], **({"standalone_file": True} if d["standalone_file"] else {})})
+                               "aliases": [],
+                               **({"mapped_roots": d["roots"]} if len(d["roots"]) > 1 else {}),
+                               **({"standalone_file": True} if d["standalone_file"] else {})})
         for item in result:
             item["plex_keys"] = sorted(set(item["plex_keys"]), key=int)
             item["aliases"] = sorted(set(item["aliases"]))
@@ -575,23 +629,54 @@ class LiveBackend:
     def _verify_plex_mapping(self, item: dict):
         item = _item(item)
         for key in item.get("plex_keys", []):
-            status, detail = self._plex("/library/metadata/" + key, missing=True)
+            query = "?includeGuids=1" if item.get("additional_roots") else ""
+            status, detail = self._plex("/library/metadata/" + key + query, missing=True)
             if status == 404:
                 continue
             elements = detail.findall("Video" if item["kind"] == "movie" else "Directory")
             if len(elements) != 1 or elements[0].get("type") != item["kind"]:
                 raise BackendError("Plex record identity changed after preview")
             descriptor = self._plex_descriptor(elements[0], item["kind"])
-            if descriptor["roots"] != [item["root"]] or descriptor["standalone_file"] != item.get("standalone_file", False):
+            if descriptor["roots"] != sorted(_library_paths(item)) or descriptor["standalone_file"] != item.get("standalone_file", False):
                 raise BackendError("Plex media directory changed after preview")
+            if item.get("additional_roots") and not _confirmed_movie_roots(item, descriptor):
+                raise BackendError("Plex movie identity or year changed after preview")
             if item["kind"] == "show":
                 _, leaves = self._plex("/library/metadata/" + key + "/allLeaves")
                 if any(_part_root(part.get("file"), "show") != item["root"] for part in leaves.findall(".//Media/Part")):
                     raise BackendError("Plex show has episodes outside the selected directory")
 
+    def check_library_ownership(self, item: dict) -> None:
+        """Refresh owners before acting on optional extra movie directories."""
+        if not item.get("additional_roots"):
+            return
+        item = _item(item)
+        selected_roots = set(_library_paths(item))
+        current_catalog = self.catalog("movie")
+        current = next((other for other in current_catalog if other["ref"] == item["ref"]), None)
+        if current is not None:
+            if (current.get("root") != item["root"] or current.get("external_id") != item["external_id"]
+                    or current.get("arr_service") != item["arr_service"] or current.get("mapping_blocker")
+                    or set(_library_paths(current)) != selected_roots):
+                raise BackendError("The managed movie mapping changed; additional directories were preserved")
+        expected_plex_keys = set(item.get("plex_keys", []))
+        for other in current_catalog:
+            # Unsupported multi-root metadata remains undeletable, but all of
+            # its reported roots still count when checking another owner's scope.
+            other_roots = set(_library_paths(other)) | set(other.get("mapped_roots", []))
+            if not selected_roots.intersection(other_roots) or other["ref"] == item["ref"]:
+                continue
+            keys = set(other.get("plex_keys", []))
+            expected_unmanaged = (current is None and other.get("arr_service") is None
+                                  and other["ref"] in {"movie:plex:" + key for key in expected_plex_keys}
+                                  and keys and keys <= expected_plex_keys)
+            if not expected_unmanaged:
+                raise BackendError("Another library record owns a selected movie directory; files were preserved")
+
     def preflight(self, items: list[dict]) -> dict:
         for item in items:
             self._verify_plex_mapping(item)
+            self.check_library_ownership(item)
         return _run_remote({"operation": "preflight", "items": _remote_items(items)})
 
     def disable_collections(self, ids: list[int]) -> list[dict]:
@@ -604,25 +689,28 @@ class LiveBackend:
         if not item.get("arr_service"):
             return {"ref": item["ref"], "arr_removed": True, "import_exclusion": "not_managed"}
         self._verify_plex_mapping(item)
-        if any(path == item["root"] or path.startswith(item["root"] + "/") for path in self.active_paths()):
+        if any(path == root or path.startswith(root + "/") for path in self.active_paths() for root in _library_paths(item)):
             raise BackendError("Selected media is playing; playback was preserved")
+        self.check_library_ownership(item)
         return _run_remote({"operation": "delete", "items": _remote_items([item])})
 
     def delete_plex(self, item: dict) -> dict:
         item = _item(item)
         self._verify_plex_mapping(item)
-        if any(path == item["root"] or path.startswith(item["root"] + "/") for path in self.active_paths()):
+        if any(path == root or path.startswith(root + "/") for path in self.active_paths() for root in _library_paths(item)):
             raise BackendError("Selected media is playing; playback was preserved")
         # engine.py has already removed the exact planned files. Refuse to let
         # Plex become a second filesystem-deletion route for new arrivals.
-        if os.path.lexists(item["root"]):
+        for root in _library_paths(item):
+            if not os.path.lexists(root):
+                continue
             if item.get("standalone_file"):
                 raise BackendError("The selected movie file remains or appeared before Plex removal; inspect status")
-            if os.path.islink(item["root"]) or not os.path.isdir(item["root"]):
+            if os.path.islink(root) or not os.path.isdir(root):
                 raise BackendError("Media root changed before Plex removal")
             def onerror(error):
                 raise BackendError("Cannot confirm media files are absent before Plex removal")
-            for directory, dirs, files in os.walk(item["root"], followlinks=False, onerror=onerror):
+            for directory, dirs, files in os.walk(root, followlinks=False, onerror=onerror):
                 if files or any(os.path.islink(os.path.join(directory, name)) for name in dirs):
                     raise BackendError("Media files remain or appeared before Plex removal; inspect status")
         results = []
@@ -653,7 +741,8 @@ class LiveBackend:
             statuses = [self._plex("/library/metadata/" + key, missing=True)[0] for key in item.get("plex_keys", [])]
             arr = arr_results.get(item["ref"], {})
             managed_item = bool(item.get("arr_service"))
-            recreated = [x for x in current_catalog if x["kind"] == item["kind"] and x["root"] == item["root"]]
+            recreated = [x for x in current_catalog if x["kind"] == item["kind"]
+                         and set(_library_paths(x)).intersection(_library_paths(item))]
             results.append({"ref": item["ref"], "managed": managed_item, "arr_removed": arr.get("arr_removed", not managed_item) and not any(x.get("arr_service") for x in recreated),
                             "plex_removed": all(status == 404 for status in statuses) and not any(x.get("plex_keys") for x in recreated),
                             "import_exclusion_verified": arr.get("import_exclusion_verified", not managed_item),

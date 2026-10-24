@@ -25,6 +25,7 @@ class ScopedBackend(fixtures.FakeBackend):
         self.catalog_calls = []
         self.fail_arr_before = set()
         self.fail_plex_after = False
+        self.owner_conflict = False
 
     def catalog(self, kind="any"):
         self.catalog_calls.append(kind)
@@ -32,6 +33,10 @@ class ScopedBackend(fixtures.FakeBackend):
 
     def active_download_refs(self, kind="any"):
         return {ref for ref in self.queued if kind == "any" or ref.startswith(kind + ":")}
+
+    def check_library_ownership(self, item):
+        if self.owner_conflict:
+            raise BackendError("Another title now owns the additional library folder")
 
     def verify(self, items, *, check_catalog=True):
         return super().verify(items)
@@ -195,6 +200,90 @@ class WorkflowTests(unittest.TestCase):
             self.engine.plan([item["ref"]])
         self.assertTrue(target.exists())
         self.assertEqual([], self.backend.calls)
+
+    def duplicate_movie_versions(self):
+        item, primary = self.add_item()
+        folder = self.media / "movies" / "Alpha.2001.BluRay.REMUX"
+        folder.mkdir()
+        additional = folder / "alternate.mkv"
+        additional.write_bytes(b"different encoding")
+        item["additional_roots"] = [str(folder)]
+        return item, primary, additional
+
+    def test_confirmed_duplicate_versions_remove_both_folders_with_primary_arr_inventory(self):
+        item, primary, additional = self.duplicate_movie_versions()
+        _, retained = self.add_item("Beta", number=2)
+        result = self.deletion.run(["Alpha (2001)"])
+        self.assertEqual("complete", result["state"])
+        self.assertEqual(2, result["files_removed"])
+        self.assertFalse(primary.parent.exists())
+        self.assertFalse(additional.parent.exists())
+        self.assertTrue(retained.exists())
+        record = self.engine.store.read(self.operation_id() + ".delete.json")
+        self.assertEqual(["movie.mkv"], [row["path"] for row in record["manifest"]["entries"][0]["item"]["relative_files"]])
+        self.assertEqual(1, self.backend.calls.count(("delete_arr", item["ref"])))
+
+    def test_additional_movie_folder_owned_by_another_title_is_retained(self):
+        item, primary, additional = self.duplicate_movie_versions()
+        _, other = self.add_item("Beta", number=2)
+        item["additional_roots"].append(str(other.parent))
+        result = self.deletion.run(["Alpha (2001)"])
+        self.assertEqual("partial", result["state"])
+        self.assertTrue(all(path.exists() for path in (primary, additional, other)))
+        self.assertEqual([], self.backend.calls)
+
+    def test_playing_additional_version_blocks_the_whole_movie(self):
+        _, primary, additional = self.duplicate_movie_versions()
+        self.backend.playing = [str(additional)]
+        result = self.deletion.run(["Alpha (2001)"])
+        self.assertEqual("partial", result["state"])
+        self.assertTrue(primary.exists())
+        self.assertTrue(additional.exists())
+        self.assertEqual([], self.backend.calls)
+
+    def test_new_file_in_additional_folder_prevents_completion_and_plex_removal(self):
+        _, _, additional = self.duplicate_movie_versions()
+        arrived = additional.parent / "late.mkv"
+        unlink = self.fs.unlink
+        def new_file(file):
+            unlink(file)
+            arrived.write_bytes(b"new arrival")
+        with mock.patch.object(self.fs, "unlink", side_effect=new_file):
+            result = self.deletion.run(["Alpha (2001)"])
+        self.assertEqual("partial", result["state"])
+        self.assertTrue(arrived.exists())
+        self.assertFalse(any(call[0] == "delete_plex" for call in self.backend.calls))
+
+    def test_new_additional_folder_owner_after_arr_write_blocks_local_cleanup(self):
+        _, primary, additional = self.duplicate_movie_versions()
+        delete_arr = self.backend.delete_arr
+        def claim_folder(item):
+            result = delete_arr(item)
+            self.backend.owner_conflict = True
+            return result
+        with mock.patch.object(self.backend, "delete_arr", side_effect=claim_folder):
+            result = self.deletion.run(["Alpha (2001)"])
+        self.assertEqual("partial", result["state"])
+        self.assertTrue(additional.exists())
+        self.assertTrue(primary.exists())
+        self.assertFalse(any(call[0] == "delete_plex" for call in self.backend.calls))
+        resumed = self.deletion.run(None, operation_id=result["operation_id"])
+        self.assertEqual("partial", resumed["state"])
+        self.assertTrue(additional.exists())
+        self.assertEqual(1, sum(call[0] == "delete_arr" for call in self.backend.calls))
+
+    def test_additional_folder_shape_and_legacy_plans_are_bounded(self):
+        item, primary, additional = self.duplicate_movie_versions()
+        for changed in ({"additional_roots": [str(primary.parent)]},
+                        {"additional_roots": [str(self.media / 'movies')]},
+                        {"additional_roots": str(additional.parent)},
+                        {"arr_service": None}, {"kind": "show"}, {"standalone_file": True}):
+            with self.subTest(changed=changed), self.assertRaises(CleanupError):
+                self.fs.validate_item({**item, **changed})
+        with self.assertRaisesRegex(CleanupError, "one-step delete"):
+            self.engine.plan([item["ref"]])
+        self.assertTrue(primary.exists())
+        self.assertTrue(additional.exists())
 
     def test_partial_title_never_substitutes_the_only_available_sequel(self):
         _, sequel = self.add_item("Alpha II", year=2002)
