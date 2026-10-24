@@ -102,6 +102,35 @@ class MappingTests(unittest.TestCase):
         self.assertEqual(["/library/sections", "/library/sections/1/all?includeGuids=1"], [call.args[0] for call in plex.call_args_list])
         self.assertEqual(["movie:plex:900"], [item["ref"] for item in results])
 
+    def test_same_root_preserves_different_plex_title_as_alias(self):
+        raw = [{"kind": "movie", "arr_service": "radarr", "arr_id": 12, "external_id": 112,
+                "title": "Canonical Title", "year": 2001,
+                "container_root": "/movies/Canonical Title (2001)"}]
+        sections = ET.fromstring('<MediaContainer><Directory key="1" type="movie"><Location path="/media/movies"/></Directory></MediaContainer>')
+        listing = ET.fromstring('<MediaContainer><Video ratingKey="900" type="movie" title="Display Title" year="2001"><Guid id="tmdb://112"/><Media><Part file="/media/movies/Canonical Title (2001)/film.mkv" size="10"/></Media></Video></MediaContainer>')
+        b = backend.LiveBackend()
+        with mock.patch.object(backend, "_run_remote", return_value=raw), mock.patch.object(b, "_plex", side_effect=[(200, sections), (200, listing)]):
+            result = b.catalog("movie")
+        self.assertEqual(1, len(result))
+        self.assertEqual("Canonical Title", result[0]["title"])
+        self.assertEqual(["Display Title"], result[0]["aliases"])
+        self.assertEqual(["900"], result[0]["plex_keys"])
+        self.assertEqual(112, result[0]["external_id"])
+
+    def test_flat_plex_movie_maps_exact_file_instead_of_library_base(self):
+        sections = ET.fromstring('<MediaContainer><Directory key="1" type="movie"><Location path="/media/movies"/></Directory></MediaContainer>')
+        filename = "Example.2001.1080p.WEBRip.x265-GROUP.mkv"
+        listing = ET.fromstring(f'<MediaContainer><Video ratingKey="901" type="movie" title="Example" year="2001"><Guid id="tmdb://113"/><Media><Part file="/media/movies/{filename}" size="10"/></Media></Video></MediaContainer>')
+        b = backend.LiveBackend()
+        with mock.patch.object(backend, "_run_remote", return_value=[]), mock.patch.object(b, "_plex", side_effect=[(200, sections), (200, listing)]):
+            result = b.catalog("movie")
+        self.assertEqual(1, len(result))
+        self.assertEqual("movie:plex:901", result[0]["ref"])
+        self.assertEqual("/mnt/media/movies/" + filename, result[0]["root"])
+        self.assertTrue(result[0]["standalone_file"])
+        self.assertFalse(result[0]["mapping_blocker"])
+        self.assertIsNone(result[0]["arr_service"])
+
     def test_targeted_verification_does_not_rebuild_catalog(self):
         selected = movie(plex_keys=["123"])
         arr = [{"ref": selected["ref"], "arr_removed": True, "import_exclusion_verified": True}]
@@ -121,6 +150,85 @@ class MappingTests(unittest.TestCase):
                     method("music")
         remote.assert_not_called()
         plex.assert_not_called()
+
+
+class StandaloneMovieTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="edsys-flat-movie-fixture-")
+        self.root = Path(self.temp.name)
+        self.movies = self.root / "movies"
+        self.movies.mkdir()
+        self.path = self.movies / "Example.2001.mkv"
+        self.path.write_bytes(b"Fixture video")
+        self.roots = mock.patch.object(backend, "MEDIA_ROOTS", {"movie": str(self.movies), "show": str(self.root / "tv")})
+        self.roots.start()
+        self.item = movie(ref="movie:plex:900", arr_service=None, arr_id=None, external_id=None,
+                          root=str(self.path), plex_keys=["900"], standalone_file=True)
+
+    def tearDown(self):
+        self.roots.stop()
+        self.temp.cleanup()
+
+    def test_exact_standalone_file_is_valid_but_bases_and_other_kinds_are_not(self):
+        self.assertIs(self.item, backend._item(self.item))
+        for changed in [dict(self.item, root=str(self.movies)),
+                        dict(self.item, root=str(self.movies / "notes.txt")),
+                        dict(self.item, root=str(self.movies / "dir" / "film.mkv")),
+                        dict(self.item, root=str(self.movies / ".." / "elsewhere.mkv")),
+                        dict(self.item, ref="show:plex:900", kind="show"),
+                        dict(self.item, ref="movie:radarr:12", arr_service="radarr", arr_id=12, external_id=99),
+                        dict(self.item, standalone_file="true")]:
+            with self.subTest(changed=changed), self.assertRaises(backend.BackendError):
+                backend._item(changed)
+
+    def test_flat_tv_and_nonvideo_plex_parts_remain_unsupported(self):
+        for path, kind in [("/media/tv/Example.mkv", "show"),
+                           ("/media/movies/notes.txt", "movie"),
+                           ("/media/movies/../Example.mkv", "movie"),
+                           ("/media/movies", "movie")]:
+            with self.subTest(path=path), self.assertRaises(backend.BackendError):
+                backend._part_root(path, kind)
+
+    def test_standalone_symlink_or_directory_is_rejected(self):
+        self.path.unlink()
+        other = self.root / "outside.mkv"
+        other.write_bytes(b"Unrelated fixture")
+        self.path.symlink_to(other)
+        with self.assertRaisesRegex(backend.BackendError, "symlink"):
+            backend._item(self.item)
+        self.path.unlink()
+        self.path.mkdir()
+        with self.assertRaisesRegex(backend.BackendError, "regular file"):
+            backend._item(self.item)
+
+    def test_flat_movie_playback_resolves_to_exact_file(self):
+        sessions = ET.fromstring('<MediaContainer><Video ratingKey="900" type="movie"><Media><Part file="/media/movies/Example.2001.mkv"/></Media></Video></MediaContainer>')
+        b = backend.LiveBackend()
+        with mock.patch.object(b, "_plex", return_value=(200, sessions)):
+            self.assertEqual([str(self.path)], b.active_paths())
+
+    def test_preflight_requires_the_exact_standalone_mapping(self):
+        detail = ET.fromstring('<MediaContainer><Video ratingKey="900" type="movie"><Media><Part file="/media/movies/Example.2001.mkv"/></Media></Video></MediaContainer>')
+        b = backend.LiveBackend()
+        with mock.patch.object(b, "_plex", return_value=(200, detail)):
+            b._verify_plex_mapping(self.item)
+        changed = ET.fromstring('<MediaContainer><Video ratingKey="900" type="movie"><Media><Part file="/media/movies/Other.2001.mkv"/></Media></Video></MediaContainer>')
+        with mock.patch.object(b, "_plex", return_value=(200, changed)), self.assertRaises(backend.BackendError):
+            b._verify_plex_mapping(self.item)
+
+    def test_plex_delete_requires_file_absence_and_never_walks_library_base(self):
+        b = backend.LiveBackend()
+        with mock.patch.object(b, "_verify_plex_mapping"), mock.patch.object(b, "active_paths", return_value=[]), mock.patch.object(b, "_plex") as plex:
+            with self.assertRaisesRegex(backend.BackendError, "remains"):
+                b.delete_plex(self.item)
+            plex.assert_not_called()
+        self.path.unlink()  # Only the disposable fixture file is removed.
+        with mock.patch.object(b, "_verify_plex_mapping"), mock.patch.object(b, "active_paths", return_value=[]), mock.patch.object(b, "_plex", side_effect=[(200, None), (200, None), (404, None)]) as plex, mock.patch.object(backend.os, "walk", side_effect=AssertionError("Unexpected directory traversal")):
+            result = b.delete_plex(self.item)
+        self.assertTrue(result["plex_removed"])
+        self.assertTrue(self.movies.is_dir())
+        self.assertEqual(["/library/metadata/900"] * 3, [call.args[0] for call in plex.call_args_list])
+        self.assertEqual("DELETE", plex.call_args_list[1].kwargs["method"])
 
 
 class RemoteScopeTests(unittest.TestCase):

@@ -35,6 +35,13 @@ def normalize(value: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", value).casefold() if c.isalnum())
 
 
+def title_names(item: dict) -> list[str]:
+    aliases = item.get("aliases", [])
+    if not isinstance(aliases, list):
+        aliases = []
+    return [item["title"], *[name for name in aliases if isinstance(name, str)]]
+
+
 def canonical(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
 
@@ -125,7 +132,12 @@ class FileSystem:
         require(root.is_absolute() and root.parent == base and root.name not in {"", ".", ".."},
                 "A title must map to one directory immediately below its movie or TV library")
         no_symlinks(root)
-        require(not root.exists() or root.is_dir(), "The selected library root is not a directory")
+        if item.get("standalone_file"):
+            require(item["kind"] == "movie" and not item.get("arr_service") and root.suffix.lower() in VIDEO,
+                    "Only Plex-only movie video files support direct library placement")
+            require(not root.exists() or root.is_file(), "The selected library file is not a regular file")
+        else:
+            require(not root.exists() or root.is_dir(), "The selected library root is not a directory")
 
     def walk(self, root: Path, *, maximum: int = 50000,
              exclude_directory: Callable[[Path], bool] | None = None) -> list[Path]:
@@ -165,6 +177,21 @@ class FileSystem:
 
     def tree(self, item: dict) -> list[dict]:
         self.validate_item(item)
+        if item.get("standalone_file"):
+            root = Path(item["root"])
+            paths = [root] if root.exists() else []
+            # Direct-library files own only same-stem sidecars, optionally with
+            # conventional language/accessibility suffixes. Never walk the library.
+            tag = r"(?:[a-z]{2,3}(?:-[a-z]{2,4})?|forced|sdh|cc)"
+            for sibling in root.parent.iterdir():
+                if sibling.suffix.lower() not in SIDECAR:
+                    continue
+                suffix = sibling.stem.removeprefix(root.stem + ".")
+                if sibling.stem == root.stem or (sibling.stem.startswith(root.stem + ".")
+                                                and re.fullmatch(tag + r"(?:\." + tag + r")*", suffix, re.I)):
+                    no_symlinks(sibling)
+                    paths.append(sibling)
+            return [self.file(path, "library") for path in sorted(paths)]
         return [self.file(p, "library") for p in self.walk(Path(item["root"]), maximum=20000)]
 
     @staticmethod
@@ -173,10 +200,11 @@ class FileSystem:
             year = item.get("year")
             if not isinstance(year, int):
                 return False
-            return any(normalize(name[:match.start()]) == normalize(item["title"])
+            return any(normalize(name[:match.start()]) == normalize(title)
+                       for title in title_names(item)
                        for match in re.finditer(rf"(?<!\d){year}(?!\d)", name))
         match = re.search(r"(?i)(?:[ ._(-]s\d{1,2}(?:e\d{1,3})?|[ ._(-]season[ ._-]*\d+)", name)
-        return bool(match and normalize(name[:match.start()]) == normalize(item["title"]))
+        return bool(match and any(normalize(name[:match.start()]) == normalize(title) for title in title_names(item)))
 
     def staging_context(self, path: Path, item: dict) -> bool:
         return self._release_directory(path.stem, item) or any(
@@ -438,6 +466,8 @@ class Engine:
                 if x.get("collection_id") in collections and x["ref"] not in {i["ref"] for i in items}:
                     items.append(dict(x))
         require(len(items) <= 100, "Collection expansion exceeds 100 titles; use smaller explicit batches")
+        require(not any(item.get("standalone_file") for item in items),
+                "Direct-library movie files use the one-step delete command")
         # A shared or nested root with an unselected record cannot be deleted safely.
         chosen = {x["ref"] for x in items}
         for item in items:

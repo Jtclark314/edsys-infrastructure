@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 import re
 import selectors
 import shlex
+import stat
 import subprocess
 import time
 import urllib.error
@@ -31,6 +32,7 @@ MEDIA_ROOTS = {"movie": "/mnt/media/movies", "show": "/mnt/media/tv"}
 PLEX_ROOTS = {"movie": "/media/movies", "show": "/media/tv"}
 ARR_ROOTS = {"radarr": "/movies", "sonarr": "/tv"}
 REF = re.compile(r"(movie:radarr|show:sonarr|movie:plex|show:plex):([1-9][0-9]{0,9})\Z")
+MOVIE_VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".m4v", ".mov", ".ts", ".m2ts", ".wmv", ".mpg", ".mpeg"}
 
 
 class BackendError(RuntimeError):
@@ -73,9 +75,31 @@ def _part_root(path: str, kind: str) -> str:
     if not path.startswith(prefix) or str(PurePosixPath(path)) != path or any(p in (".", "..") for p in path.split("/")):
         raise BackendError("Plex media is outside the configured library")
     relative = path[len(prefix):].split("/")
+    if len(relative) == 1 and kind == "movie":
+        return _flat_movie_path(path, source="plex")
     if len(relative) < 2 or not relative[0]:
         raise BackendError("Plex media must be inside its own library directory")
     return _root(PLEX_ROOTS[kind] + "/" + relative[0], kind, source="plex")
+
+
+def _flat_movie_path(path: str, *, source: str = "local") -> str:
+    """A direct movie video is an exact-file target, never its library base."""
+    local = _root(path, "movie", source=source)
+    if PurePosixPath(local).suffix.lower() not in MOVIE_VIDEO_EXTENSIONS:
+        raise BackendError("Standalone movie media must name one direct video file")
+    return local
+
+
+def _check_standalone_file(path: str) -> None:
+    for component in [*reversed(Path(path).parents), Path(path)]:
+        try:
+            info = component.lstat()
+        except FileNotFoundError:
+            continue  # The exact file may already be gone during readback.
+        if stat.S_ISLNK(info.st_mode):
+            raise BackendError("Standalone movie paths must not contain symlinks")
+        if component == Path(path) and not stat.S_ISREG(info.st_mode):
+            raise BackendError("Standalone movie media is not a regular file")
 
 
 def _item(item: dict) -> dict:
@@ -87,6 +111,14 @@ def _item(item: dict) -> dict:
     kind, service, identity = item["ref"].split(":")
     if item.get("kind") != kind or _root(item.get("root"), kind) != item["root"]:
         raise BackendError("Media selection identity or root changed")
+    standalone = item.get("standalone_file", False)
+    if type(standalone) is not bool:
+        raise BackendError("Invalid standalone movie flag")
+    if standalone:
+        if kind != "movie" or service != "plex":
+            raise BackendError("Only unmanaged Plex movies can use standalone files")
+        _flat_movie_path(item["root"])
+        _check_standalone_file(item["root"])
     if service != "plex":
         if item.get("arr_service") != service or item.get("arr_id") != int(identity):
             raise BackendError("Media selection identity changed")
@@ -424,6 +456,7 @@ class LiveBackend:
         key = element.get("ratingKey", "")
         if not re.fullmatch(r"[1-9][0-9]{0,9}", key):
             raise BackendError("Plex returned an unsupported record identifier")
+        standalone = False
         if kind == "show":
             _, detail = self._plex("/library/metadata/" + key)
             elements = detail.findall("Directory")
@@ -436,12 +469,14 @@ class LiveBackend:
         else:
             parts = element.findall("./Media/Part")
             roots = {_part_root(x.get("file"), kind) for x in parts}
+            standalone = any(PurePosixPath(x.get("file")).parent == PurePosixPath(PLEX_ROOTS["movie"]) for x in parts)
             size = sum(int(x.get("size", "0")) for x in parts)
             has_files = bool(parts)
         if not roots:
             raise BackendError("Plex record has no exact supported library directory")
         return {"key": key, "title": _display(element.get("title")), "year": int(element.get("year")) if element.get("year", "").isdigit() else None,
-                "roots": sorted(roots), "estimated_bytes": size, "has_files": has_files}
+                "roots": sorted(roots), "estimated_bytes": size, "has_files": has_files,
+                "standalone_file": standalone}
 
     def catalog(self, kind: str = "any") -> list[dict]:
         requested_kind = _kind(kind)
@@ -458,7 +493,7 @@ class LiveBackend:
                 raise BackendError("ARR returned an unsupported media root")
             local = _root(MEDIA_ROOTS[kind] + "/" + x["container_root"][len(prefix):], kind)
             item = {k: x.get(k) for k in ("kind", "arr_service", "arr_id", "external_id", "year", "collection_id", "collection_title", "estimated_bytes", "has_files")}
-            item.update(ref=kind + ":" + service + ":" + str(x["arr_id"]), title=_display(x["title"]), root=local, plex_keys=[])
+            item.update(ref=kind + ":" + service + ":" + str(x["arr_id"]), title=_display(x["title"]), root=local, plex_keys=[], aliases=[])
             result.append(item)
             by_root.setdefault((kind, local), []).append(item)
         _, sections = self._plex("/library/sections")
@@ -497,14 +532,20 @@ class LiveBackend:
             if matches:
                 for item in matches:
                     item["plex_keys"].append(d["key"])
+                    if d["title"] and d["title"] != item["title"]:
+                        item["aliases"].append(d["title"])
+                    if d["standalone_file"]:
+                        item["mapping_blocker"] = "A standalone Plex file overlaps an ARR library directory"
                     if blocker:
                         item["mapping_blocker"] = blocker
             else:
                 result.append({"ref": kind + ":plex:" + d["key"], "kind": kind, "title": d["title"], "year": d["year"], "root": d["roots"][0],
                                "arr_service": None, "arr_id": None, "external_id": None, "collection_id": None, "collection_title": None,
-                               "plex_keys": [d["key"]], "estimated_bytes": d["estimated_bytes"], "has_files": d["has_files"], "mapping_blocker": blocker})
+                               "plex_keys": [d["key"]], "estimated_bytes": d["estimated_bytes"], "has_files": d["has_files"], "mapping_blocker": blocker,
+                               "aliases": [], **({"standalone_file": True} if d["standalone_file"] else {})})
         for item in result:
             item["plex_keys"] = sorted(set(item["plex_keys"]), key=int)
+            item["aliases"] = sorted(set(item["aliases"]))
         return result
 
     def active_paths(self) -> list[str]:
@@ -541,7 +582,7 @@ class LiveBackend:
             if len(elements) != 1 or elements[0].get("type") != item["kind"]:
                 raise BackendError("Plex record identity changed after preview")
             descriptor = self._plex_descriptor(elements[0], item["kind"])
-            if descriptor["roots"] != [item["root"]]:
+            if descriptor["roots"] != [item["root"]] or descriptor["standalone_file"] != item.get("standalone_file", False):
                 raise BackendError("Plex media directory changed after preview")
             if item["kind"] == "show":
                 _, leaves = self._plex("/library/metadata/" + key + "/allLeaves")
@@ -575,6 +616,8 @@ class LiveBackend:
         # engine.py has already removed the exact planned files. Refuse to let
         # Plex become a second filesystem-deletion route for new arrivals.
         if os.path.lexists(item["root"]):
+            if item.get("standalone_file"):
+                raise BackendError("The selected movie file remains or appeared before Plex removal; inspect status")
             if os.path.islink(item["root"]) or not os.path.isdir(item["root"]):
                 raise BackendError("Media root changed before Plex removal")
             def onerror(error):

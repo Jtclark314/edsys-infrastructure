@@ -110,6 +110,92 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(original.exists())
         self.assertFalse(remake.exists())
 
+    def test_plex_alias_resolves_title_and_associated_download_release(self):
+        selected, path = self.add_item("Canonical Title")
+        selected["aliases"] = ["Plex Display Title"]
+        folder = self.release("Plex.Display.Title.2001.1080p-GROUP")
+        other, other_path = self.add_item("Plex Display Title II", number=2)
+        result = self.deletion.run(["Plex Display Title (2001)"])
+        self.assertEqual("complete", result["state"])
+        self.assertEqual(["Canonical Title (2001)"], result["removed"])
+        self.assertFalse(path.exists())
+        self.assertFalse(folder.exists())
+        self.assertTrue(other_path.exists())
+        self.assertNotIn(other["ref"], self.backend.excluded)
+
+    def test_alias_collision_requires_clarification_without_deletion(self):
+        selected, first = self.add_item("Canonical Title")
+        selected["aliases"] = ["Plex Display Title"]
+        _, second = self.add_item("Plex Display Title", number=2)
+        result = self.deletion.run(["Plex Display Title (2001)"])
+        self.assertEqual("needs_clarification", result["state"])
+        self.assertTrue(first.exists())
+        self.assertTrue(second.exists())
+        self.assertEqual([], self.backend.calls)
+
+    def standalone_movie(self):
+        item, path = self.add_item()
+        target = self.media / "movies" / "Alpha.2001.mkv"
+        path.rename(target)
+        path.parent.rmdir()
+        item.update(root=str(target), ref="movie:plex:1001", arr_service=None, arr_id=None, standalone_file=True)
+        return item, target
+
+    def test_direct_movie_removes_exact_file_and_sidecars_preserving_library(self):
+        _, target = self.standalone_movie()
+        sidecars = [target.with_suffix(suffix) for suffix in (".nfo", ".jpg", ".en.srt", ".eng.forced.srt")]
+        retained = [target.parent / name for name in ("Alpha.2001.Sequel.jpg", "Alpha.2001.Other.Movie.jpg", "Beta.2001.mkv")]
+        for path in sidecars + retained:
+            path.write_bytes(b"fixture")
+        result = self.deletion.run(["Alpha (2001)"])
+        self.assertEqual("complete", result["state"])
+        self.assertEqual(5, result["files_removed"])
+        self.assertFalse(any(path.exists() for path in [target, *sidecars]))
+        self.assertTrue(all(path.exists() for path in retained))
+        self.assertTrue(target.parent.is_dir())
+        self.assertFalse(any(call[0] == "delete_arr" for call in self.backend.calls))
+
+    def test_direct_movie_new_sidecar_is_retained_and_reported(self):
+        _, target = self.standalone_movie()
+        arrived = target.with_suffix(".fr.srt")
+        unlink = self.fs.unlink
+        def new_sidecar(file):
+            unlink(file)
+            arrived.write_bytes(b"new arrival")
+        with mock.patch.object(self.fs, "unlink", side_effect=new_sidecar):
+            result = self.deletion.run(["Alpha (2001)"])
+        self.assertEqual("partial", result["state"])
+        self.assertEqual([], result["removed"])
+        self.assertTrue(arrived.exists())
+        self.assertFalse(any(call[0] == "delete_plex" for call in self.backend.calls))
+
+    def test_direct_movie_symlink_sidecar_blocks_without_removing_target(self):
+        _, target = self.standalone_movie()
+        outside = self.root / "outside.srt"
+        outside.write_bytes(b"keep")
+        target.with_suffix(".srt").symlink_to(outside)
+        result = self.deletion.run(["Alpha (2001)"])
+        self.assertEqual("partial", result["state"])
+        self.assertTrue(target.exists())
+        self.assertTrue(outside.exists())
+        self.assertEqual([], self.backend.calls)
+
+    def test_direct_file_rejects_series_managed_and_library_base_targets(self):
+        item, target = self.standalone_movie()
+        for changed in ({"kind": "show", "root": str(self.media / "tv" / "Alpha.mkv")},
+                        {"arr_service": "radarr"}, {"root": str(target.parent)},
+                        {"root": str(target.with_suffix(".txt"))}):
+            with self.subTest(changed=changed), self.assertRaises(CleanupError):
+                self.fs.validate_item({**item, **changed})
+        self.assertTrue(target.exists())
+
+    def test_legacy_plan_direct_file_uses_clear_one_step_error(self):
+        item, target = self.standalone_movie()
+        with self.assertRaisesRegex(CleanupError, "one-step delete"):
+            self.engine.plan([item["ref"]])
+        self.assertTrue(target.exists())
+        self.assertEqual([], self.backend.calls)
+
     def test_partial_title_never_substitutes_the_only_available_sequel(self):
         _, sequel = self.add_item("Alpha II", year=2002)
         result = self.deletion.run(["Alpha"])

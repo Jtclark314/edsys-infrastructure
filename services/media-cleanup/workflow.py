@@ -10,7 +10,7 @@ import secrets
 import time
 
 from backend import BackendError
-from engine import CleanupError, PLAN_ID, descendant, no_symlinks, normalize, require, strictly_absent
+from engine import CleanupError, PLAN_ID, descendant, no_symlinks, normalize, require, strictly_absent, title_names
 
 
 def label(item):
@@ -25,11 +25,11 @@ def resolve(titles, catalog, collections=False):
         key = normalize(name)
         require(bool(key), "A title must contain a movie or series name, not only a year")
         eligible = [x for x in catalog if year is None or x.get("year") == year]
-        exact = [x for x in eligible if normalize(x["title"]) == key]
+        exact = [x for x in eligible if any(normalize(name) == key for name in title_names(x))]
         group_key = re.sub(r"collection$", "", key)
         group = [x for x in eligible if x.get("collection_title") and
                  re.sub(r"collection$", "", normalize(x["collection_title"])) == group_key] if collections else []
-        matches = group or exact or [x for x in eligible if key in normalize(x["title"])]
+        matches = group or exact or [x for x in eligible if any(key in normalize(name) for name in title_names(x))]
         if not matches:
             missing.append(query)
         elif not group and (len(matches) > 1 or not exact):
@@ -48,10 +48,11 @@ def release_owners(catalog):
     """Index title/year identities once instead of comparing every file to every film."""
     movie_owners, show_owners = {}, {}
     for candidate in catalog:
-        if candidate["kind"] == "movie":
-            movie_owners.setdefault((normalize(candidate["title"]), candidate.get("year")), set()).add(candidate["ref"])
-        else:
-            show_owners.setdefault(normalize(candidate["title"]), set()).add(candidate["ref"])
+        for name in title_names(candidate):
+            if candidate["kind"] == "movie":
+                movie_owners.setdefault((normalize(name), candidate.get("year")), set()).add(candidate["ref"])
+            else:
+                show_owners.setdefault(normalize(name), set()).add(candidate["ref"])
 
     def owners(name):
         found = set()
@@ -178,7 +179,8 @@ class Deletion:
                     library = self.fs.tree(item)
                     downloads, roots, warnings = owned_downloads(self.fs, item, catalog)
                     entry.update(files=library + downloads, download_roots=roots, warnings=warnings)
-                    entry["item"]["relative_files"] = [{"path": str(Path(f["path"]).relative_to(item["root"])),
+                    relative_root = Path(item["root"]).parent if item.get("standalone_file") else Path(item["root"])
+                    entry["item"]["relative_files"] = [{"path": str(Path(f["path"]).relative_to(relative_root)),
                                                        "size": f["size"], "mtime_ns": f["mtime_ns"]} for f in library]
                     self.guard(entry["item"], kind)
                     self.backend.preflight([entry["item"]])
