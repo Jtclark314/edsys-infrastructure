@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI counterpart to the four fixed media-cleanup tools."""
+"""One-step media deletion, with legacy diagnostic commands."""
 import argparse
 import json
 
@@ -10,6 +10,12 @@ from engine import CleanupError, Engine
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    delete = commands.add_parser("delete", help="Resolve and remove requested titles in one step")
+    delete.add_argument("titles", nargs="*")
+    delete.add_argument("--kind", choices=["movie", "show", "any"], default="movie")
+    delete.add_argument("--include-collections", action="store_true")
+    delete.add_argument("--dry-run", action="store_true")
+    delete.add_argument("--operation-id")
     find = commands.add_parser("find", help="Resolve titles, read-only")
     find.add_argument("titles", nargs="+")
     find.add_argument("--kind", choices=["movie", "show", "any"], default="any")
@@ -29,7 +35,9 @@ def main():
     args = parser.parse_args()
     try:
         engine = Engine(LiveBackend())
-        if args.command == "find":
+        if args.command == "delete":
+            result = engine.delete(args.titles or None, args.kind, args.include_collections, args.dry_run, args.operation_id)
+        elif args.command == "find":
             result = engine.find(args.titles, args.kind, args.offset)
         elif args.command == "plan":
             result = engine.plan(args.refs, args.include_collections, not args.omit_download_copies)

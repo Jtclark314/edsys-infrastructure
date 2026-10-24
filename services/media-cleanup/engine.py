@@ -173,8 +173,8 @@ class FileSystem:
             year = item.get("year")
             if not isinstance(year, int):
                 return False
-            match = re.search(rf"(?<!\d){year}(?!\d)", name)
-            return bool(match and normalize(name[:match.start()]) == normalize(item["title"]))
+            return any(normalize(name[:match.start()]) == normalize(item["title"])
+                       for match in re.finditer(rf"(?<!\d){year}(?!\d)", name))
         match = re.search(r"(?i)(?:[ ._(-]s\d{1,2}(?:e\d{1,3})?|[ ._(-]season[ ._-]*\d+)", name)
         return bool(match and normalize(name[:match.start()]) == normalize(item["title"]))
 
@@ -306,8 +306,8 @@ class FileSystem:
             now = os.stat(p.name, dir_fd=parent, follow_symlinks=False)
             require((now.st_dev, now.st_ino, now.st_size, now.st_mtime_ns) == identity(f), "File identity changed")
             os.unlink(p.name, dir_fd=parent)
-        except OSError:
-            raise CleanupError("The file's parent directories changed or became inaccessible; inspect state") from None
+        except OSError as exc:
+            raise CleanupError(f"File removal failed: {os.strerror(exc.errno) if exc.errno else 'filesystem unavailable'}; inspect state") from None
         finally:
             os.close(parent)
         require(all(not Path(x["path"]).exists() for x in f["physical"]),
@@ -363,6 +363,11 @@ class Engine:
         self.fs = filesystem or FileSystem()
         self.store = Store(state_root or Path.home() / ".local/state/edsys-media-cleanup")
         self.clock = clock
+
+    def delete(self, titles: list[str] | None = None, kind: str = "movie", include_collections: bool = False,
+               dry_run: bool = False, operation_id: str | None = None) -> dict:
+        from workflow import Deletion
+        return Deletion(self).run(titles, kind, include_collections, dry_run, operation_id)
 
     def find(self, queries: list[str], kind: str = "any", offset: int = 0) -> dict:
         require(isinstance(queries, list) and 1 <= len(queries) <= 25, "Provide 1..25 title queries")
@@ -588,6 +593,12 @@ class Engine:
         return self._summary(value, signature)
 
     def status(self, plan_id: str) -> dict:
+        require(isinstance(plan_id, str) and bool(PLAN_ID.fullmatch(plan_id)), "Use a valid operation or plan ID")
+        if (self.store.root / (plan_id + ".delete.json")).is_file():
+            record = self.store.read(plan_id + ".delete.json")
+            require(hmac.compare_digest(record["signature"], self.store.sign(record["manifest"])), "Operation record changed")
+            return record.get("result") or {"operation_id": plan_id, "state": record["state"],
+                                            "message": "Resume this operation with media_delete(operation_id=...)"}
         p = self.store.plan(plan_id)
         j = self.store.read(plan_id + ".journal.json")
         result = {"plan_id": plan_id, "state": j["state"], "titles": self.public_items(p["items"]),

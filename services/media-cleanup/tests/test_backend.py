@@ -92,6 +92,67 @@ class MappingTests(unittest.TestCase):
         self.assertTrue(verified["arr_removed"])
         self.assertFalse(verified["plex_removed"])
 
+    def test_movie_catalog_skips_tv_listing_and_show_descriptors(self):
+        sections = ET.fromstring('<MediaContainer><Directory key="1" type="movie"><Location path="/media/movies"/></Directory><Directory key="2" type="show"><Location path="/media/tv"/></Directory></MediaContainer>')
+        listing = ET.fromstring('<MediaContainer><Video ratingKey="900" type="movie" title="Example" year="2001"><Media><Part file="/media/movies/Example (2001)/film.mkv" size="10"/></Media></Video></MediaContainer>')
+        b = backend.LiveBackend()
+        with mock.patch.object(backend, "_run_remote", return_value=[]) as remote, mock.patch.object(b, "_plex", side_effect=[(200, sections), (200, listing)]) as plex:
+            results = b.catalog("movie")
+        remote.assert_called_once_with({"operation": "catalog", "kind": "movie"})
+        self.assertEqual(["/library/sections", "/library/sections/1/all?includeGuids=1"], [call.args[0] for call in plex.call_args_list])
+        self.assertEqual(["movie:plex:900"], [item["ref"] for item in results])
+
+    def test_targeted_verification_does_not_rebuild_catalog(self):
+        selected = movie(plex_keys=["123"])
+        arr = [{"ref": selected["ref"], "arr_removed": True, "import_exclusion_verified": True}]
+        b = backend.LiveBackend()
+        with mock.patch.object(backend, "_run_remote", return_value=arr), mock.patch.object(b, "catalog", side_effect=AssertionError("Unexpected full catalogue rebuild")), mock.patch.object(b, "_plex", return_value=(404, None)) as plex:
+            verified = b.verify([selected], check_catalog=False)
+        self.assertTrue(verified["arr_removed"])
+        self.assertTrue(verified["plex_removed"])
+        self.assertTrue(verified["exclusions_verified"])
+        plex.assert_called_once_with("/library/metadata/123", missing=True)
+
+    def test_invalid_scope_fails_before_any_transport(self):
+        b = backend.LiveBackend()
+        with mock.patch.object(backend, "_run_remote") as remote, mock.patch.object(b, "_plex") as plex:
+            for method in [b.catalog, b.active_download_refs]:
+                with self.assertRaises(backend.BackendError):
+                    method("music")
+        remote.assert_not_called()
+        plex.assert_not_called()
+
+
+class RemoteScopeTests(unittest.TestCase):
+    def setUp(self):
+        self.ns = {}
+        definitions = backend.REMOTE_HELPER.split("try:\n raw=sys.stdin.buffer.read", 1)[0]
+        exec(compile(definitions, "<remote-scope-fixture>", "exec"), self.ns)
+
+    def test_movie_catalog_never_calls_sonarr(self):
+        def api(service, path, **kwargs):
+            self.assertEqual("radarr", service)
+            if path == "/collection":
+                return 200, []
+            self.assertEqual("/movie", path)
+            return 200, [{"id": 12, "tmdbId": 99, "title": "Example", "year": 2001, "path": "/movies/Example (2001)"}]
+        self.ns["api"] = api
+        result = self.ns["execute"]({"operation": "catalog", "kind": "movie"})
+        self.assertEqual(["movie"], [item["kind"] for item in result])
+
+    def test_show_catalog_never_calls_radarr(self):
+        def api(service, path, **kwargs):
+            self.assertEqual(("sonarr", "/series"), (service, path))
+            return 200, [{"id": 12, "tvdbId": 99, "title": "Example", "year": 2001, "path": "/tv/Example"}]
+        self.ns["api"] = api
+        result = self.ns["execute"]({"operation": "catalog", "kind": "show"})
+        self.assertEqual(["show"], [item["kind"] for item in result])
+
+    def test_movie_queue_reads_only_radarr(self):
+        self.ns["queue_refs"] = mock.Mock(return_value=["movie:radarr:12"])
+        self.assertEqual(["movie:radarr:12"], self.ns["execute"]({"operation": "active_downloads", "kind": "movie"}))
+        self.ns["queue_refs"].assert_called_once_with("radarr")
+
 
 class RemoteDeletionTests(unittest.TestCase):
     def setUp(self):

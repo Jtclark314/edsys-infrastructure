@@ -105,6 +105,12 @@ def _display(value) -> str:
     return "".join(c for c in str(value or "") if ord(c) >= 32)[:400]
 
 
+def _kind(value: str) -> str:
+    if value not in {"movie", "show", "any"}:
+        raise BackendError("kind must be movie, show or any")
+    return value
+
+
 # The only remote program dispatched over the existing SSH route. Its stdin is
 # bounded JSON data; no request can add a URL, path, program or API operation.
 REMOTE_HELPER = r'''
@@ -247,13 +253,19 @@ def verify_deleted(service,path,external):
 def execute(req):
  operation=req.get('operation')
  if operation=='catalog':
-  collections={x['tmdbId']:x for x in api('radarr','/collection')[1]}
+  kind=req.get('kind','any')
+  if kind not in ('movie','show','any'):raise Error('Unsupported media kind')
+  collections={x['tmdbId']:x for x in api('radarr','/collection')[1]} if kind!='show' else {}
   result=[]
   for service,path in [('radarr','/movie'),('sonarr','/series')]:
+   if kind=='movie' and service!='radarr' or kind=='show' and service!='sonarr':continue
    for item in api(service,path)[1]:
     result.append(projection(service,item,collections))
   return result
- if operation=='active_downloads':return queue_refs('radarr')+queue_refs('sonarr')
+ if operation=='active_downloads':
+  kind=req.get('kind','any')
+  if kind not in ('movie','show','any'):raise Error('Unsupported media kind')
+  return (queue_refs('radarr') if kind!='show' else [])+(queue_refs('sonarr') if kind!='movie' else [])
  if operation=='preflight':
   items=req.get('items',[])
   return preflight(items,files=all('relative_files' in item for item in items))
@@ -431,13 +443,16 @@ class LiveBackend:
         return {"key": key, "title": _display(element.get("title")), "year": int(element.get("year")) if element.get("year", "").isdigit() else None,
                 "roots": sorted(roots), "estimated_bytes": size, "has_files": has_files}
 
-    def catalog(self) -> list[dict]:
-        raw = _run_remote({"operation": "catalog"})
+    def catalog(self, kind: str = "any") -> list[dict]:
+        requested_kind = _kind(kind)
+        raw = _run_remote({"operation": "catalog", "kind": requested_kind})
         result = []
         by_root = {}
         for x in raw:
             service = x["arr_service"]
             kind = x["kind"]
+            if requested_kind != "any" and kind != requested_kind:
+                continue
             prefix = ARR_ROOTS[service] + "/"
             if not x["container_root"].startswith(prefix):
                 raise BackendError("ARR returned an unsupported media root")
@@ -451,7 +466,7 @@ class LiveBackend:
         show_elements = []
         for section in sections.findall("Directory"):
             kind = "movie" if section.get("type") == "movie" else "show" if section.get("type") == "show" else None
-            if not kind or {x.get("path") for x in section.findall("Location")} != {PLEX_ROOTS[kind]}:
+            if not kind or (requested_kind != "any" and kind != requested_kind) or {x.get("path") for x in section.findall("Location")} != {PLEX_ROOTS[kind]}:
                 continue
             key = section.get("key", "")
             if not key.isdigit():
@@ -513,8 +528,8 @@ class LiveBackend:
                         paths.append(MEDIA_ROOTS[kind] + p[len(PLEX_ROOTS[kind]):])
         return sorted(set(paths))
 
-    def active_download_refs(self) -> set[str]:
-        return set(_run_remote({"operation": "active_downloads"}))
+    def active_download_refs(self, kind: str = "any") -> set[str]:
+        return set(_run_remote({"operation": "active_downloads", "kind": _kind(kind)}))
 
     def _verify_plex_mapping(self, item: dict):
         item = _item(item)
@@ -578,12 +593,17 @@ class LiveBackend:
             results.append({"rating_key": key, "http_status": status, "removed": True})
         return {"ref": item["ref"], "plex_removed": True, "records": results}
 
-    def verify(self, items: list[dict]) -> dict:
+    def verify(self, items: list[dict], *, check_catalog: bool = True) -> dict:
+        if type(check_catalog) is not bool:
+            raise BackendError("check_catalog must be a boolean")
         managed = _remote_items(items)
         arr_results = {x["ref"]: x for x in _run_remote({"operation": "verify", "items": managed})} if managed else {}
         # Native integrations can replace record IDs. A fresh catalogue catches
         # a recreated ARR/Plex entry under a new identifier at the same root.
-        current_catalog = self.catalog()
+        # One-step cleanup can instead read back exact selected IDs without
+        # rebuilding the entire Plex catalogue after each operation.
+        kinds = {x["kind"] for x in items}
+        current_catalog = self.catalog(next(iter(kinds)) if len(kinds) == 1 else "any") if check_catalog else []
         results = []
         for item in items:
             item = _item(item)
