@@ -151,6 +151,18 @@ if [[ "${BACKUP_STATUS}" -ne 0 ]]; then
   fail "restic backup failed with exit code ${BACKUP_STATUS}"
 fi
 
+# Local Immich originals use a separate direct-file snapshot in this repository.
+# Its exact scope includes original videos without weakening global exclusions.
+# The existing collector staged the matching database before this file backup;
+# the helper accepts success only after every reference is found in the snapshot.
+if [[ "${DRY_RUN}" != "true" && "${RUN_COLLECTION}" == "true" && "${REMOTE_COLLECTION_ENABLED}" == "true" && -e /etc/edsys-backup/immich-local.json ]]; then
+  local_immich_helper="${BACKUP_ROOT}/scripts/edsys-immich-local.py"
+  [[ -r "${local_immich_helper}" ]] || fail "Local Immich backup helper missing"
+  /usr/bin/nice -n 15 /usr/bin/ionice -c 2 -n 7 /usr/bin/python3 "${local_immich_helper}" backup \
+    --stage-root "${STAGING_DIR}/image-originals" \
+    2>&1 | tee -a "${LOG_FILE}" || fail "Local Immich originals snapshot failed; critical-state snapshot remains retained"
+fi
+
 SNAPSHOT_ID=""
 if [[ "${DRY_RUN}" != "true" ]]; then
   SNAPSHOT_ID="$(restic --retry-lock "${RESTIC_LOCK_RETRY}" snapshots --tag "${RUN_ID}" --json | jq -r 'if length > 0 then (max_by(.time).short_id // max_by(.time).id // "") else "" end')"

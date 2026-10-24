@@ -179,6 +179,94 @@ exports and encrypted snapshots.
 
 ## Local image and Immich originals — deployed October 20, 2026
 
+### Local Immich migration — October 24, 2026
+
+The local deployment on 9950x uses `edsys-immich-local.py`. Activate it only
+after the existing instance has been transferred and accepted: install the
+reviewed helper beside `edsys-image-originals.py`, deploy the reviewed backup
+entrypoint, and create root-owned mode-0600
+`/etc/edsys-backup/immich-local.json` from `immich-local.example.json`. Fill
+`media_uuid` and `nvme_uuid` from the independently verified storage identities,
+matching the application's private `storage.env`, then change `enabled` to true.
+The example contains placeholders, never live filesystem identities.
+An absent activation file retains the remote collector.
+An invalid activation file fails closed; it does not silently fall back to
+the stopped old instance. Do not invoke the full backup installer.
+
+Exact storage guards compare the two private expected UUIDs to the dedicated
+photo ext4 mount at `/mnt/immich-library` and AI-store ext4 mount at
+`/mnt/ai-store`. Missing, malformed, identical or mismatched identities fail
+closed. Live identities remain only in the root-private activation policy.
+The running database must bind its data from
+`/mnt/ai-store/immich/postgres`. Referenced originals must resolve through
+approved container binds onto the dedicated SSD, with no symlink or derivative
+substitution. The application configuration remains private at
+`/mnt/ai-store/immich/config`.
+
+The existing daily collector stages only a consistent PostgreSQL dump, roles,
+configuration/image identities, original-reference metadata and the small local
+image archive. The database/reference list uses one exported read-only snapshot;
+the dump is fully decoded before publication. Original photos and videos are
+not copied into staging. The original legacy archive generations stay intact.
+The two newest completed local metadata generations are retained after acceptance.
+
+After the ordinary critical-state snapshot, the existing backup entrypoint
+creates a separate `immich-originals`/`immich-local-v1` snapshot in the same
+encrypted repository while holding its existing backup lock. It selects the
+original `upload`, `library`, `profile`, and any legacy-library folders directly,
+plus existing storage-marker files for regenerable thumbnail/video/backup folders,
+plus staged recovery and private configuration. It deliberately does not use
+the general bulk-media/video exclusion file for this exact photo-library scope.
+The existing global exclusion policy, timers, offsite destination and retention
+settings are unchanged. Stable source-root paths preserve ordinary snapshot
+retention grouping; generation-specific paths must not be passed as snapshot
+roots. A dry run or `--no-collect` run does not make a new Immich snapshot.
+
+Every database original reference and every staged recovery file must appear
+at the expected size in the exact encrypted snapshot before status becomes
+healthy. Original metadata is checked before and after that snapshot. New uploads
+after the database capture are harmless extras; removal/change of a captured
+original refuses acceptance. A failed stage cannot reuse a previous checkpoint
+as fresh success. Status retains the database capture time separately from
+snapshot verification time. Failed snapshots are retained as evidence and never
+reported as accepted; no automatic forget, prune, unlock or service stop occurs
+inside this helper. Normal enclosing retention is the existing backup policy.
+
+This removes the 64 GiB whole-library archive and three-full-copy staging
+requirements for the new instance. Safety limits remain: up to one million
+assets within a bounded 256 MiB reference response, a six-hour maximum age for
+the staged database, 15 minutes for the small stage, and a configurable direct
+backup deadline of up to six hours. Large-library initial seeding, available
+encrypted-repository capacity, and offsite bandwidth still need measurement
+before an iCloud import. No iCloud access or import is performed by this helper.
+
+Qualification uses the existing backup lock, a scoped local stage/snapshot and
+an isolated encrypted restore. Verify the recovered database dump, both recovery
+manifests and every restored original against its source hashes; never restore
+over production. Exact Google Drive snapshot parity and direct-offsite recovery
+remain independent gates. Do not claim a full running application restore based
+only on a readable dump or successful snapshot.
+
+The October 24 activation passed a scoped local snapshot and encrypted restore:
+all 433 database-referenced originals matched their source SHA-256 hashes and
+all eighteen existing local image paths remained protected. The existing offsite
+mirror then copied snapshot
+`d67567d47a8f8e8b128f61018a4dd03b5a61655744f510ab9c0c3e7c5802ce66`.
+Direct offsite recovery matched the database dump and an original video. That
+recovered dump was actually restored into a separate exact-image PostgreSQL
+14.19 container with no network or published ports; all 433 asset/reference
+tuples matched, with vchord 0.4.3 and vector 0.8.1. The disposable container and
+its private database/bootstrap state were removed. The natural daily cycle
+remains to be observed. This scoped backup proof does not establish recovery
+of an imported iCloud collection.
+
+Offline checks:
+
+```bash
+python3 -m unittest discover -s scripts/backup/tests -p 'test_immich_local.py' -v
+python3 -m unittest discover -s scripts/backup/tests -p 'test_image_originals.py' -v
+```
+
 The deployed `edsys-image-originals.py` extends the existing daily remote
 collector. Live collection and isolated database recovery passed the scoped
 October 20 qualification described below.

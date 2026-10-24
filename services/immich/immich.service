@@ -1,0 +1,31 @@
+[Unit]
+Description=Immich with verified local photo and database storage
+Requires=docker.service
+PartOf=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+RequiresMountsFor=/mnt/immich-library /mnt/ai-store
+BindsTo=mnt-immich\x2dlibrary.mount mnt-ai\x2dstore.mount
+After=mnt-immich\x2dlibrary.mount mnt-ai\x2dstore.mount
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+UMask=0077
+EnvironmentFile=/mnt/ai-store/immich/config/storage.env
+ExecStartPre=/usr/bin/python3 /opt/edsys-immich/guard.py --media-uuid ${IMMICH_MEDIA_UUID} --nvme-uuid ${IMMICH_NVME_UUID}
+ExecStart=/usr/bin/docker compose --project-name edsys-immich --project-directory /mnt/ai-store/immich/config -f /mnt/ai-store/immich/config/compose.yaml up --no-build --pull never --abort-on-container-failure
+ExecStop=/usr/bin/docker compose --project-name edsys-immich --project-directory /mnt/ai-store/immich/config -f /mnt/ai-store/immich/config/compose.yaml stop --timeout 60
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=180
+TimeoutStopSec=180
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+StandardOutput=append:/mnt/ai-store/immich/logs/service.log
+StandardError=inherit
+
+[Install]
+WantedBy=multi-user.target docker.service

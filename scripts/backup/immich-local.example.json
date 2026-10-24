@@ -1,0 +1,7 @@
+{
+  "format": 1,
+  "enabled": false,
+  "media_uuid": "<MEDIA_FILESYSTEM_UUID>",
+  "nvme_uuid": "<INTERNAL_NVME_FILESYSTEM_UUID>",
+  "backup_timeout_seconds": 14400
+}

@@ -1,0 +1,12 @@
+[Unit]
+Description=Existing Immich LAN endpoint compatibility socket
+Wants=network-online.target
+After=network-online.target
+
+[Socket]
+ListenStream=192.168.50.78:2283
+FreeBind=yes
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target

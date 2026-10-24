@@ -672,6 +672,12 @@ def main():
     parser.add_argument("--known-hosts", default="/etc/edsys-backup/known_hosts")
     parser.add_argument("--deadline-seconds", type=int, default=900)
     args = parser.parse_args()
+    # Activated only after the existing instance has moved to the guarded local
+    # SSD. An absent activation file preserves the original remote collector.
+    if args.action in ("stage", "verify") and Path("/etc/edsys-backup/immich-local.json").exists():
+        helper = Path(__file__).with_name("edsys-immich-local.py")
+        return subprocess.call([sys.executable, str(helper), args.action,
+                                "--stage-root", args.stage_root])
     if not 1 <= args.deadline_seconds <= 900:
         parser.error("deadline must be between 1 and 900 seconds")
     END = time.monotonic() + args.deadline_seconds
