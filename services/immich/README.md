@@ -1,127 +1,162 @@
 # Immich on 9950x
 
-Status: the existing **2.5.6** instance moved to 9950x on October 24, 2026.
-Production storage/API checks, local encrypted originals restore, exact offsite
-recovery and an actual isolated PostgreSQL restore/query passed. Current
-acceptance belongs in `EdSys-Master/docs/IMMICH.md`. The retained family-services
-application is stopped, with all four container restart policies disabled.
+Production version/backend acceptance: **3.3.5 / CUDA ML / optimized models v2; final acceptance October 25, 2026 Eastern**.
+The existing 2.5.6 instance moved to 9950x on October 24, 2026 Eastern;
+the subsequent authorized iCloud copy and pre-upgrade indexing were verified.
+Current acceptance belongs in `EdSys-Master/docs/IMMICH.md`. The retained
+family-services application is stopped with all four container restart policies
+disabled. iCloud content remains unchanged; no import or processing schedule
+was added.
 
 ## Scope and storage
 
-The owner approved moving the existing Immich instance to 9950x while preserving
-version **2.5.6**, existing accounts/library, rollback and iCloud. No iCloud
-collection, account change, photo deletion or application upgrade is part of
-this migration. The isolated qualification copy uses disposable authentication
-and a synthetic image; its database is restored from the original checkpoint
-before production use.
-
-- Complete media/upload tree: `/mnt/immich-library/upload`.
+- Originals and new uploads: `/mnt/immich-library/upload`, on the dedicated
+  PNY 2 TB SSD using its retained ext4 filesystem.
 - Empty legacy library mapping: `/mnt/immich-library/legacy-library`.
-- Media filesystem: ext4 identity independently verified against
-  `IMMICH_MEDIA_UUID` in the root-private runtime `storage.env`.
-- Internal state/configuration/recovery: `/mnt/ai-store/immich`.
-- Internal filesystem: ext4 identity independently verified against
-  `IMMICH_NVME_UUID` in that same private file.
-- Postgres, Redis, server data and model cache remain on internal NVMe.
+- PostgreSQL, Redis, server data, configuration and model cache:
+  internal NVMe under `/mnt/ai-store/immich`.
+- Expected filesystem identities: `IMMICH_MEDIA_UUID` and `IMMICH_NVME_UUID`
+  in the root-private runtime `storage.env`; never copy their live values here.
 
-Private source Compose/environment, account data, image exports, originals,
-database dumps, hashes, access tokens and logs never belong in this repository.
-`render_compose.py` consumes a protected resolved source configuration and writes
-the protected runtime Compose file at
-`/mnt/ai-store/immich/config/compose.yaml`, mode 0600. It preserves application
-environment values and pins all four existing image IDs with pull disabled.
-The server explicitly sets `IMMICH_MEDIA_LOCATION=/usr/src/app/upload`, so
-new originals use the SSD upload bind. `/data` remains only a compatibility
-mapping on internal storage. A disposable candidate upload's database path
-and physical host file were checked against this root and matched exactly;
-the final service repeated that check successfully on the SSD.
-The rendered JSON is valid Compose YAML; never print it because it includes
-the original credentials. Do not run a Compose update/pull during migration.
+The SSD's former 1,365 media files / 621,141,235,058 logical bytes were relocated
+to the internal 2 TB HDD and Node0 NFS branch with complete SHA-256 and native
+metadata verification. Only the verified legacy paths and 118 emptied
+directories were removed after application and recovery acceptance. At that
+stage, before the later import, about 1.86 TB / 1.69 TiB was available. Plex
+and the five paused media automation services were restored. The WD 5 TB drive
+had four pending sectors at the migration check; its mergerfs branch remains
+`=NC`, preserving existing access while preventing new allocation. Replacement
+or repair is separate work. See `EdSys-Master/docs/MEDIA_STORAGE.md`.
 
-## Service and access
+The copy reconciliation accounted for 11,515 unique source media files:
+7,432 stills, 250 visible videos and 3,833 hidden Live Photo clips. All 433 prior
+assets remained unchanged. Original-byte readback and all 3,833 expected Live
+Photo relationships passed. The source's 7,691 logical records resolve to
+7,682 unique masters: nine aliases across six shared-master groups were proved,
+rather than treated as missing downloads. All 7,254 managed XMPs passed; 428
+prior-duplicate XMP exceptions and separate alias evidence were preserved in
+the private encrypted recovery scope without overwriting prior metadata.
 
-CPU-only limits: server four CPU/4 GiB; Postgres two CPU/2 GiB; ML two CPU/3 GiB;
-Redis half a CPU/256 MiB. This uses the existing CPU models and cache, without
-claiming or configuring GPU acceleration.
+All 18 queues and per-asset indexing prerequisites passed before upgrade, and
+temporary CPU tuning was restored. Exact 2.5.6 video-policy checks accounted
+for all 250 visible videos: 85 nonempty encoded files on the SSD and 165 valid
+no-transcode/no-remux originals. GPU ML does not change video transcoding policy.
 
-Production binds only `127.0.0.1:2283` and `192.168.50.50:2283`. There is no
-new public, Funnel or Tailnet listener. The final private Docker subnet is
-`10.254.228.16/28`; the isolated candidate uses internal `10.254.228.0/28` with
-no host publication. These scoped subnets were checked against current Docker
-networks and host routes because the host's automatic pools are exhausted.
-Candidate probes run from the host against its private bridge address.
+Private source Compose/environment, account data, originals, database dumps,
+inventories, hashes, authentication material and logs never belong in Git/RAG.
+`render_compose.py` consumes a protected resolved source and writes protected
+Compose JSON/YAML at `/mnt/ai-store/immich/config/compose.yaml`, mode 0600.
+`IMMICH_MEDIA_LOCATION=/usr/src/app/upload` keeps new originals on the SSD;
+`/data` is an internal-storage compatibility mapping. Actual upload path and
+byte checks passed. Do not print rendered configuration.
+
+## Explicit version and ML profiles
+
+The reviewed profiles are `profiles/v3.3.5-cpu.json` and
+`profiles/v3.3.5-cuda.json`. They pin server and matching ML image manifests;
+PostgreSQL and Redis retain their qualified image identities. Supply the
+selected file through `render_compose.py --profile`. A source using a reviewed
+3.3.5 tag or digest refuses an omitted profile, preventing accidental rendering
+of legacy 2.5.6 images. This automatic detection does not cover unreviewed
+future image versions. Legacy source artifacts retain their
+deliberate pre-upgrade/rollback behavior.
+
+Qualify a separate CPU candidate first using isolated matching database and
+media paths. Accept production CPU behavior before changing only the matching
+ML backend to CUDA. Do not point a disposable candidate at the production PG
+directory or start both clusters on the same data. Runtime acceptance:
+
+- CPU 3.3.5 storage, migration, API and original/index parity:
+  **verified in production before CUDA cutover, including semantic search**.
+- CUDA provider/model behavior and bounded coexistence/release:
+  **verified with actual GPU-backed ML and a disposable upload/index/delete test**;
+  **verified GPU attribution and idle model release; Plex/Frigate remained healthy; minimum observed free VRAM 1,002 MiB (observed headroom, not a guarantee)**.
+- Final source and indexing parity:
+  **verified all 11,515 asset/reference IDs, 3,833 Live links, accounts/collections, all enabled indexing prerequisites and 19 idle queues in two snapshots 30 seconds apart**.
+
+The profiles use model revision `v2` while retaining `ViT-B-32__openai`,
+`buffalo_l` and `PP-OCRv5_mobile`. ML has one worker, one request thread,
+batch size one for face/OCR work, model TTL 60 seconds and no preload settings.
+Only the CUDA ML service receives GPU device 0. Server video policy is retained.
+The normal caps remain server four CPU/4 GiB, PostgreSQL two CPU/2 GiB,
+ML two CPU/3 GiB and Redis half a CPU/256 MiB.
+
+At the owner's request, the three new v3 scheduled integrity scans—checksum,
+missing-file and untracked-file scans—are explicitly disabled. Existing nightly
+processing and backup schedules are unchanged. The v3 migration normalizes the
+Opus codec identifier from `libopus` to `opus` without changing its meaning.
+The previous `accelDecode=false` setting was explicitly restored; hardware video
+acceleration remains disabled. CUDA access remains confined to ML.
+
+## Guarded service and access
+
+Production binds `127.0.0.1:2283` and `192.168.50.50:2283`. The final private
+Docker subnet is `10.254.228.16/28`; the isolated candidate uses internal
+`10.254.228.0/28` without a host port. No additional listener is introduced.
 
 Install `guard.py` root-owned under `/opt/edsys-immich/` and `immich.service`
-under `/etc/systemd/system/`. Use `storage.env.example` as the template and put
-the independently verified expected UUIDs into root-owned mode-0600
-`/mnt/ai-store/immich/config/storage.env`; the tracked unit contains no live
-filesystem identities. The unit requires and binds to both mount units,
-checks exact writable local filesystem UUIDs, canonical data directories and
-the media marker before each start. It also requires an existing PostgreSQL 14
-cluster (`PG_VERSION` and its control file), refusing an empty database path.
-The unit uses foreground Compose. Every
-container has `restart: no` and bind mounts disable automatic host-path
-creation. Docker cannot independently restart this stack onto missing media.
-`PartOf=docker.service` and the unit's Docker Wants link propagate normal
-daemon stop/restart/start through the guard. Never set container restart policy
-back to `unless-stopped`.
+under `/etc/systemd/system/`. Populate root-owned mode-0600
+`/mnt/ai-store/immich/config/storage.env` from `storage.env.example` with
+independently verified identities. The unit requires and binds to both mount
+units, verifies exact writable filesystems/canonical directories/media marker,
+and refuses an empty PostgreSQL 14 directory. Foreground Compose uses
+`restart: no` for every container and disables automatic host-path creation.
+Docker stop/restart propagates through the systemd guard.
 
 ```bash
-sudo systemctl enable --now immich.service
 sudo systemctl status immich.service
 sudo systemctl restart immich.service
 ```
 
-Do not start the production Compose project directly. The systemd guard is the
-production start path. The protected service log is
-`/mnt/ai-store/immich/logs/service.log`.
+The guarded systemd unit is the production start path. Do not start production
+Compose directly or restore `unless-stopped` restart policies. Its protected
+log is `/mnt/ai-store/immich/logs/service.log`.
 
-The old exact LAN endpoint `192.168.50.78:2283` is retained with a temporary
-socket proxy on family-services. Install the source `legacy-proxy.socket` and
-`.service` as `edsys-immich-legacy.socket` and `.service` only after stopping
-the old Immich containers. The proxy forwards to `192.168.50.50:2283` and
-preserves existing mobile/server URLs. Until clients move to the new canonical
-address, they depend on the old VM and this proxy. Other family-services apps
-remain on VM202.
-
-All four retained source containers have `restart: no`. No source system/user
-unit, cron/boot command, Portainer stack label or active Swarm controller was
-found for Immich. Do not run the old Compose project while the new instance is
-active; its original configuration remains private for deliberate rollback.
+The old `192.168.50.78:2283` endpoint forwards to `.50:2283` through the temporary
+`edsys-immich-legacy` socket proxy on family-services. Unchanged clients still
+depend on that VM. Original source containers remain stopped with restart
+disabled, and unrelated family-services applications stay on their host.
 
 ## Verification and recovery
 
-Focused source checks:
+Focused source checks, from the infrastructure repository:
 
 ```bash
 python3 -m unittest discover -s services/immich -p 'test_guard.py' -v
 python3 -m unittest discover -s services/immich -p 'test_render.py' -v
-sudo python3 services/immich/test_systemd_guard.py
+python3 -m unittest discover -s services/immich -p 'test_runtime_profiles.py' -v
 ```
 
-The last command creates only uniquely owned disposable mock units, exercises
-real systemd start/stop/restart and missing/wrong-storage refusal, then removes
-its units and state. It does not restart Docker or any production service.
+The optional `sudo python3 services/immich/test_systemd_guard.py` exercises
+uniquely owned disposable mock units and removes them. It does not restart
+Docker or production. Physical host reboot/USB unplug and owner phone use
+remain separate acceptance claims.
 
-Acceptance must preserve exact database asset references, original-file hashes,
-accounts and source image identities; verify authenticated original downloads,
-previews, a disposable upload and CPU ML processing on the isolated copy;
-repeat storage/application probes after final transfer; and verify missing/wrong
-storage refuses startup. A host reboot or physical USB unplug is a separate
-acceptance claim. Phone acceptance remains owner verification.
+Backup integration belongs to `scripts/backup/edsys-immich-local.py` and the
+existing encrypted Restic framework. Referenced originals go directly to
+encrypted snapshots; consistent database/configuration/image/reference
+checkpoints are staged. All 18 existing local image paths, existing schedules,
+retention and earlier recovery stages remain protected. Scoped Immich staging
+does not establish health of the unrelated failing broad collector.
 
-Backup integration is owned by `scripts/backup/edsys-immich-local.py` and the
-existing encrypted Restic framework; follow its README. Local mode is activated
-and its encrypted restore verified all 433 referenced originals. The exact
-snapshot was found offsite; a direct offsite DB/video restore matched, and an
-isolated same-image PostgreSQL restore returned all 433 matching reference
-tuples. The original schedule/retention and old recovery stages are retained. Direct
-original-file backup replaces full-library archive staging. The eventual iCloud
-library still requires capacity planning for the independent backup repository
-and an offsite recovery check.
+An initial local recovery restored all 11,515 originals and 7,254 managed XMPs.
+Final pre-upgrade and post-upgrade recovery reused that independent payload only
+after authenticating unchanged old/new Restic media-content references and
+freshly hashing all 18,769 files. Both final checkpoints passed 60 selected
+direct offsite readbacks of originals, XMP and recovery/source metadata.
+The final 3.3.5 recovery also restored six recovery members directly from
+offsite and actually restored its database into isolated PostgreSQL 14,
+verifying exact assets, 3,833 Live links, accounts, 99 people groups and the
+three disabled integrity schedules. The test database is stopped and retained.
+This does not establish a fresh roughly 50 GB plaintext offsite media restore.
+Exact snapshot identities and raw receipts remain private. Existing backup
+schedules/retention and all earlier recovery stages remain protected; this
+scoped acceptance does not establish health of the unrelated broad collector.
 
-Rollback stops the new guarded service/proxy before restarting the retained old
-source containers with their captured image/configuration identities. Preserve
-all post-cutover photo/account changes before any database rollback. Old source
-media/database/configuration and encrypted checkpoints are retained; do not run
-both production instances or restore an old database over newer uploads.
+Rollback from 3.3.5 must stop the guarded stack and use the matching retained
+pre-upgrade 2.5.6 PostgreSQL directory plus old Compose/images. Never start
+2.5.6 against the database after 3.3.5 migrations. The older family-services
+checkpoint predates the import and is not its rollback database. Protect new
+uploads/account changes before any rollback; retain original media, matched
+cold checkpoints and encrypted backups. Full running-application disaster
+recovery with regenerated derivatives was not exercised by file/dump recovery.

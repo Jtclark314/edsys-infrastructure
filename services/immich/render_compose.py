@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render a private, same-image Immich stack from an existing resolved config."""
+"""Render guarded private Immich configuration with explicit reviewed upgrade profiles."""
 
 from __future__ import annotations
 
@@ -20,11 +20,43 @@ NAMES = {"immich-server": "server", "database": "postgres", "redis": "redis", "i
 LIMITS = {"immich-server": (4, "4g"), "database": (2, "2g"), "redis": (0.5, "256m"), "immich-machine-learning": (2, "3g")}
 
 
+# Exact public linux/amd64 manifests resolved read-only from GHCR on 2026-10-24 Eastern.
+# Database and Redis keep the existing qualified image IDs.
+UPGRADE_IMAGES = {
+    "server": "ghcr.io/immich-app/immich-server:v3.3.5@sha256:1ab81816384ce8e782fdbdb2b7703ab68fd12442bc311a53118dc0d74c2ced24",
+    "cpu": "ghcr.io/immich-app/immich-machine-learning:v3.3.5@sha256:1270449e47e1fcd703661c4d728b7904d89aacfb715662c26116cc9dd73f266b",
+    "cuda": "ghcr.io/immich-app/immich-machine-learning:v3.3.5-cuda@sha256:24ed8ee229b5ed2c9dbfd923a1e17276f97beeefc58992953b2afe2dc860a723",
+}
+
+
+def images_for(profile: dict | None) -> dict:
+    images = dict(IMAGES)
+    if profile is None:
+        return images
+    if (set(profile) != {"version", "backend", "model_revision"}
+            or profile["version"] != "v3.3.5"
+            or profile["backend"] not in ("cpu", "cuda")
+            or profile["model_revision"] != "v2"):
+        raise ValueError("unapproved_upgrade_profile")
+    images["immich-server"] = UPGRADE_IMAGES["server"]
+    images["immich-machine-learning"] = UPGRADE_IMAGES[profile["backend"]]
+    return images
+
+
 def bind(source: Path, target: str) -> dict:
     return {"type": "bind", "source": str(source), "target": target, "bind": {"create_host_path": False}}
 
 
-def render(source: dict, state: Path, media: Path, candidate: bool) -> dict:
+def render(source: dict, state: Path, media: Path, candidate: bool, profile: dict | None = None) -> dict:
+    if profile is None:
+        reviewed = {image.rsplit("@", 1)[-1] for image in UPGRADE_IMAGES.values()}
+        reviewed_tags = {image.split("@", 1)[0] for image in UPGRADE_IMAGES.values()}
+        application = source.get("services", {})
+        if any(application.get(role, {}).get("image", "").rsplit("@", 1)[-1] in reviewed
+               or application.get(role, {}).get("image", "").split("@", 1)[0] in reviewed_tags
+               for role in ("immich-server", "immich-machine-learning")):
+            raise ValueError("explicit_upgrade_profile_required")
+    images = images_for(profile)
     if set(source.get("services", {})) != set(IMAGES):
         raise ValueError("unexpected_source_services")
     result = copy.deepcopy(source)
@@ -35,7 +67,7 @@ def render(source: dict, state: Path, media: Path, candidate: bool) -> dict:
     subnet = "10.254.228.0/28" if candidate else "10.254.228.16/28"
     result["networks"] = {"default": {"internal": candidate, "ipam": {"config": [{"subnet": subnet}]}}}
     for service, row in result["services"].items():
-        row["image"] = IMAGES[service]
+        row["image"] = images[service]
         row["pull_policy"] = "never"
         prefix = "immich-candidate-" if candidate else "immich-"
         row["container_name"] = prefix + NAMES[service]
@@ -52,6 +84,26 @@ def render(source: dict, state: Path, media: Path, candidate: bool) -> dict:
             row["volumes"] = [bind(state / "redis", "/data")]
         elif service == "immich-machine-learning":
             row["volumes"] = [bind(media / "upload", "/usr/src/app/upload"), bind(state / "model-cache", "/cache")]
+            if profile is not None:
+                env = row.setdefault("environment", {})
+                for name in list(env):
+                    if name.startswith("MACHINE_LEARNING_PRELOAD__"):
+                        del env[name]
+                env.update({
+                    "MACHINE_LEARNING_MODEL_REVISION": "v2",
+                    "MACHINE_LEARNING_WORKERS": "1",
+                    "MACHINE_LEARNING_REQUEST_THREADS": "1",
+                    "MACHINE_LEARNING_MODEL_INTER_OP_THREADS": "1",
+                    "MACHINE_LEARNING_MODEL_INTRA_OP_THREADS": "2",
+                    "MACHINE_LEARNING_MODEL_TTL": "60",
+                    "MACHINE_LEARNING_MODEL_TTL_POLL_S": "10",
+                    "MACHINE_LEARNING_MAX_BATCH_SIZE__FACIAL_RECOGNITION": "1",
+                    "MACHINE_LEARNING_MAX_BATCH_SIZE__OCR": "1",
+                })
+                if profile["backend"] == "cuda":
+                    row["deploy"] = {"resources": {"reservations": {"devices": [{
+                        "driver": "nvidia", "device_ids": ["0"], "capabilities": ["gpu"],
+                    }]}}}
         else:
             # Keep new originals on the same SSD root as migrated originals;
             # /data is an explicit compatibility mount on the internal NVMe.
@@ -76,9 +128,11 @@ def main() -> None:
     parser.add_argument("--media", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--candidate", action="store_true")
+    parser.add_argument("--profile", type=Path, help="Explicit reviewed version/backend profile")
     args = parser.parse_args()
     os.umask(0o077)
-    data = render(json.loads(args.source.read_text()), args.state, args.media, args.candidate)
+    profile = json.loads(args.profile.read_text()) if args.profile else None
+    data = render(json.loads(args.source.read_text()), args.state, args.media, args.candidate, profile)
     args.output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with args.output.open("w") as stream:
         json.dump(data, stream, indent=2)
