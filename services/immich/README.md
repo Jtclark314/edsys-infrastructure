@@ -92,7 +92,21 @@ acceleration remains disabled. CUDA access remains confined to ML.
 
 Production binds `127.0.0.1:2283` and `192.168.50.50:2283`. The final private
 Docker subnet is `10.254.228.16/28`; the isolated candidate uses internal
-`10.254.228.0/28` without a host port. No additional listener is introduced.
+`10.254.228.0/28` without a host port. A separate private Tailscale Serve HTTPS
+listener was accepted October 25, 2026:
+`https://9950x.taile832fe.ts.net:2283` → `http://127.0.0.1:2283`.
+Inspect and privately checkpoint `sudo tailscale serve status --json` first;
+add only this mapping with
+`sudo tailscale serve --bg --https=2283 http://127.0.0.1:2283`.
+All nine pre-existing Serve routes and the daemon/container identities were
+preserved. No Funnel, firewall/ACL expansion, daemon restart or scheduled task.
+Rollback removes only this mapping with `sudo tailscale serve --https=2283 off`;
+never reset the entire Serve configuration. Verified HTTPS originals/preview
+hashes, video range requests and anonymous original denial; a separate
+Tailscale peer also resolved the Tailnet address and returned HTTPS 200. The
+owner confirmed the new iPhone 18 could connect after enabling its Tailscale
+client; a distinct cellular-only bearer test was not separately recorded. Mobile setup and the one-time
+checksum distinction are documented in `EdSys-Master/docs/IMMICH.md`.
 
 Install `guard.py` root-owned under `/opt/edsys-immich/` and `immich.service`
 under `/etc/systemd/system/`. Populate root-owned mode-0600
