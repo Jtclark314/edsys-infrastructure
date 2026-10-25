@@ -174,3 +174,44 @@ checkpoint predates the import and is not its rollback database. Protect new
 uploads/account changes before any rollback; retain original media, matched
 cold checkpoints and encrypted backups. Full running-application disaster
 recovery with regenerated derivatives was not exercised by file/dump recovery.
+
+## Bounded AI enhancement trials — October 25, 2026
+
+Production configuration remains 3.3.5/CUDA/v2 with `ViT-B-32__openai`; no new
+model/index rebuild, caption writes or production Power Tools deployment was
+performed. A fixed CPU-only 64-image/320-caption COCO pilot produced 74.69%
+source-image rank-one recall for the current model, 85.94% for SigLIP and
+88.44% for SigLIP2. These results do not qualify whole-library relevance or
+shared-GPU coexistence. Personal rankings remain an owner-review artifact.
+Two local CPU models generated 16 private captions each without production
+access; each passed only 1/2 public calibration anchors after an office-image
+response hit the 192-token cap. Bulk metadata use needs factual review and
+stronger length/error handling.
+
+Power Tools v0.25.0, commit `6d36826b680a35b0a894a080c2e5c6034c703241`,
+was tested only through a private guarded derivative with API plus read-only
+PostgreSQL access to an independent Immich clone. Import recovery/start paths,
+workflow scheduling, mutation routes, cloud AI and external browser resources
+were blocked; safe import-list reads remained available. The bounded trial passed 58 guard assertions and build/type
+checks, 41 API reads, 16 asset details, 16 native-byte-matching thumbnails and
+an independent headless people-page render. Clone DB tuples and all 7,863
+copied files remained unchanged. Four write/worker routes returned 403;
+workflows, runs, imports and Redis repeat keys stayed zero. This qualifies
+only those guarded read-only paths, not upstream writes, sharing, imports,
+workflow execution, cloud AI, maps or production deployment. No production
+credentials/mounts, GPU devices, Docker socket or public port were provided.
+An initial verifier mistake followed 16 generic public placeholder GETs,
+without auth headers or personal content; corrected verification rejects
+redirects. Do not describe the entire investigation as zero external traffic.
+
+All trial containers/model scopes stopped, the named browser and temporary
+review server closed, and clone-only API access was revoked. Owner-confirmed
+duplicate cleanup in Trash was preserved. All pretrial reference tuples and
+descriptions matched, including trashed assets; all 44 trashed original-file
+hashes matched. Production container identities/restart counts were unchanged;
+Plex responded and seven Frigate cameras had positive FPS/zero skipped FPS in
+sampled checks. These checks do not prove uninterrupted playback/freshness.
+No iCloud operation or new scheduled task was performed. Private model caches,
+photos, captions, clone credentials/dumps and receipts remain outside Git/RAG.
+
+Aggregate decisions and limits belong to EdSys-Master `docs/IMMICH.md`.
