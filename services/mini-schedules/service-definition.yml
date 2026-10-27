@@ -1,0 +1,16 @@
+name: mini-schedules
+description: Private manual-entry schedule prototype with dependency formulas and Gantt links
+host: 9950x
+runtime: systemd-user
+ports:
+  - 127.0.0.1:8138
+  - private-tailscale-https:8451
+volumes:
+  - /home/jeremy/.local/share/mini-schedules
+environment: /home/jeremy/.config/mini-schedules/server.env
+secrets_required: []
+backup: SQLite online recovery copy after each explicit save; latest 30 copies retained locally
+monitoring: Private /api/health; systemd restarts only this service on failure
+restore_notes: Stop this service; restore a verified isolated SQLite copy; keep failed/current DB for rollback
+owner: Jeremy
+last_verified: 2026-10-27

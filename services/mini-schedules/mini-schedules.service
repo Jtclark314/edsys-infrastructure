@@ -1,0 +1,27 @@
+[Unit]
+Description=Mini Schedules private manual-entry prototype
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/code/mini-schedules
+EnvironmentFile=%h/.config/mini-schedules/server.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=%h/code/mini-schedules/.venv/bin/python -m app.serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/mini-schedules
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryMax=512M
+CPUQuota=100%
+
+[Install]
+WantedBy=default.target
