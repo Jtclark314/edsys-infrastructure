@@ -15,6 +15,7 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `../docker/anythingllm/README.md` - AnythingLLM deployment with private runtime env references and explicit host bindings.
 - `../docker/edsys-glasses-gateway/README.md` - tracked host-binding wrapper for the private glasses-gateway source and runtime state.
 - `../docker/homepage-workhorse/README.md` - second Homepage instance for the Workhorse/AI/Programming/Codex dashboard.
+- `../docker/homepage-master/README.md` - private combined EdSys/Foothills Master Dashboard with generated navigation and the existing host-network deployment pattern.
 - `../docker/edsys-ai-portal/README.md` - private LiteLLM-backed EdSys operator UI.
 - `../docker/edsys-control-api/README.md` - read-only API and dashboard over the EdSys-Master source-of-truth YAML.
 - `../docker/edsys-code-intelligence/README.md` - hardened, loopback-only committed-code search, CPU reranking, local review MCP, and guarded index timers for Codex.

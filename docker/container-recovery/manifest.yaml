@@ -50,6 +50,12 @@ tiers:
         healthchecks:
           - url: http://127.0.0.1:3021/api/services
             codes: [200]
+      - name: homepage-master
+        files: [/srv/edsys/edsys-infrastructure/docker/homepage-master/compose.yaml]
+        services: [homepage-master]
+        healthchecks:
+          - url: http://127.0.0.1:3022/api/services
+            codes: [200]
       - name: uptime-kuma
         files: [/home/jeremy/stacks/uptime-kuma/docker-compose.yml]
         services: [uptime-kuma]

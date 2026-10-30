@@ -1,0 +1,23 @@
+services:
+  homepage-master:
+    image: ghcr.io/gethomepage/homepage@sha256:d8d784e5090111b6e4c56dfd90e272d2953a2094e87349f647165df0fa6c4401
+    pull_policy: never
+    container_name: homepage-master
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - type: bind
+        source: /srv/homepage-master/config
+        target: /app/config
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /srv/homepage/icons
+        target: /app/public/icons
+        read_only: true
+        bind:
+          create_host_path: false
+    environment:
+      TZ: America/New_York
+      PORT: "3022"
+      HOMEPAGE_ALLOWED_HOSTS: 192.168.50.50:3022,100.87.137.47:3022,9950x:3022,127.0.0.1:3022,localhost:3022

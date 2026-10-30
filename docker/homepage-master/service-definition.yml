@@ -1,0 +1,26 @@
+name: Master Dashboard
+description: Combined logically grouped navigation from the individual EdSys and Foothills dashboards.
+host: 9950x
+runtime: Docker Compose; existing Homepage image pinned by digest
+status: deployed-private-navigation-verified
+ports:
+  - 3022/tcp through Docker host networking, matching the existing Workhorse pattern
+volumes:
+  - /srv/homepage-master/config:/app/config
+  - /srv/homepage/icons:/app/public/icons:ro
+environment:
+  TZ: America/New_York
+  PORT: '3022'
+  HOMEPAGE_ALLOWED_HOSTS: exact LAN, Tailnet, local health-check and 9950x host names on the configured ports
+secrets_required: []
+backup:
+  source: /home/jeremy/code/homepage-config/master and generator inputs in homepage-config
+  deployment: /srv/edsys/edsys-infrastructure/docker/homepage-master
+  recovery: Regenerate config from reviewed source; keep private pre-deployment copies of changed live files.
+monitoring:
+  - Inherited Homepage container health check at internal /api/healthcheck
+  - Ordered container-recovery HTTP check at http://127.0.0.1:3022/api/services
+restore_notes: Restore only this stack's config and exact image, then start the existing container. Host networking avoids a dynamic Tailnet-address bind dependency. No Docker socket, application data, database, or public tunnel is involved.
+owner: Jeremy
+last_verified: '2026-10-29'
+verification_scope: Compose validation; healthy live container; LAN/Tailnet APIs; generated 205-card coverage; rendered settings and desktop/mobile search verified 2026-10-29. Full-host reboot not performed.

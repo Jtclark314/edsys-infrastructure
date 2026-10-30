@@ -21,6 +21,8 @@
 - Keep edits narrow and implementation-focused; preserve unrelated work. A plan/read-only request does not authorize deployment.
 - Complete already-authorized work and required checks without repeated confirmation of the same scope. Broaden tests only for a concrete reason.
 - Run syntax checks where practical.
+- For authorized app/service creation, commissioning, relocation, or retirement, update the appropriate EdSys/Foothills dashboard entries in `/home/jeremy/code/homepage-config` with a clear name, primary function, verified URL or explicit no-web-interface note, and accurate lifecycle state. Preserve private access and secret boundaries.
+- From `homepage-config`, run `python3 tools/sync_dashboards.py build` and `python3 tools/sync_dashboards.py check`, deploy using `master/README.md`, and verify the affected individual dashboard and Master Dashboard before closing the lifecycle change.
 - Before committing, run a risky-string scan such as:
   `git grep -n -I -E "password|token|api[_-]?key|secret|BEGIN (RSA|OPENSSH|PRIVATE) KEY" -- .`
 
