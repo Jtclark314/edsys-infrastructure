@@ -1,0 +1,22 @@
+name: edsys-stirling-pdf-mcp
+description: Private local stdio bridge to the available Stirling PDF core REST API
+host: 9950x
+runtime: Official MCP Python SDK 2.2.0 in an isolated hash-locked Python 3.12 virtual environment
+ports: [] # No HTTP listener or web interface. Codex starts a local stdio subprocess.
+volumes:
+  - /home/jeremy/.local/share/edsys-stirling-mcp/releases
+  - /home/jeremy/.local/share/edsys-stirling-mcp/current
+  - /home/jeremy/.local/state/edsys-stirling-mcp/artifacts
+environment:
+  STIRLING_BASE_URL: http://10.254.230.50:8080
+  STIRLING_ARTIFACT_DIR: /home/jeremy/.local/state/edsys-stirling-mcp/artifacts
+secrets_required: [] # Signing/encryption passwords may be read from individually selected private local files.
+backup:
+  policy: Parent private-services backup retains source, immutable release/current target, exact MCP configuration rollback, and dependency lock.
+  artifacts: User document outputs remain private. Back up needed artifacts with the owning document workflow; no automatic expiry or deletion.
+monitoring:
+  protocol: Fresh MCP initialize, list_tools, catalog lookup and synthetic PDF returned-data workflow
+  backend: Existing Stirling private service health and dashboard
+restore_notes: Restore the retained release and exact prior MCP config; point current at the retained release and reload MCP configuration. No app-server restart is required. See README.md.
+owner: Jeremy / EdSys
+last_verified: 2026-11-01
