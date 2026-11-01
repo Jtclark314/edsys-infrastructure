@@ -1,4 +1,5 @@
-name: edsys-stirling-pdf-mcp
+name: edsys-stirling
+status: active
 description: Private local stdio bridge to the available Stirling PDF core REST API
 host: 9950x
 runtime: Official MCP Python SDK 2.2.0 in an isolated hash-locked Python 3.12 virtual environment
@@ -17,6 +18,6 @@ backup:
 monitoring:
   protocol: Fresh MCP initialize, list_tools, catalog lookup and synthetic PDF returned-data workflow
   backend: Existing Stirling private service health and dashboard
-restore_notes: Restore the retained release and exact prior MCP config; point current at the retained release and reload MCP configuration. No app-server restart is required. See README.md.
+restore_notes: Restore the retained release and this MCP registration while preserving later unrelated Codex settings; use the config hash guard in README.md. Point current at the retained release and reload MCP configuration without an app-server restart.
 owner: Jeremy / EdSys
 last_verified: 2026-11-01
