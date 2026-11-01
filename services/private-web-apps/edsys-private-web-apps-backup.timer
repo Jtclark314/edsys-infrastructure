@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly scoped private web application backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 America/New_York
+Persistent=false
+RandomizedDelaySec=0
+Unit=edsys-private-web-apps-backup.service
+
+[Install]
+WantedBy=timers.target

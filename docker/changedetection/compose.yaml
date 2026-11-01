@@ -1,0 +1,68 @@
+name: ${CHANGEDETECTION_PROJECT_NAME:-edsys-changedetection}
+
+services:
+  changedetection:
+    # Official stable 0.60.10, verified 2026-11-01 (linux/amd64).
+    image: ghcr.io/dgtlmoon/changedetection.io:0.60.10@sha256:72f97681f390e4d6ae3e6585e1e0036449910f347144b766fc23910458566a1a
+    container_name: ${CHANGEDETECTION_CONTAINER_NAME:-edsys-changedetection}
+    # Boot is owned by the mount-guarded host unit, not Docker auto-start.
+    restart: on-failure:5
+    user: "${CHANGEDETECTION_UID:-1000}:${CHANGEDETECTION_GID:-1000}"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 1.0
+    mem_limit: 1g
+    pids_limit: 128
+    stop_grace_period: 45s
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - umask 077; python /opt/edsys/initialize.py && exec python ./changedetection.py -d /datastore
+    environment:
+      TZ: America/New_York
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: /app:/usr/local
+      LOGGER_LEVEL: INFO
+      FETCH_WORKERS: "2"
+      DEFAULT_SETTINGS_REQUESTS_WORKERS: "2"
+      DEFAULT_SETTINGS_REQUESTS_TIMEOUT: "30"
+      DEFAULT_FETCH_BACKEND: html_requests
+      BASE_URL: ${CHANGEDETECTION_BASE_URL:?Set the private owner-protected HTTPS URL}
+      USE_X_SETTINGS: "1"
+      HIDE_REFERER: "true"
+      DISABLE_VERSION_CHECK: "true"
+      LLM_FEATURES_DISABLED: "true"
+      LITELLM_FETCH_PRICING_FROM_GITHUB: "false"
+      ALLOW_FILE_URI: "false"
+      # Candidate qualification may temporarily override this for its local fixture.
+      ALLOW_IANA_RESTRICTED_ADDRESSES: ${CHANGEDETECTION_ALLOW_PRIVATE_TARGETS:-false}
+    ports:
+      - "127.0.0.1:${CHANGEDETECTION_BACKEND_PORT:-8141}:5000"
+    volumes:
+      - type: bind
+        source: ${CHANGEDETECTION_DATA_DIR:?Set the private datastore directory}
+        target: /datastore
+        bind:
+          create_host_path: false
+      - ./initialize.py:/opt/edsys/initialize.py:ro
+      - ./healthcheck.py:/opt/edsys/healthcheck.py:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+    healthcheck:
+      test: [CMD, python, /opt/edsys/healthcheck.py]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${CHANGEDETECTION_SUBNET:-10.254.230.16/28}

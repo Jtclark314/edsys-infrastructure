@@ -1,0 +1,22 @@
+[Unit]
+Description=EdSys private application Tailscale access bridges
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/mountpoint -q /mnt/ai-store
+ExecStart=/home/jeremy/.local/bin/node /srv/edsys/edsys-infrastructure/services/private-web-apps/web-proxy.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=default.target

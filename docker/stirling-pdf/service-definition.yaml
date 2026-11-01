@@ -1,0 +1,48 @@
+name: stirling-pdf
+description: Private full open-source PDF editing, conversion, OCR, signing, and pipeline workspace
+host: 9950x
+runtime: Docker Compose; pinned core build; mount-guarded host startup
+ports:
+  - address: 10.254.230.50
+    container: 8080
+    host_published: false
+    purpose: Host identity proxy upstream on dedicated Docker bridge
+  - tailscale_proxy_https: 8452
+volumes:
+  - source: /mnt/ai-store/edsys-private-services/stirling-pdf/configs
+    target: /configs
+    purpose: Application settings and local service configuration
+  - source: /mnt/ai-store/edsys-private-services/stirling-pdf/signatures
+    target: /customFiles/signatures
+    purpose: Administrator-provided shared signature images
+  - source: /mnt/ai-store/edsys-private-services/stirling-pdf/templates
+    target: /customFiles/templates
+    purpose: Custom assets and templates
+  - source: /mnt/ai-store/edsys-private-services/stirling-pdf/pipeline
+    target: /pipeline
+    purpose: Pipeline definitions, watch inputs, and completed outputs
+environment:
+  template: .env.example
+  runtime: Private external env file; never committed
+  timezone: America/New_York
+  native_authentication: Excluded from upstream core; Tailscale identity proxy required
+  network_egress: Public and private HTTP(S) page conversion enabled by owner request
+  telemetry: disabled
+  cloud_and_paid_integrations: disabled
+  experimental_core_features: enabled
+  upload: 1 GiB per file; 2 GiB multipart request
+  request_timeout: 2 hours
+  office_workers: 2
+  resources: 12 CPUs; 20 GiB memory; 8 GiB Java heap; 8 GiB temporary workspace
+secrets_required: []
+backup:
+  method: Stop only this app; capture complete state root; restart prior-running app; encrypted offsite backup
+  scope: Settings, shared assets, pipeline definitions and files, private env, source, pinned image archive
+  consistency: Plain file tree; no core database or online export required
+  excludes: Browser-local library, preferences and saved automations remain on each client
+monitoring:
+  container_health: Application health HTTP200 and both loopback Office worker listeners
+  functional: Synthetic PDF, conversion, OCR, signing, forms, pipelines, mobile transfer, UI and cold restore
+restore_notes: Restore a matching cold state tree and image into an isolated candidate; never share writable state. Mount custom asset subdirectories only; the static UI symlink stays ephemeral.
+owner: Jeremy
+last_verified: 2026-11-01 isolated core and conversion qualification; production route acceptance owned by commissioning workflow

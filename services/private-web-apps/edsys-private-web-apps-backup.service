@@ -1,0 +1,26 @@
+[Unit]
+Description=Consistent scoped backup of Stirling PDF and changedetection.io
+Requisite=docker.service
+After=docker.service edsys-private-web-apps.service
+PartOf=edsys-private-web-apps.service
+RequiresMountsFor=/mnt/ai-store /srv/edsys-backup
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/usr/local/libexec/edsys-private-web-apps-backup backup
+ExecStopPost=/usr/local/libexec/edsys-private-web-apps-backup recover-running
+TimeoutStartSec=45min
+TimeoutStopSec=150s
+KillMode=mixed
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Deliberately independent of the broad collector and remote-source pulls.
+# A missing daemon fails this unit; this unit does not start/restart Docker.
+# Stop/restart of the app unit drains this capture and ExecStopPost first.
+# Signal the helper first so an in-flight graceful Docker stop can finish.

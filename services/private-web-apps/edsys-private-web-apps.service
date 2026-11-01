@@ -1,0 +1,28 @@
+[Unit]
+Description=Private Stirling PDF and changedetection with verified data storage
+Requires=docker.service
+PartOf=docker.service
+After=docker.service network-online.target mnt-ai\x2dstore.mount
+Wants=network-online.target
+RequiresMountsFor=/mnt/ai-store
+BindsTo=mnt-ai\x2dstore.mount
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+UMask=0077
+ExecStartPre=/usr/local/libexec/edsys-private-web-apps-mount-check
+ExecStart=/usr/local/libexec/edsys-private-web-apps-control start
+ExecStop=/usr/local/libexec/edsys-private-web-apps-control stop
+# Also clean up after a failed or externally interrupted start.
+ExecStopPost=/usr/local/libexec/edsys-private-web-apps-control stop
+TimeoutStartSec=480
+TimeoutStopSec=150
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+[Install]
+WantedBy=multi-user.target docker.service

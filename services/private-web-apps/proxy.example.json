@@ -1,0 +1,27 @@
+{
+  "ownerLogin": "owner@example.invalid",
+  "tailnet": {
+    "stableID": "replace-with-current-tailnet-stable-id",
+    "dnsSuffix": "taile832fe.ts.net"
+  },
+  "routes": [
+    {
+      "name": "stirling-pdf",
+      "listenPort": 8142,
+      "upstreamHost": "10.254.230.50",
+      "upstreamPort": 8080,
+      "publicHost": "9950x.taile832fe.ts.net:8452",
+      "maxBodyBytes": 2164260864,
+      "requestTimeoutMs": 7200000
+    },
+    {
+      "name": "changedetection",
+      "listenPort": 8143,
+      "upstreamHost": "127.0.0.1",
+      "upstreamPort": 8141,
+      "publicHost": "9950x.taile832fe.ts.net:8453",
+      "maxBodyBytes": 33554432,
+      "requestTimeoutMs": 1800000
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+name: edsys-stirling-pdf
+
+services:
+  stirling-pdf:
+    image: ${STIRLING_IMAGE:?Set the qualified local image ID; see README.md}
+    pull_policy: never
+    container_name: ${STIRLING_CONTAINER_NAME:-edsys-stirling-pdf}
+    restart: on-failure:5
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      TZ: America/New_York
+      SECURITY_ENABLELOGIN: "false"
+      PREMIUM_ENABLED: "false"
+      SYSTEM_DEFAULTLOCALE: en-US
+      SYSTEM_ENABLEALPHAFUNCTIONALITY: "true"
+      SYSTEM_FRONTENDURL: ${STIRLING_PUBLIC_URL:-https://example.invalid}
+      SYSTEM_BACKENDURL: ${STIRLING_PUBLIC_URL:-https://example.invalid}
+      SYSTEM_CORSALLOWEDORIGINS: ${STIRLING_PUBLIC_URL:-https://example.invalid}
+      SYSTEM_ENABLEANALYTICS: "false"
+      SYSTEM_ENABLEPOSTHOG: "false"
+      SYSTEM_ENABLESCARF: "false"
+      SYSTEM_SHOWUPDATE: "false"
+      SYSTEM_GOOGLEVISIBILITY: "false"
+      SYSTEM_ENABLEURLTOPDF: "true"
+      SYSTEM_HTML_URLSECURITY_ENABLED: "true"
+      SYSTEM_HTML_URLSECURITY_LEVEL: MEDIUM
+      SYSTEM_HTML_URLSECURITY_BLOCKPRIVATENETWORKS: "false"
+      SYSTEM_HTML_URLSECURITY_INTERNALTLDS: ""
+      SYSTEM_HTML_URLSECURITY_BLOCKLOCALHOST: "true"
+      SYSTEM_HTML_URLSECURITY_BLOCKLINKLOCAL: "true"
+      SYSTEM_HTML_URLSECURITY_BLOCKCLOUDMETADATA: "true"
+      SYSTEM_ENABLEMOBILESCANNER: "true"
+      SYSTEM_ENABLEMOBILESIGNATURE: "true"
+      SYSTEM_ENABLEDESKTOPINSTALLSLIDE: "false"
+      SYSTEM_SERVERCERTIFICATE_ENABLED: "false"
+      SYSTEM_FILEUPLOADLIMIT: 1024MB
+      SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE: 1024MB
+      SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE: 2048MB
+      SPRING_MVC_ASYNC_REQUEST_TIMEOUT: "7200000"
+      SERVER_SERVLET_SESSION_TIMEOUT: 120m
+      SERVER_JETTY_CONNECTION_IDLE_TIMEOUT: 7200000ms
+      SYSTEM_TEMPFILEMANAGEMENT_BASETMPDIR: /tmp/stirling-pdf
+      SYSTEM_TEMPFILEMANAGEMENT_MAXAGEHOURS: "3"
+      SYSTEM_TEMPFILEMANAGEMENT_CLEANUPINTERVALMINUTES: "15"
+      SYSTEM_TEMPFILEMANAGEMENT_STARTUPCLEANUP: "true"
+      STORAGE_ENABLED: "false"
+      STORAGE_SHARING_ENABLED: "false"
+      STORAGE_SHARING_LINKENABLED: "false"
+      STORAGE_SHARING_EMAILENABLED: "false"
+      AIENGINE_ENABLED: "false"
+      AIENGINE_CLOUDDOCUMENTINDEXING: "false"
+      DOCPARSE_ENABLED: "false"
+      FORMDETECTION_ENABLED: "false"
+      MCP_ENABLED: "false"
+      # DocParse is proprietary; the video controller is disabled in upstream core.
+      ENDPOINTS_GROUPSTOREMOVE: DocParse
+      ENDPOINTS_TOREMOVE: pdf-to-video
+      MAIL_ENABLED: "false"
+      TELEGRAM_ENABLED: "false"
+      PREMIUM_PROFEATURES_GOOGLEDRIVE_ENABLED: "false"
+      TOOLRECOMMENDATIONS_ENABLED: "false"
+      UI_HIDEDISABLEDTOOLS_GOOGLEDRIVE: "true"
+      UI_DEFAULTHIDEUNAVAILABLETOOLS: "true"
+      PROCESSEXECUTOR_AUTOUNOSERVER: "true"
+      PROCESSEXECUTOR_SESSIONLIMIT_LIBREOFFICESESSIONLIMIT: "2"
+      PROCESSEXECUTOR_SESSIONLIMIT_TESSERACTSESSIONLIMIT: "2"
+      PROCESSEXECUTOR_SESSIONLIMIT_OCRMYPDFSESSIONLIMIT: "2"
+      PROCESSEXECUTOR_SESSIONLIMIT_GHOSTSCRIPTSESSIONLIMIT: "2"
+      PROCESSEXECUTOR_SESSIONLIMIT_QPDFSESSIONLIMIT: "2"
+      PROCESSEXECUTOR_SESSIONLIMIT_WEASYPRINTSESSIONLIMIT: "2"
+      PROCESSEXECUTOR_SESSIONLIMIT_PYTHONOPENCVSESSIONLIMIT: "2"
+      PROCESSEXECUTOR_SESSIONLIMIT_IMAGEMAGICKSESSIONLIMIT: "2"
+      PROCESSEXECUTOR_SESSIONLIMIT_CALIBRESESSIONLIMIT: "2"
+      PROCESSEXECUTOR_TIMEOUTMINUTES_LIBREOFFICETIMEOUTMINUTES: "120"
+      PROCESSEXECUTOR_TIMEOUTMINUTES_TESSERACTTIMEOUTMINUTES: "120"
+      PROCESSEXECUTOR_TIMEOUTMINUTES_OCRMYPDFTIMEOUTMINUTES: "120"
+      PROCESSEXECUTOR_TIMEOUTMINUTES_GHOSTSCRIPTTIMEOUTMINUTES: "120"
+      PROCESSEXECUTOR_TIMEOUTMINUTES_QPDFTIMEOUTMINUTES: "120"
+      PROCESSEXECUTOR_TIMEOUTMINUTES_WEASYPRINTTIMEOUTMINUTES: "120"
+      PROCESSEXECUTOR_TIMEOUTMINUTES_PYTHONOPENCVTIMEOUTMINUTES: "120"
+      PROCESSEXECUTOR_TIMEOUTMINUTES_IMAGEMAGICKTIMEOUTMINUTES: "120"
+      PROCESSEXECUTOR_TIMEOUTMINUTES_CALIBRETIMEOUTMINUTES: "120"
+      PROCESSEXECUTOR_TIMEOUTMINUTES_PDFTOHTMLTIMEOUTMINUTES: "120"
+    volumes:
+      - type: bind
+        source: ${STIRLING_STATE_ROOT:-/mnt/ai-store/edsys-private-services/stirling-pdf}/configs
+        target: /configs
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${STIRLING_STATE_ROOT:-/mnt/ai-store/edsys-private-services/stirling-pdf}/signatures
+        target: /customFiles/signatures
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${STIRLING_STATE_ROOT:-/mnt/ai-store/edsys-private-services/stirling-pdf}/templates
+        target: /customFiles/templates
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${STIRLING_STATE_ROOT:-/mnt/ai-store/edsys-private-services/stirling-pdf}/pipeline
+        target: /pipeline
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,exec,size=8g,mode=1777
+      - /logs:rw,noexec,nosuid,nodev,size=32m,uid=1000,gid=1000,mode=0700
+      - /customFiles:rw,noexec,nosuid,nodev,size=16m,uid=1000,gid=1000,mode=0700
+      - /storage:rw,noexec,nosuid,nodev,size=16m,uid=1000,gid=1000,mode=0700
+      - /home/stirlingpdfuser:rw,nosuid,nodev,size=512m,uid=1000,gid=1000,mode=0700
+    cpus: 12.0
+    mem_limit: 20g
+    mem_reservation: 2g
+    pids_limit: 1024
+    stop_grace_period: 40s
+    healthcheck:
+      test: [CMD, /usr/local/bin/edsys-stirling-health]
+      interval: 20s
+      timeout: 6s
+      start_period: 90s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    labels:
+      com.edsys.managed: "true"
+      com.edsys.preserve: "true"
+      com.edsys.service: stirling-pdf
+    networks:
+      private:
+        ipv4_address: ${STIRLING_IP:-10.254.230.50}
+
+networks:
+  private:
+    internal: false
+    ipam:
+      config:
+        - subnet: ${STIRLING_SUBNET:-10.254.230.48/28}

@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+exec /usr/local/libexec/edsys-private-web-apps-control check-mount

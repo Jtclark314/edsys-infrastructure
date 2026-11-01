@@ -1,0 +1,34 @@
+name: changedetection
+description: Private HTTP website change monitoring and snapshot comparison
+host: 9950x
+runtime: Docker Compose; mount-guarded host startup
+ports:
+  - address: 127.0.0.1
+    host: 8141
+    container: 5000
+  - owner_proxy_https: 8453
+volumes:
+  - source: /mnt/ai-store/edsys-private-services/changedetection
+    target: /datastore
+    purpose: Private settings, tokens, watches, history, and snapshots
+environment:
+  template: .env.example
+  runtime: Private external env file; never committed
+  timezone: America/New_York
+  workers: 2
+  default_fetcher: html_requests
+  telemetry: disabled
+  private_target_addresses: blocked
+  file_urls: blocked
+  llm_features: disabled
+secrets_required:
+  - API and RSS tokens generated in the private datastore
+backup:
+  method: Stop app briefly; capture complete datastore; restart prior-running app; encrypted offsite backup
+  scope: Datastore, private runtime env, image digest, and source definition
+monitoring:
+  container_health: Authenticated systeminfo response using in-process private API token
+  functional: Synthetic initial and changed snapshots plus API/UI diff and restore
+restore_notes: Restore matching datastore and pinned image into an isolated candidate; never share writable state
+owner: Jeremy
+last_verified: 2026-11-01 isolated candidate; production route acceptance owned by commissioning workflow
