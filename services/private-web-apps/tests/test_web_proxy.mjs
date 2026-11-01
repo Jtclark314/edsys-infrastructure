@@ -389,6 +389,44 @@ test('forwarding rebuilds trusted fields while preserving app auth, cookies and 
   } finally { await f.close(); }
 });
 
+test('HTTPS responses add absent cookie flags without rewriting values, attributes or separate cookies', async () => {
+  const cookies = [
+    'session=opaque%2Efixture==; HttpOnly; Path=/',
+    'strict=unchanged; secure; SameSite=Strict; Priority=High',
+    'none=unchanged; sEcUrE; sAmEsItE = None',
+    'secureOnly=value; Secure',
+    'sameSiteOnly=value; SameSite=Strict',
+    'SameSite=Strict; Path=/',
+    'Secure=value; Path=/',
+    'expires=value; Expires=Wed, 21 Oct 2037 07:28:00 GMT; HttpOnly',
+  ];
+  const expected = [
+    'session=opaque%2Efixture==; HttpOnly; Path=/; Secure; SameSite=Lax',
+    'strict=unchanged; secure; SameSite=Strict; Priority=High',
+    'none=unchanged; sEcUrE; sAmEsItE = None',
+    'secureOnly=value; Secure; SameSite=Lax',
+    'sameSiteOnly=value; SameSite=Strict; Secure',
+    'SameSite=Strict; Path=/; Secure; SameSite=Lax',
+    'Secure=value; Path=/; Secure; SameSite=Lax',
+    'expires=value; Expires=Wed, 21 Oct 2037 07:28:00 GMT; HttpOnly; Secure; SameSite=Lax',
+  ];
+  for (const config of validateConfig(example)) {
+    const f = await fixture((req, res) => {
+      if (req.url === '/multiple') res.setHeader('set-cookie', cookies);
+      if (req.url === '/single') res.setHeader('set-cookie', 'single=one; HttpOnly');
+      res.end('cookie response');
+    }, config);
+    try {
+      for (const [path, wanted] of [['/multiple', expected], ['/single', ['single=one; HttpOnly; Secure; SameSite=Lax']], ['/none', undefined]]) {
+        const result = await call(f.port, { path, headers: headers(config) });
+        assert.equal(result.status, 200);
+        assert.deepEqual(result.headers['set-cookie'], wanted);
+        assert.equal(result.headers['strict-transport-security'], undefined);
+      }
+    } finally { await f.close(); }
+  }
+});
+
 test('both named routes retain their own exact public identity and approved backend destination', async () => {
   for (const config of validateConfig(example)) {
     const f = await fixture((req, res) => {
@@ -520,11 +558,35 @@ function upgradeRequest(port, h = {}, config = base) {
     origin: `https://${config.publicHost}`, connection: 'Upgrade', upgrade: 'websocket',
     'sec-websocket-version': '13', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==', ...h } });
 }
-function websocketAccept(req, socket) {
+function websocketAccept(req, socket, _head, cookies = []) {
   const accept = crypto.createHash('sha1').update(req.headers['sec-websocket-key']
     + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
-  socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+  const cookieHeaders = cookies.map(cookie => `Set-Cookie: ${cookie}\r\n`).join('');
+  socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n${cookieHeaders}\r\n`);
 }
+
+test('WebSocket upgrade cookies receive the same missing HTTPS flags without collapsing entries', async () => {
+  const f = await fixture((_req, res) => res.end('unused'), {}, (req, socket) => {
+    websocketAccept(req, socket, undefined, ['upgrade=fixture; HttpOnly', 'preserved=one; SameSite=None; Secure']);
+  });
+  try {
+    await new Promise((resolve, reject) => {
+      const req = upgradeRequest(f.port);
+      req.on('upgrade', (response, socket) => {
+        try {
+          assert.deepEqual(response.headers['set-cookie'], [
+            'upgrade=fixture; HttpOnly; Secure; SameSite=Lax', 'preserved=one; SameSite=None; Secure',
+          ]);
+          assert.equal(response.headers['strict-transport-security'], undefined);
+          socket.destroy();
+          resolve();
+        } catch (error) { socket.destroy(); reject(error); }
+      });
+      req.on('response', res => { res.resume(); reject(new Error('WebSocket rejected')); });
+      req.on('error', reject); req.end();
+    });
+  } finally { await f.close(); }
+});
 
 test('WebSocket requires origin/owner, preserves app auth, and transports a real masked frame', async () => {
   let upgrades = 0;

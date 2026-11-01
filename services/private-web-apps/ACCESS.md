@@ -66,8 +66,12 @@ example are 2 GiB plus 16 MiB multipart overhead and two hours for Stirling;
 changedetection remains 32 MiB and 30 minutes. Configuration ceilings are 3 GiB
 and two hours for Stirling, 32 MiB and 30 minutes for changedetection. Match these
 with each application's own limits. Response framing,
-cookies and app auth are preserved; hop-by-hop headers are rebuilt. Responses
+cookie values and app auth are preserved; hop-by-hop headers are rebuilt. Responses
 deny framing, suppress referrers and disable storage by shared caches.
+Each response cookie, including WebSocket upgrade cookies, receives `Secure`
+and `SameSite=Lax` only when that attribute is absent. Existing attributes,
+cookie bytes and separate Set-Cookie entries remain intact. No HSTS policy is
+added because other services use HTTP ports on this same hostname.
 
 Stirling responses additionally apply a browser CSP for same-origin connections,
 images, fonts and workers. Local `blob:` connections/images/workers and `data:`

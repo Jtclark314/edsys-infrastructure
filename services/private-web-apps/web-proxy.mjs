@@ -204,8 +204,24 @@ function upstreamHeaders(req, config, websocket = false) {
   return result;
 }
 
+function secureCookies(headers) {
+  const result = { ...headers };
+  const cookies = result['set-cookie'];
+  if (cookies !== undefined) {
+    const normalize = cookie => {
+      // Inspect attribute names only; preserve the original cookie bytes and order.
+      const attributes = new Set(cookie.split(';').slice(1)
+        .map(attribute => attribute.split('=', 1)[0].trim().toLowerCase()));
+      return cookie + (attributes.has('secure') ? '' : '; Secure')
+        + (attributes.has('samesite') ? '' : '; SameSite=Lax');
+    };
+    result['set-cookie'] = Array.isArray(cookies) ? cookies.map(normalize) : normalize(cookies);
+  }
+  return result;
+}
+
 function responseHeaders(headers, config) {
-  const result = { ...cleanHeaders(headers), 'x-frame-options': 'DENY',
+  const result = { ...secureCookies(cleanHeaders(headers)), 'x-frame-options': 'DENY',
     'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
   if (config?.name === 'stirling-pdf') {
     const existing = result['content-security-policy'];
@@ -299,7 +315,7 @@ export function createProxy(config, { requestUpstream = http.request,
     timer.unref();
     upstream.on('upgrade', (response, peer, upstreamHead) => {
       remote = peer;
-      const headers = { ...cleanHeaders(response.headers), connection: 'Upgrade', upgrade: 'websocket' };
+      const headers = { ...secureCookies(cleanHeaders(response.headers)), connection: 'Upgrade', upgrade: 'websocket' };
       const lines = Object.entries(headers).flatMap(([key, value]) =>
         (Array.isArray(value) ? value : [value]).map(item => `${key}: ${item}`));
       socket.write(`HTTP/1.1 101 Switching Protocols\r\n${lines.join('\r\n')}\r\n\r\n`);
