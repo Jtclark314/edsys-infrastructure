@@ -56,7 +56,7 @@ services:
       FORMDETECTION_ENABLED: "false"
       MCP_ENABLED: "false"
       # DocParse is proprietary; the video controller is disabled in upstream core.
-      ENDPOINTS_GROUPSTOREMOVE: DocParse
+      ENDPOINTS_GROUPSTOREMOVE: DocParse,ImageMagick
       ENDPOINTS_TOREMOVE: pdf-to-video
       MAIL_ENABLED: "false"
       TELEGRAM_ENABLED: "false"

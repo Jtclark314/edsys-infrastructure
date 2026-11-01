@@ -31,9 +31,11 @@ remain with the private release record.
 | Local browser state | File library, personal signatures, saved automations/preferences | Available per browser; server backup intentionally does not claim to synchronize it |
 | Read aloud | Core viewer uses browser Web Speech API and available voices | Feature remains available. Voice availability and audio output depend on device/browser; synthetic UI inspection only |
 
-All available core endpoint groups remain enabled. The only explicit endpoint
-removals are **DocParse** (proprietary) and **PDF-to-video** (the upstream controller
-is disabled). Native core dependency checks also exclude CBR writing and the
+All available OSS tool families remain enabled. Explicit endpoint removals are
+**DocParse** (proprietary) and **PDF-to-video** (the upstream controller is disabled).
+The optional **ImageMagick** integration group is disabled to disable the unavailable
+proprietary line-art checkbox; ordinary compression keeps its QPDF, Ghostscript and
+Java alternatives. Native core dependency checks also exclude CBR writing and the
 proprietary form-detection/PDF-UA/accessibility features. The live inventory has
 99 generic endpoint flags and 148 OpenAPI paths; flags include UI aliases and
 documentation pages and must not be mistaken for 149 distinct PDF tools.
@@ -51,7 +53,8 @@ documentation pages and must not be mistaken for 149 distinct PDF tools.
 | MCP server, AI Engine, DocParse, cloud indexing, automatic form detection | License excluded | Proprietary backend components; configuration disabled and code absent |
 | PDF/UA tagging/accessibility reports and PDF/A A-level tagger | License excluded | Requires proprietary implementation; core B-level conversion/verification remains available |
 | Server-managed certificate store | License excluded | Uploaded certificate signing remains available in core |
-| Compress → line-art sub-option | License excluded | The optional implementation is `app/proprietary/.../ImageMagickLineArtConversionService`; core returns explicit HTTP 403. Installing the OSS ImageMagick binary does not provide that proprietary service; ordinary compression/grayscale remain available |
+| OS certificate store and hardware-token signing | Desktop-only upstream | Core HardwareKeyStoreService permits these paths only in the native desktop bundle; a hosted server cannot access a client's OS key store or USB token. Uploaded certificate signing remains available |
+| Compress → line-art sub-option | License excluded | The optional implementation is `app/proprietary/.../ImageMagickLineArtConversionService`; core returns explicit HTTP 403 and its UI checkbox is disabled through the official integration-group setting. Installing the OSS ImageMagick binary does not provide that proprietary service; ordinary compression/grayscale remain available |
 | Drive/cloud document integrations and paid portal/Processor | License excluded/unconfigured | Proprietary integration paths and/or external OAuth accounts absent; public build keys blank |
 | Vendor tool-recommendation API | License excluded | Official core client suppresses its first 404, disables further calls and falls back to static recommendations without a user-facing error |
 | PDF→CBR writing | Non-OSS binary excluded | Requires `rar`; no shareware encoder installed. Supported CBZ and archive-reading paths remain available |
