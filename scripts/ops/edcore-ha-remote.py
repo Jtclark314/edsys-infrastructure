@@ -9,15 +9,76 @@ import asyncio
 import collections
 import hashlib
 import json
+from pathlib import Path, PurePosixPath
 import re
 import sys
 
 import aiohttp
-from supervisor.const import SOCKET_CORE
+
+try:
+    # Supervisor releases before the per-Core runtime directory used this path.
+    from supervisor.const import SOCKET_CORE
+except ImportError:
+    SOCKET_CORE = None
 
 
 MAX_RESPONSE = 2 * 1024 * 1024
 SECRET_KEYS = {"access_token", "refresh_token", "token", "password", "api_key", "secret", "credentials"}
+
+
+def core_socket_from_metadata(core, supervisor):
+    """Map Core's explicit socket setting into Supervisor's existing bind mount.
+
+    Read only the selected environment name; never return container metadata or
+    use a token when the socket is absent. Old releases retain their own known
+    constant only when Core has no explicit socket setting.
+    """
+    values = [item.partition("=")[2] for item in core.get("Config", {}).get("Env", [])
+              if isinstance(item, str) and item.partition("=")[0] == "SUPERVISOR_CORE_API_SOCKET"]
+    if not values:
+        if SOCKET_CORE is not None:
+            return Path(SOCKET_CORE)
+        raise RuntimeError("Core has no explicit Supervisor socket; no alternate credentials attempted")
+    if len(values) != 1:
+        raise RuntimeError("Core socket metadata is ambiguous")
+    socket = PurePosixPath(values[0])
+    if not socket.is_absolute() or ".." in socket.parts or socket.name != "core.sock":
+        raise RuntimeError("Core socket metadata is invalid")
+    candidates = []
+    for mount in supervisor.get("Mounts", []):
+        if mount.get("Type") != "bind":
+            continue
+        source = PurePosixPath(mount.get("Source", ""))
+        destination = PurePosixPath(mount.get("Destination", ""))
+        if (not source.is_absolute() or not destination.is_absolute()
+                or ".." in source.parts or ".." in destination.parts):
+            continue
+        if socket.is_relative_to(source):
+            candidates.append((len(source.parts), destination / socket.relative_to(source)))
+    if not candidates:
+        raise RuntimeError("Core socket is outside Supervisor's existing bind mounts")
+    longest = max(length for length, _ in candidates)
+    matches = {path for length, path in candidates if length == longest}
+    if len(matches) != 1:
+        raise RuntimeError("Supervisor socket mount metadata is ambiguous")
+    return Path(matches.pop())
+
+
+async def resolve_core_socket():
+    """Discover only existing socket metadata through the local Docker socket."""
+    timeout = aiohttp.ClientTimeout(total=5)
+    async with aiohttp.ClientSession(connector=aiohttp.UnixConnector(path="/run/docker.sock"), timeout=timeout) as session:
+        try:
+            core = await request(session, "GET", "containers/homeassistant/json")
+            supervisor = await request(session, "GET", "containers/hassio_supervisor/json")
+        except Exception as exc:
+            raise RuntimeError("Existing Docker socket metadata read failed; no alternate credentials attempted") from exc
+    if not isinstance(core, dict) or not isinstance(supervisor, dict):
+        raise RuntimeError("Existing Docker socket metadata is invalid")
+    socket = core_socket_from_metadata(core, supervisor)
+    if not socket.is_socket():
+        raise RuntimeError("Existing Supervisor/Core socket is unavailable; no alternate credentials attempted")
+    return socket
 
 
 def redact(value):
@@ -62,8 +123,9 @@ async def websocket(session, command):
 
 
 async def run(payload):
+    socket = await resolve_core_socket()
     timeout = aiohttp.ClientTimeout(total=25)
-    async with aiohttp.ClientSession(connector=aiohttp.UnixConnector(path=str(SOCKET_CORE)), timeout=timeout) as session:
+    async with aiohttp.ClientSession(connector=aiohttp.UnixConnector(path=str(socket)), timeout=timeout) as session:
         operation = payload["operation"]
         if operation == "inspect":
             config = await request(session, "GET", "api/config")

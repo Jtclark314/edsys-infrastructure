@@ -9,8 +9,14 @@ Use `edcore-control ha api` from Phil's delegated local Codex task. The installe
 `scripts/ops/edcore-control.py`, which invokes `edcore-ha-api.py` and sends a
 bounded request through existing key-only SSH to `pve-node3`, QEMU guest exec
 on VMID 300, and the existing `hassio_supervisor` container. The worker uses
-the official Supervisor/Core Unix socket, discovered from
-`supervisor.const.SOCKET_CORE` (currently `/run/os/core.sock`).
+the official Supervisor/Core Unix socket. The worker reads the running Core
+container's exact `SUPERVISOR_CORE_API_SOCKET` setting through the existing
+local Docker socket and maps that path through Supervisor's existing bind
+mounts. It does not export container metadata or environment values. Older
+Supervisor releases may use their own `supervisor.const.SOCKET_CORE` constant
+only when Core has no explicit socket setting. A missing socket, invalid or
+ambiguous metadata, or unavailable Docker socket fails closed; no TCP or
+credential fallback is attempted.
 
 This is an **existing privileged operator route**, not a dedicated least-privilege
 LAN integration. Its authority comes from the existing root SSH/guest route and
@@ -106,10 +112,32 @@ python3 -m py_compile scripts/ops/edcore-control.py \
 edcore-control ha api inspect
 ```
 
-The 24 focused regressions cover write rejection before transport, explicit
+The 34 focused regressions cover write rejection before transport, explicit
 targets, path injection, credential redaction, multi-chunk response reads,
-bounded output, and ambiguous guest results. Dependencies are already installed;
+bounded output, ambiguous guest results, current and legacy socket layouts,
+the exact environment-name match, bind-mount boundaries/conflicts, and
+metadata-transport failure without credential fallback. Dependencies are already installed;
 the 9950x helper uses only Python's standard library.
+
+### Supervisor socket compatibility repair: 2026-11-01
+
+An owner-initiated HA update exposed a route compatibility failure: current
+Supervisor no longer exports `SOCKET_CORE`, and its per-Core runtime directory
+can place the socket beneath `core/core.sock`. Installed official Supervisor
+source resolves the running container's explicit socket setting rather than
+assuming one version's pathname. The worker now follows that metadata route
+while keeping the same SSH, guest, Supervisor, authentication and action
+boundaries. The metadata reads have five-second request timeouts and the same
+two-MiB response cap as other reads. No service restart or configuration,
+credential, permission, listener, or update change is part of this repair.
+
+Syntax and all 34 focused regressions passed. After the owner's separate
+update, the repaired existing route returned Core 2026.10.4, 931 states,
+85 service domains and 448 action names. A native dashboard-list WebSocket read
+also passed. During the update, the guest route temporarily reported
+`QEMU guest agent is not running`; no restart or alternate route was used.
+These reads validate the control transport, not household-device actions or
+the state of each unavailable entity.
 
 Rollback is a source-level revert of the helper addition and dispatcher change.
 The exact prior dispatcher is retained privately with the repair evidence.

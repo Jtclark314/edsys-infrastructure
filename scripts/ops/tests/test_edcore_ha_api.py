@@ -91,14 +91,19 @@ def test_bounded_list_and_json_object_validation():
             parser.parse_args(argv)
 
 
-def load_worker(monkeypatch):
+def load_worker(monkeypatch, *, legacy_socket=True):
     import types
-    monkeypatch.setitem(__import__("sys").modules, "supervisor.const", types.SimpleNamespace(SOCKET_CORE="/existing/core.sock"))
+    constants = types.SimpleNamespace(SOCKET_CORE="/existing/core.sock") if legacy_socket else types.SimpleNamespace()
+    monkeypatch.setitem(__import__("sys").modules, "supervisor.const", constants)
     monkeypatch.setitem(__import__("sys").modules, "aiohttp", types.SimpleNamespace())
     spec = importlib.util.spec_from_file_location("edcore_ha_worker", PATH.with_name("edcore-ha-remote.py"))
     worker = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(worker)
     return worker
+
+
+def test_worker_imports_when_current_supervisor_has_no_legacy_socket_constant(monkeypatch):
+    assert load_worker(monkeypatch, legacy_socket=False).SOCKET_CORE is None
 
 
 def test_worker_redacts_credentials_and_camera_url_tokens(monkeypatch):
@@ -128,3 +133,80 @@ def test_worker_reads_multiple_http_chunks_and_enforces_byte_bound(monkeypatch):
     monkeypatch.setattr(worker, "MAX_RESPONSE", 5)
     with pytest.raises(RuntimeError, match="bounded"):
         asyncio.run(worker.request(Session(), "GET", "api/test"))
+
+
+def test_worker_maps_current_core_socket_from_exact_env_and_supervisor_mount(monkeypatch):
+    worker = load_worker(monkeypatch)
+    monkeypatch.setattr(worker, "SOCKET_CORE", None)
+    core = {"Config": {"Env": ["SUPERVISOR_TOKEN=never-return-this", "SUPERVISOR_CORE_API_SOCKET=/run/supervisor/core/core.sock"]}}
+    supervisor = {"Mounts": [{"Type": "bind", "Source": "/run/supervisor", "Destination": "/run/os"}]}
+    assert worker.core_socket_from_metadata(core, supervisor) == Path("/run/os/core/core.sock")
+    assert core["Config"]["Env"][0] == "SUPERVISOR_TOKEN=never-return-this"
+
+
+def test_worker_explicit_running_socket_takes_precedence_over_legacy_constant(monkeypatch):
+    worker = load_worker(monkeypatch)
+    core = {"Config": {"Env": ["SUPERVISOR_CORE_API_SOCKET=/run/supervisor/core.sock"]}}
+    supervisor = {"Mounts": [{"Type": "bind", "Source": "/run/supervisor", "Destination": "/run/os"}]}
+    assert worker.core_socket_from_metadata(core, supervisor) == Path("/run/os/core.sock")
+    assert worker.core_socket_from_metadata({"Config": {"Env": []}}, {}) == Path("/existing/core.sock")
+
+
+@pytest.mark.parametrize("value", ["", "relative/core.sock", "/run/supervisor/../core.sock", "/run/supervisor/token"])
+def test_worker_rejects_invalid_explicit_socket_without_legacy_fallback(value, monkeypatch):
+    worker = load_worker(monkeypatch)
+    with pytest.raises(RuntimeError, match="invalid"):
+        worker.core_socket_from_metadata({"Config": {"Env": ["SUPERVISOR_CORE_API_SOCKET=" + value]}}, {})
+
+
+def test_worker_rejects_missing_or_ambiguous_socket_metadata(monkeypatch):
+    worker = load_worker(monkeypatch)
+    monkeypatch.setattr(worker, "SOCKET_CORE", None)
+    with pytest.raises(RuntimeError, match="no explicit"):
+        worker.core_socket_from_metadata({"Config": {"Env": ["OTHER_SUPERVISOR_CORE_API_SOCKET=/wrong/core.sock"]}}, {})
+    core = {"Config": {"Env": ["SUPERVISOR_CORE_API_SOCKET=/run/supervisor/core/core.sock"]}}
+    with pytest.raises(RuntimeError, match="outside"):
+        worker.core_socket_from_metadata(core, {"Mounts": [{"Type": "bind", "Source": "/run/supervisor-other", "Destination": "/run/os"}]})
+    core["Config"]["Env"] *= 2
+    with pytest.raises(RuntimeError, match="ambiguous"):
+        worker.core_socket_from_metadata(core, {})
+
+
+def test_worker_uses_most_specific_existing_mount_and_rejects_conflicts(monkeypatch):
+    worker = load_worker(monkeypatch)
+    core = {"Config": {"Env": ["SUPERVISOR_CORE_API_SOCKET=/run/supervisor/core/core.sock"]}}
+    mounts = [{"Type": "bind", "Source": "/run/supervisor", "Destination": "/run/os"},
+              {"Type": "bind", "Source": "/run/supervisor/core", "Destination": "/run/core"}]
+    assert worker.core_socket_from_metadata(core, {"Mounts": mounts}) == Path("/run/core/core.sock")
+    mounts.append({"Type": "bind", "Source": "/run/supervisor/core", "Destination": "/run/conflict"})
+    with pytest.raises(RuntimeError, match="ambiguous"):
+        worker.core_socket_from_metadata(core, {"Mounts": mounts})
+
+
+def test_worker_metadata_transport_is_fixed_bounded_and_has_no_credential_fallback(monkeypatch):
+    import asyncio
+    import types
+    worker = load_worker(monkeypatch)
+    calls = []
+    class Session:
+        def __init__(self, *, connector, timeout):
+            assert connector == "/run/docker.sock"
+            assert timeout == 5
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+    monkeypatch.setattr(worker, "aiohttp", types.SimpleNamespace(ClientTimeout=lambda *, total: total, UnixConnector=lambda *, path: path, ClientSession=Session))
+    async def metadata(session, method, path):
+        calls.append((method, path))
+        if path == "containers/homeassistant/json":
+            return {"Config": {"Env": ["SUPERVISOR_CORE_API_SOCKET=/run/supervisor/core/core.sock"]}}
+        return {"Mounts": [{"Type": "bind", "Source": "/run/supervisor", "Destination": "/run/os"}]}
+    monkeypatch.setattr(worker, "request", metadata)
+    monkeypatch.setattr(worker.Path, "is_socket", lambda self: str(self) == "/run/os/core/core.sock")
+    assert asyncio.run(worker.resolve_core_socket()) == Path("/run/os/core/core.sock")
+    assert calls == [("GET", "containers/homeassistant/json"), ("GET", "containers/hassio_supervisor/json")]
+    async def failed(*args):
+        raise RuntimeError("private metadata must not escape")
+    monkeypatch.setattr(worker, "request", failed)
+    with pytest.raises(RuntimeError, match="metadata read failed") as result:
+        asyncio.run(worker.resolve_core_socket())
+    assert "private metadata" not in str(result.value)

@@ -34,6 +34,9 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `PROXMOX_FAMILY_SERVICES.md` - VM202's qualified 5 GiB allocation on node2, preserved virtual board, recovery evidence and snapshot-retention exception.
 - `HOME_ASSISTANT_CONTROL.md` - Phil's existing privileged HA API route, bounded reads, explicit actions, disposable-helper verification, privacy and rollback.
 - `HOME_ASSISTANT_DASHBOARDS.md` - accepted native dashboard design, UI/data verification boundaries, private checkpoints, and narrow rollback.
+- `../services/home-assistant-master-bedroom/README.md` - dedicated native bedroom
+  command dashboard, existing LG/Pi/Plex/voice controls, all HA lights/switches,
+  create-only deployment and guarded dashboard-only recovery.
 - `../services/home-assistant-family-hub/README.md` - local Family calendar,
   responsive Family Hub and explicitly selected AnyList lists; pinned connector,
   native authenticated cards, test boundaries and scoped recovery.

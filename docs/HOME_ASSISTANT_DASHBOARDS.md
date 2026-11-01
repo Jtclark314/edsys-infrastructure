@@ -1,5 +1,44 @@
 # Home Assistant Dashboard Design
 
+## Dedicated Master Bedroom dashboard: 2026-11-01
+
+The owner requested a separate sidebar **Master Bedroom** command dashboard at
+`/edsys-master-bedroom/home`. The deployed native configuration has twelve
+views: Home, TV remote, Lights & switches, Voice & status, and copies of all
+eight current Bedroom Pi views, including Plex, YouTube, Music & books, Night &
+sleep, TV screen, Household, LG remote and Capabilities. Existing app launchers,
+media targets and production EdSys Assist pipeline are reused; no entity or
+control route is invented. Copies retain Pi action payloads while local
+navigation leads through the new dashboard.
+
+The observed five lights and 72 switches have individual controls, with room
+controls before device/camera settings and no entity-list header toggle. Existing
+unavailable bedside color light and floodlight remain visible. This native
+storage configuration is editable in HA; future devices and subsequent changes
+to the original Pi views require a deliberate dashboard edit.
+
+Create-only deployment compares all sixteen original dashboards and resources
+before writing, requires exact new-dashboard native readback, and rechecks the
+original configurations afterward. Exact native readback, all sixteen original
+dashboard/resource preservation checks, 77 control rows, 158 retained Pi action
+payloads and reference validation passed. All twelve views rendered in Nimo's
+actual signed-in HA frontend without visible entity/configuration errors;
+desktop and selected 411-pixel phone-width checks passed. TV remote remains a
+main tab and Voice showed EdSys backend Ready. Both Homepage launcher cards
+rendered with the correct name, description and exact destination; signed-out
+navigation retained HA sign-in. Native API/title/layout parity passed for the
+82-card main launcher and 206-card Master. The two Homepage containers were
+refreshed; HA and the Pi were not restarted. Read-only rollback preview passed.
+No physical device/media/voice action was tested. This work adds no frontend
+resource, integration or automation. The owner's separate HA update is
+independent of this dashboard deployment.
+
+Source, verification and guarded rollback:
+[Master Bedroom runbook](../services/home-assistant-master-bedroom/README.md).
+Runtime observations, bindings, household data and recovery records remain
+private outside Git and RAG. Rollback removes only the unchanged new dashboard;
+later edits cause it to stop for review rather than overwrite them.
+
 ## Post-show follow-up and cancellation: 2026-10-17
 
 The prepared LG current-address reservation is installed and loaded by one
