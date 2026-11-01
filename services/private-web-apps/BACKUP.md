@@ -54,21 +54,34 @@ Protected content:
   is optional and may be empty or a YAML mapping. There is no native database in
   this OSS-only profile.
 - changedetection's complete `changedetection/` datastore, including settings,
-  private API/session state, watches and snapshots. The store must parse, have a
-  `watching` mapping and retain enabled private API access with a nonempty key.
+  private API/session state, watches and snapshots. Version 0.60.10 serializes
+  `settings.application` in `changedetection.json` and watches in separate
+  `{uuid}/watch.json` files; it does not require a top-level `watching` mapping.
+  Settings must parse as mappings and retain enabled private API access with a
+  nonempty string key.
   An intentionally empty watch list is valid; an empty/missing store is not.
 - Every other top-level runtime entry except `images/`, the two captured app
   directories, and explicit `tmp`/`candidate` names (including `tmp-` and
   `candidate-` prefixes and their dot-prefixed variants). Thus private deployment
   envs and `proxy.json` are protected. Symlinks/special files fail closed.
-- Both owning Docker source folders, the private-web-apps source folder, installed
-  root application/backup units and timer, user proxy unit, exact installed
-  control/mount-check/backup helpers and private mount UUID guard.
+- Both owning Docker source folders, the private-web-apps source folder, the
+  complete `services/stirling-mcp` source folder with required `server.py`
+  entrypoint, installed root application/backup units and timer, user proxy unit,
+  exact installed control/mount-check/backup helpers and private mount UUID guard.
 - The separate `images/` tree directly in the same Restic snapshot. At least two
-  nonempty `.tar`, `.tar.gz`, or `.tar.zst` image archives are required. Root
-  commissioning must prove these are the exact two qualified application images.
+  nonempty `.tar`, `.tar.gz`, or `.tar.zst` archives are required. `archives.json`
+  lists Docker exports as `{file, image_id, sha256, size}` records; filenames must
+  be basenames, and every entry's file, hash and size must match the actual image
+  inventory. Both captured app image IDs must have matching retained exports.
+  A new app image without its export fails validation before any Restic write or
+  acceptance. Root commissioning additionally proves actual Docker load/restore.
   Direct inclusion avoids repeatedly copying large exports into archive staging;
   unchanged exports use Restic deduplication.
+  The commissioned MCP runtime/venv archive is an additional opaque artifact in
+  this tree, not a Docker image entry. Its private registration and prechange
+  Codex configuration are protected under `deploy/`. Live MCP release symlinks,
+  artifact directories and user documents outside this runtime root are not
+  traversed or copied.
 
 Staging is `/srv/edsys-backup/staging/private-web-apps`. Generation directories
 are write-once by policy. Archives include member hashes, sizes, modes, UID/GID
@@ -172,7 +185,9 @@ state, restart after capture failure, failed restart intent, stale intent, exact
 snapshot scope, refused live restore, and preservation of last-good state after
 capture/snapshot failures. Coverage includes graceful process cancellation,
 low-space refusal, shared-filesystem capacity, oversized-state refusal and
-protection of completed PDFs/templates/signatures. Large-size checks use sparse
+protection of completed PDFs/templates/signatures, the actual 0.60.10 settings
+format, private API requirements, MCP source recovery, and missing/stale image
+exports with last-good preservation before any Restic write. Large-size checks use sparse
 metadata fixtures; no multi-GiB content is written/read. No live Docker or
 repository operation is performed.
 Retention tests prove preservation of CURRENT/payload, two prior accepted sets,

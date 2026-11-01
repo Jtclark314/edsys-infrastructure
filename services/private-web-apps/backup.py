@@ -302,13 +302,16 @@ def archive_inventory(path: Path, *, app: str | None = None) -> list[dict]:
         if not set(STATE_BINDS[app]).issubset(directories):
             raise BackupError("stirling_persistent_directory_missing")
     if app == "changedetection":
-        if not isinstance(changedetection, dict) or not isinstance(changedetection.get("watching"), dict):
+        # 0.60.10 serializes settings here and watches in {uuid}/watch.json;
+        # an empty production watch list therefore has no top-level watching.
+        if not isinstance(changedetection, dict):
             raise BackupError("changedetection_store_invalid")
         settings_root = changedetection.get("settings")
         settings = settings_root.get("application") if isinstance(settings_root, dict) else None
         if not isinstance(settings, dict):
             raise BackupError("changedetection_store_invalid")
-        if settings.get("api_access_token_enabled") is not True or not settings.get("api_access_token"):
+        token = settings.get("api_access_token")
+        if settings.get("api_access_token_enabled") is not True or not isinstance(token, str) or not token.strip():
             raise BackupError("changedetection_private_api_state_missing")
     return records
 
@@ -424,10 +427,15 @@ def recovery_sources(paths: Paths) -> list[tuple[Path, str]]:
         if child.is_symlink() or not (child.is_file() or child.is_dir()):
             raise BackupError("unsupported_runtime_artifact")
         sources.append((child, "runtime/" + child.name))
-    for relative in ("docker/stirling-pdf", "docker/changedetection", "services/private-web-apps"):
+    source_requirements = {
+        "docker/stirling-pdf": "compose.yaml",
+        "docker/changedetection": "compose.yaml",
+        "services/private-web-apps": "backup.py",
+        "services/stirling-mcp": "server.py",
+    }
+    for relative, required_name in source_requirements.items():
         root = paths.source / relative
         plain_tree(root, max_bytes=128 * 1024**2)
-        required_name = "compose.yaml" if relative.startswith("docker/") else "backup.py"
         if not (root / required_name).is_file() or not (root / required_name).stat().st_size:
             raise BackupError("recovery_source_missing")
         sources.append((root, "source/" + relative))
@@ -441,6 +449,43 @@ def image_inventory(root: Path) -> list[dict]:
         raise BackupError("two_image_archives_required")
     with bounded(1200):
         return [file_record(p, str(p.relative_to(root))) for p in files]
+
+
+def verify_image_bindings(root: Path, images: list[dict], apps: dict) -> None:
+    """Bind captured Docker image IDs to retained exports, not opaque artifacts."""
+    index_path = root / "archives.json"
+    if not index_path.is_file() or not 0 < index_path.stat().st_size <= 1024**2:
+        raise BackupError("image_archive_index_missing")
+    try:
+        entries = json.loads(index_path.read_text())
+        if not isinstance(entries, list) or not entries:
+            raise BackupError("image_archive_index_invalid")
+        inventory = {item["path"]: item for item in images}
+        exported_ids = set()
+        filenames = set()
+        for entry in entries:
+            if not isinstance(entry, dict) or set(entry) != {"file", "image_id", "sha256", "size"}:
+                raise BackupError("image_archive_index_invalid")
+            filename, image_id = entry["file"], entry["image_id"]
+            if (not isinstance(filename, str) or PurePosixPath(filename).name != filename
+                    or not filename.endswith((".tar", ".tar.gz", ".tar.zst")) or filename in filenames
+                    or not isinstance(image_id, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id)
+                    or not isinstance(entry["sha256"], str) or not re.fullmatch(r"[a-f0-9]{64}", entry["sha256"])
+                    or type(entry["size"]) is not int or entry["size"] <= 0):
+                raise BackupError("image_archive_index_invalid")
+            actual = inventory.get(filename)
+            if not actual or any(actual[key] != entry[key] for key in ("sha256", "size")):
+                raise BackupError("image_export_inventory_mismatch")
+            filenames.add(filename)
+            exported_ids.add(image_id)
+        for app in APPS:
+            image_id = apps[app].get("image_id")
+            if not isinstance(image_id, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id):
+                raise BackupError("captured_image_id_invalid")
+            if image_id not in exported_ids:
+                raise BackupError("active_image_export_missing")
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        raise BackupError("image_archive_index_invalid") from None
 
 
 def verify_stage(stage: Path, image_root: Path) -> dict:
@@ -468,6 +513,7 @@ def verify_stage(stage: Path, image_root: Path) -> dict:
         images = image_inventory(image_root)
         if images != manifest.get("images"):
             raise BackupError("image_hash_or_mode_mismatch")
+        verify_image_bindings(image_root, images, manifest["apps"])
         return {"app_count": len(APPS), "member_count": sum(len(a["members"]) for a in manifest["apps"].values()),
                 "state_and_recovery_bytes": total, "image_count": len(images),
                 "image_bytes": sum(i["size"] for i in images)}

@@ -27,6 +27,13 @@ class Fixture(unittest.TestCase):
         self.image_root.mkdir()
         (self.image_root / "stirling-pdf.tar").write_bytes(b"isolated-image-fixture-one")
         (self.image_root / "changedetection.tar").write_bytes(b"isolated-image-fixture-two")
+        self.image_ids = {app: "sha256:" + digit * 64
+                          for app, digit in zip(backup.APPS, ("b", "c"))}
+        self.image_index = [{"file": app + ".tar", "image_id": self.image_ids[app],
+                             "sha256": backup.hash_file(self.image_root / (app + ".tar")),
+                             "size": (self.image_root / (app + ".tar")).stat().st_size}
+                            for app in backup.APPS]
+        backup.atomic_json(self.image_root / "archives.json", self.image_index)
         stirling = self.paths.runtime / "stirling-pdf/configs"
         stirling.mkdir(parents=True)
         (stirling / "settings.yml").write_text("system:\n  enableAnalytics: false\n")
@@ -35,7 +42,9 @@ class Fixture(unittest.TestCase):
         changedetection = self.paths.runtime / "changedetection"
         changedetection.mkdir()
         (changedetection / "changedetection.json").write_text(json.dumps({
-            "watching": {}, "settings": {"application": {
+            "app_guid": "offline-fixture-guid", "build_sha": None, "version_tag": None,
+            "note": "Settings file; watches are in separate UUID directories",
+            "settings": {"application": {
                 "api_access_token_enabled": True, "api_access_token": "offline-fixture-only"}}}))
         self.identifier = "a" * 64
 
@@ -51,7 +60,8 @@ class Fixture(unittest.TestCase):
         apps = {}
         for app in backup.APPS:
             backup.make_archive(path / (app + ".tar"), [(self.paths.runtime / app, ".")], seconds=10)
-            apps[app] = {"members": backup.archive_inventory(path / (app + ".tar"), app=app)}
+            apps[app] = {"image_id": self.image_ids[app],
+                         "members": backup.archive_inventory(path / (app + ".tar"), app=app)}
         recovery = self.root / "recovery-fixture"
         recovery.mkdir(exist_ok=True)
         (recovery / "compose.yaml").write_text("services: {}\n")
@@ -88,6 +98,41 @@ class Fixture(unittest.TestCase):
 
 
 class VerificationTests(Fixture):
+    def test_changedetection_06010_settings_without_watching_are_accepted(self):
+        data = json.loads((self.paths.runtime / "changedetection/changedetection.json").read_text())
+        self.assertNotIn("watching", data)
+        backup.verify_stage(self.payload(), self.image_root)
+
+    def test_changedetection_missing_or_malformed_application_settings_are_refused(self):
+        for number, data in enumerate(([], {}, {"settings": []}, {"settings": {"application": []}})):
+            with self.subTest(number=number):
+                (self.paths.runtime / "changedetection/changedetection.json").write_text(json.dumps(data))
+                with self.assertRaisesRegex(backup.BackupError, "changedetection_store_invalid"):
+                    self.payload(self.root / f"bad-settings-{number}")
+
+    def test_changedetection_private_api_must_be_enabled_with_a_nonempty_string(self):
+        settings_file = self.paths.runtime / "changedetection/changedetection.json"
+        data = json.loads(settings_file.read_text())
+        settings = data["settings"]["application"]
+        for number, (enabled, token) in enumerate(((False, "fixture"), ("true", "fixture"),
+                                                  (True, ""), (True, "  "), (True, None),
+                                                  (True, 42), (True, {"invalid": "fixture"}))):
+            with self.subTest(number=number):
+                settings.update(api_access_token_enabled=enabled, api_access_token=token)
+                settings_file.write_text(json.dumps(data))
+                with self.assertRaisesRegex(backup.BackupError, "changedetection_private_api_state_missing"):
+                    self.payload(self.root / f"bad-api-{number}")
+
+    def test_changedetection_separate_watch_files_are_captured(self):
+        watch = self.paths.runtime / "changedetection/00000000-0000-4000-8000-000000000001/watch.json"
+        watch.parent.mkdir()
+        watch.write_text(json.dumps({"url": "https://example.invalid/offline-fixture"}))
+        payload = self.payload()
+        members = backup.archive_inventory(payload / "changedetection.tar", app="changedetection")
+        self.assertEqual(next(item["sha256"] for item in members if item["path"].endswith("/watch.json")),
+                         backup.hash_file(watch))
+        backup.verify_stage(payload, self.image_root)
+
     def test_stirling_settings_must_be_a_yaml_mapping(self):
         (self.paths.runtime / "stirling-pdf/configs/settings.yml").write_text("- unexpected list\n")
         with self.assertRaisesRegex(backup.BackupError, "stirling_settings_invalid"):
@@ -145,6 +190,37 @@ class VerificationTests(Fixture):
         (self.image_root / "stirling-pdf.tar").write_bytes(b"replaced-image")
         with self.assertRaises(backup.BackupError):
             backup.verify_stage(payload, self.image_root)
+
+    def test_missing_docker_image_index_is_refused(self):
+        (self.image_root / "archives.json").unlink()
+        with self.assertRaisesRegex(backup.BackupError, "image_archive_index_missing"):
+            backup.verify_stage(self.payload(), self.image_root)
+
+    def test_missing_active_image_index_entry_is_refused(self):
+        backup.atomic_json(self.image_root / "archives.json", self.image_index[1:])
+        with self.assertRaisesRegex(backup.BackupError, "active_image_export_missing"):
+            backup.verify_stage(self.payload(), self.image_root)
+
+    def test_changed_app_image_requires_its_own_export(self):
+        self.image_ids["stirling-pdf"] = "sha256:" + "d" * 64
+        with self.assertRaisesRegex(backup.BackupError, "active_image_export_missing"):
+            backup.verify_stage(self.payload(), self.image_root)
+
+    def test_image_index_filename_hash_and_size_must_match_inventory(self):
+        for number, (key, value) in enumerate((("file", "missing.tar"), ("sha256", "0" * 64), ("size", 1))):
+            with self.subTest(key=key):
+                entries = [dict(entry) for entry in self.image_index]
+                entries[0][key] = value
+                backup.atomic_json(self.image_root / "archives.json", entries)
+                with self.assertRaisesRegex(backup.BackupError, "image_export_inventory_mismatch"):
+                    backup.verify_stage(self.payload(self.root / f"bad-index-{number}"), self.image_root)
+
+    def test_opaque_mcp_runtime_archive_is_protected_without_becoming_a_docker_image(self):
+        (self.image_root / "stirling-mcp-runtime.tar.zst").write_bytes(b"isolated-runtime-fixture")
+        payload = self.payload()
+        manifest = json.loads((payload / "manifest.json").read_text())
+        self.assertIn("stirling-mcp-runtime.tar.zst", {item["path"] for item in manifest["images"]})
+        backup.verify_stage(payload, self.image_root)
 
     def test_changed_mode_is_refused(self):
         payload = self.payload()
@@ -205,6 +281,43 @@ class ContainerContractTests(Fixture):
         with mock.patch.object(backup, "run", return_value=json.dumps([info]).encode()):
             with self.assertRaises(backup.BackupError):
                 backup.docker_inspect("edsys-stirling-pdf", "stirling-pdf", self.paths)
+
+
+class RecoverySourceTests(Fixture):
+    def setUp(self):
+        super().setUp()
+        files = [self.paths.runtime / "deploy/stirling-pdf.env",
+                 self.paths.runtime / "deploy/changedetection.env", self.paths.runtime / "proxy.json",
+                 self.paths.mount_guard,
+                 self.paths.user_units / "edsys-private-web-apps-proxy.service"]
+        files += [self.paths.system_units / name for name in (
+            "edsys-private-web-apps.service", "edsys-private-web-apps-backup.service",
+            "edsys-private-web-apps-backup.timer")]
+        files += [self.paths.libexec / name for name in (
+            "edsys-private-web-apps-control", "edsys-private-web-apps-mount-check",
+            "edsys-private-web-apps-backup")]
+        files += [self.paths.source / relative for relative in (
+            "docker/stirling-pdf/compose.yaml", "docker/changedetection/compose.yaml",
+            "services/private-web-apps/backup.py", "services/stirling-mcp/server.py",
+            "services/stirling-mcp/bridge.py")]
+        for path in files:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("offline-recovery-source-fixture\n")
+
+    def test_mcp_entrypoint_and_bridge_source_are_captured(self):
+        target = self.root / "recovery.tar"
+        backup.make_archive(target, backup.recovery_sources(self.paths), seconds=10)
+        members = backup.archive_inventory(target)
+        names = {item["path"] for item in members}
+        self.assertTrue({"source/services/stirling-mcp/server.py",
+                         "source/services/stirling-mcp/bridge.py"}.issubset(names))
+
+    def test_missing_mcp_entrypoint_is_refused_before_cold_capture(self):
+        (self.paths.source / "services/stirling-mcp/server.py").unlink()
+        with mock.patch.object(backup, "capture_app") as capture:
+            with self.assertRaisesRegex(backup.BackupError, "recovery_source_missing"):
+                backup.prepare_generation(self.paths, "missing-mcp-fixture")
+            capture.assert_not_called()
 
 
 class RunningStateTests(Fixture):
@@ -458,6 +571,21 @@ class RetentionTests(Fixture):
 
 
 class TransactionTests(Fixture):
+    def test_stale_image_export_preserves_last_good_without_restic_write(self):
+        previous = self.payload(self.paths.stage / "snapshot-payload")
+        previous_hash = backup.hash_file(previous / "manifest.json")
+        receipt = {"snapshot_id": "c" * 64, "status": "success"}
+        backup.atomic_json(self.paths.stage / "CURRENT.json", receipt)
+        self.image_ids["stirling-pdf"] = "sha256:" + "d" * 64
+        candidate = self.payload(self.paths.stage / "generations/stale-export-fixture")
+        repository = self.fake_repository()
+        with mock.patch.object(backup, "prepare_generation", return_value=candidate):
+            with self.assertRaisesRegex(backup.BackupError, "active_image_export_missing"):
+                backup.backup(self.paths, repository)
+        repository.backup.assert_not_called()
+        self.assertEqual(json.loads((self.paths.stage / "CURRENT.json").read_text()), receipt)
+        self.assertEqual(backup.hash_file(previous / "manifest.json"), previous_hash)
+
     def test_cleanup_failure_keeps_successfully_accepted_backup(self):
         def prepare(paths, generation, repository_path):
             directory = self.payload(paths.stage / "generations" / generation)
