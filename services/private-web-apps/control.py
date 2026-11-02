@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Start/stop only the two private web apps after verifying their data disk."""
+"""Own the two private app stacks and their explicitly named stateless helpers."""
 import argparse
 from pathlib import Path
 import subprocess
@@ -8,6 +8,8 @@ ROOT = Path('/mnt/ai-store/edsys-private-services')
 SOURCE = Path('/srv/edsys/edsys-infrastructure/docker')
 UUID_FILE = Path('/etc/edsys-private-web-apps/mount-uuid')
 APPS = (('stirling-pdf', 'edsys-stirling-pdf'), ('changedetection', 'edsys-changedetection'))
+STOP_ORDER = ('edsys-changedetection', 'edsys-changedetection-browser',
+              'edsys-changedetection-egress', 'edsys-stirling-pdf')
 DOCKER = ['docker', '--host', 'unix:///var/run/docker.sock']
 
 
@@ -35,7 +37,7 @@ def stop_apps():
     names = set(subprocess.check_output(
         [*DOCKER, 'ps', '--all', '--format', '{{.Names}}'], text=True, timeout=15).splitlines())
     failures = []
-    for _, name in reversed(APPS):
+    for name in STOP_ORDER:
         if name not in names:
             continue
         try:

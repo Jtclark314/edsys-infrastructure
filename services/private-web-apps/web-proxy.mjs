@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 const CONFIG_PATH = '/mnt/ai-store/edsys-private-services/proxy.json';
 const MAPPINGS = {
   'stirling-pdf': [8142, '10.254.230.50', 8080, 8452],
-  changedetection: [8143, '127.0.0.1', 8141, 8453],
+  changedetection: [8143, '10.254.230.18', 5000, 8453],
 };
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);

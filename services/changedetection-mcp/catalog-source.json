@@ -1,0 +1,21 @@
+{
+  "upstream_version": "0.60.10",
+  "upstream_revision": "16974bf351cd68b1978af9494082b75efadaa8e0",
+  "sources": {
+    "docs/api-spec.yaml": "bdcc925547f65b57cbef959f958c1052e0f492c18751a3ddcece460a1139ea90",
+    "changedetectionio/processors/restock_diff/api.yaml": "2c64b4a6ad01b14c7d26eb342bd79ec855e80b15b243dbbc5500fe71a4cdf7dd"
+  },
+  "api_spec_sha256": "cbfd177e451298cb49420ae9dc427a47b45994e3afea178180af79f6312bda8a",
+  "native_full_spec_sha256": "cd11032076617664c0110b30adf1074627f6e1fef5e8879dd62a3be11356dc57",
+  "local_extensions": [
+    {
+      "source": "docker/changedetection/patch_app.py",
+      "source_sha256": "6dc8f3671140350524fd071a842cd164dcaa5f78823ee3a411fd7e8b928081b6",
+      "changes": [
+        "Expose installed image_ssim_diff processor and its four bounded native configuration fields.",
+        "Default per-watch AI opt-in to false in model, UI and schema.",
+        "Return saved visual processor settings through getWatch."
+      ]
+    }
+  ]
+}

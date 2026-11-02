@@ -13,6 +13,7 @@ import dataclasses
 import datetime as dt
 import fcntl
 import hashlib
+import hmac
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -23,16 +24,31 @@ import stat
 import subprocess
 import sys
 import tarfile
+import tomllib
 import uuid
 import yaml
 
 
 SCOPE = "edsys-private-web-apps"
-FORMAT_TAG = "edsys-private-web-apps-v1"
+FORMAT_TAG = "edsys-private-web-apps-v2"
+FORMAT_TAGS = {1: "edsys-private-web-apps-v1", 2: FORMAT_TAG}
 APPS = {
     "stirling-pdf": "edsys-stirling-pdf",
     "changedetection": "edsys-changedetection",
 }
+SIDECARS = {"browser": "edsys-changedetection-browser", "egress": "edsys-changedetection-egress"}
+CHANGEDETECTION_BUILD_FILES = ("Dockerfile.app", "Dockerfile.browser", "patch_app.py", "app_guard.py",
+    "egress_proxy.py", "patch_browser.py", "browser-requirements.in", "browser-requirements.lock")
+CHANGEDETECTION_SOURCE_FILES = ("compose.yaml", "initialize.py", "healthcheck.py", *CHANGEDETECTION_BUILD_FILES,
+    "configure_local_ai.py", "images.lock.json")
+MCP_RUNTIME_FILES = ("server.py", "bridge.py", "run.sh", "requirements.lock", "api-spec.json", "catalog-source.json")
+MCP_REQUIRED_FILES = (*MCP_RUNTIME_FILES, "install.sh", "LICENSE", "LICENSE.upstream", "NOTICE")
+MCP_RECEIPT = "changedetection-mcp-runtime.json"
+MCP_KEY = "changedetection-mcp-api-key"
+MCP_REGISTRATION = "changedetection-mcp-registration.toml"
+MCP_INSTALL = "changedetection-mcp-install.json"
+MCP_SERVER = "edsys-changedetection"
+MCP_BASE_URL = "http://10.254.230.18:5000"
 STATE_BINDS = {
     "stirling-pdf": {"configs": "/configs", "signatures": "/customFiles/signatures",
                      "templates": "/customFiles/templates", "pipeline": "/pipeline"},
@@ -65,6 +81,7 @@ class Paths:
     libexec: Path = Path("/usr/local/libexec")
     mount_guard: Path = Path("/etc/edsys-private-web-apps/mount-uuid")
     lock: Path = Path("/run/edsys-backup.lock")
+    changedetection_mcp: Path = Path("/home/jeremy/.local/share/edsys-changedetection-mcp")
 
 
 def utc_now() -> str:
@@ -406,6 +423,8 @@ def recovery_sources(paths: Paths) -> list[tuple[Path, str]]:
         (paths.runtime / "proxy.json", "runtime/proxy.json"),
         (paths.mount_guard, "installed/mount-uuid"),
     ]
+    required += [(paths.runtime / "deploy" / name, "runtime/deploy/" + name)
+                 for name in (MCP_KEY, MCP_REGISTRATION, MCP_INSTALL)]
     for name in ("edsys-private-web-apps.service", "edsys-private-web-apps-backup.service",
                  "edsys-private-web-apps-backup.timer"):
         required.append((paths.system_units / name, "installed/system/" + name))
@@ -428,18 +447,114 @@ def recovery_sources(paths: Paths) -> list[tuple[Path, str]]:
             raise BackupError("unsupported_runtime_artifact")
         sources.append((child, "runtime/" + child.name))
     source_requirements = {
-        "docker/stirling-pdf": "compose.yaml",
-        "docker/changedetection": "compose.yaml",
-        "services/private-web-apps": "backup.py",
-        "services/stirling-mcp": "server.py",
+        "docker/stirling-pdf": ("compose.yaml",),
+        "docker/changedetection": CHANGEDETECTION_SOURCE_FILES,
+        "services/private-web-apps": ("backup.py", "control.py"),
+        "services/stirling-mcp": ("server.py",),
+        "services/changedetection-mcp": MCP_REQUIRED_FILES,
     }
-    for relative, required_name in source_requirements.items():
+    for relative, required_names in source_requirements.items():
         root = paths.source / relative
         plain_tree(root, max_bytes=128 * 1024**2)
-        if not (root / required_name).is_file() or not (root / required_name).stat().st_size:
-            raise BackupError("recovery_source_missing")
+        for required_name in required_names:
+            if not (root / required_name).is_file() or not (root / required_name).stat().st_size:
+                raise BackupError("recovery_source_missing")
         sources.append((root, "source/" + relative))
     return sources
+
+
+def verify_source_image_lock(lock: dict, containers: dict, source_hashes: dict) -> None:
+    """Bind the producer's qualified image pins to this exact deployment."""
+    roles = {"app": "changedetection", "browser": "browser", "egress": "egress"}
+    try:
+        if (type(lock.get("schema_version")) is not int or lock["schema_version"] != 1
+                or not isinstance(lock.get("images"), dict) or set(lock["images"]) != set(roles)
+                or not isinstance(lock.get("source_sha256"), dict)
+                or not set(CHANGEDETECTION_BUILD_FILES).issubset(lock["source_sha256"])):
+            raise BackupError("deployment_image_lock_invalid")
+        for role, service in roles.items():
+            image_id = lock["images"][role]["image_id"]
+            if not isinstance(image_id, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id):
+                raise BackupError("deployment_image_lock_invalid")
+            if image_id != containers[service]["image_id"]:
+                raise BackupError("deployment_image_lock_mismatch")
+        for name, digest in lock["source_sha256"].items():
+            if (not isinstance(name, str) or PurePosixPath(name).name != name
+                    or not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest)):
+                raise BackupError("deployment_image_lock_invalid")
+            if source_hashes.get("source/docker/changedetection/" + name) != digest:
+                raise BackupError("deployment_build_source_mismatch")
+    except (KeyError, TypeError, AttributeError):
+        raise BackupError("deployment_image_lock_invalid") from None
+
+
+def deployment_snapshot(paths: Paths) -> dict:
+    """Read the exact Compose deployment without starting or stopping helpers."""
+    project = "edsys-changedetection"
+    root = paths.source / "docker/changedetection"
+    environment = paths.runtime / "deploy/changedetection.env"
+    docker = ["docker", "--host", "unix:///var/run/docker.sock"]
+    compose = [*docker, "compose", "--project-name", project, "--env-file", str(environment),
+               "--file", str(root / "compose.yaml"), "config"]
+    expected = {"changedetection": APPS["changedetection"], **SIDECARS}
+    try:
+        image_lock = small_json(root / "images.lock.json", "deployment_image_lock")
+        config = json.loads(run([*compose, "--format", "json"], label="compose_config", timeout=30))
+        services = config["services"]
+        if config.get("name") != project or set(services) != set(expected):
+            raise BackupError("deployment_service_set_mismatch")
+        hashes = dict(line.split() for line in run([*compose, "--hash", "*"],
+                      label="compose_hash", timeout=30).decode().splitlines())
+        inspected = json.loads(run([*docker, "inspect", *expected.values()],
+                              label="deployment_inspect", timeout=20))
+        by_name = {info["Name"].removeprefix("/"): info for info in inspected}
+        if len(inspected) != len(expected) or set(by_name) != set(expected.values()):
+            raise BackupError("deployment_container_set_mismatch")
+        result = {}
+        for service, name in expected.items():
+            definition, info = services[service], by_name[name]
+            reference = definition["image"]
+            if (definition.get("container_name") != name or not isinstance(reference, str)
+                    or not re.fullmatch(r"(?:sha256:|[^\s@]+@sha256:)[a-f0-9]{64}", reference)):
+                raise BackupError("deployment_image_not_pinned")
+            image_id = run([*docker, "image", "inspect", "--format", "{{.Id}}", reference],
+                           label="deployment_image", timeout=15).decode().strip()
+            labels = info["Config"].get("Labels") or {}
+            if (not re.fullmatch(r"[a-f0-9]{64}", hashes.get(service, ""))
+                    or labels.get("com.docker.compose.project") != project
+                    or labels.get("com.docker.compose.service") != service
+                    or labels.get("com.docker.compose.config-hash") != hashes[service]
+                    or info["Image"] != image_id or info["Config"].get("Image") != reference
+                    or info["State"].get("Paused") or info["State"].get("Restarting")):
+                raise BackupError("deployment_source_runtime_mismatch")
+            expected_binds = set()
+            for mount in definition.get("volumes", []):
+                if mount.get("type") == "tmpfs":
+                    continue
+                source, target = Path(mount.get("source", "")), mount.get("target")
+                readonly = mount.get("read_only") is True
+                app_state = (service == "changedetection" and source == paths.runtime / "changedetection"
+                             and target == "/datastore" and not readonly)
+                if (mount.get("type") != "bind" or not source.is_absolute()
+                        or not (app_state or readonly and root.resolve() in source.resolve().parents)):
+                    raise BackupError("deployment_mount_contract_mismatch")
+                expected_binds.add((str(source), target, not readonly))
+            actual_binds = {(item.get("Source"), item.get("Destination"), item.get("RW"))
+                            for item in info["Mounts"] if item.get("Type") == "bind"}
+            if (actual_binds != expected_binds
+                    or any(item.get("Type") not in ("bind", "tmpfs") for item in info["Mounts"])):
+                raise BackupError("deployment_mount_contract_mismatch")
+            result[service] = {"container_name": name, "container_id": info["Id"],
+                               "image_id": image_id, "source_image": reference,
+                               "compose_config_hash": hashes[service],
+                               "was_running": bool(info["State"]["Running"])}
+        source_hashes = {"source/docker/changedetection/" + str(p.relative_to(root)): hash_file(p)
+                         for p in plain_tree(root, max_bytes=128 * 1024**2)}
+        source_hashes["runtime/deploy/changedetection.env"] = hash_file(environment)
+        verify_source_image_lock(image_lock, result, source_hashes)
+        return {"containers": result, "source_hashes": source_hashes}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        raise BackupError("deployment_contract_invalid") from None
 
 
 def image_inventory(root: Path) -> list[dict]:
@@ -449,6 +564,179 @@ def image_inventory(root: Path) -> list[dict]:
         raise BackupError("two_image_archives_required")
     with bounded(1200):
         return [file_record(p, str(p.relative_to(root))) for p in files]
+
+
+def small_json(path: Path, label: str) -> dict:
+    try:
+        if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= 4 * 1024**2:
+            raise BackupError(label + "_missing")
+        value = json.loads(path.read_text())
+        if not isinstance(value, dict):
+            raise BackupError(label + "_invalid")
+        return value
+    except (OSError, ValueError):
+        raise BackupError(label + "_invalid") from None
+
+
+def mcp_runtime_receipt(root: Path, images: list[dict]) -> dict:
+    receipt = small_json(root / MCP_RECEIPT, "mcp_runtime_receipt")
+    try:
+        filename = receipt["file"]
+        source_hashes = receipt["source_hashes"]
+        if (receipt.get("kind") != "isolated-python-runtime" or not isinstance(filename, str)
+                or PurePosixPath(filename).name != filename
+                or not filename.startswith("changedetection-mcp-runtime-") or not filename.endswith(".tar.zst")
+                or not re.fullmatch(r"[a-f0-9]{64}", receipt["sha256"])
+                or type(receipt["size"]) is not int or receipt["size"] <= 0
+                or not re.fullmatch(r"[a-f0-9]{40}|[a-f0-9]{64}", receipt["source_commit"])
+                or not re.fullmatch(r"[0-9]{8}T[0-9]{6}Z-[A-Za-z0-9][A-Za-z0-9._-]*", receipt["release"])
+                or not isinstance(source_hashes, dict) or set(source_hashes) != set(MCP_RUNTIME_FILES)
+                or any(not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{64}", value)
+                       for value in source_hashes.values())):
+            raise BackupError("mcp_runtime_receipt_invalid")
+        actual = next((item for item in images if item["path"] == filename), None)
+        if not actual or any(actual[key] != receipt[key] for key in ("sha256", "size")):
+            raise BackupError("mcp_runtime_archive_mismatch")
+        return receipt
+    except (KeyError, TypeError):
+        raise BackupError("mcp_runtime_receipt_invalid") from None
+
+
+def mcp_before_config(installation: dict) -> str:
+    name = installation.get("before_config_file")
+    if (not isinstance(name, str) or PurePosixPath(name).name != name
+            or not name.startswith("codex-config-before-changedetection-") or not name.endswith(".toml")):
+        raise BackupError("mcp_prechange_config_invalid")
+    return name
+
+
+def verify_mcp_documents(profile: dict, installation: dict, registration: dict,
+                         before_sha256: str, key_mode: int) -> None:
+    try:
+        if (installation.get("release") != profile["release"]
+                or installation.get("source_commit") != profile["source_commit"]
+                or installation.get("new_server") != MCP_SERVER
+                or installation.get("preserved_all_existing_settings") is not True
+                or mcp_before_config(installation) != profile["before_config_file"]
+                or installation.get("before_sha256") != before_sha256):
+            raise BackupError("mcp_install_receipt_mismatch")
+        if key_mode != 0o600:
+            raise BackupError("mcp_key_permissions_invalid")
+        servers = registration.get("mcp_servers", {})
+        if set(servers) != {MCP_SERVER}:
+            raise BackupError("mcp_registration_mismatch")
+        server = servers[MCP_SERVER]
+        env = server.get("env", {})
+        runtime_root = Path(profile["runtime_root"])
+        artifact = Path(env.get("CHANGEDETECTION_ARTIFACT_DIR", ""))
+        if (server.get("command") != str(Path(profile["install_root"]) / "current/run.sh")
+                or server.get("args", []) != []
+                or env.get("CHANGEDETECTION_API_KEY_FILE") != str(runtime_root / "deploy" / MCP_KEY)
+                or env.get("CHANGEDETECTION_BASE_URL") != MCP_BASE_URL
+                or not artifact.is_absolute() or ".." in artifact.parts
+                or any(artifact == root or root in artifact.parents
+                       for root in (runtime_root, Path(profile["install_root"]), Path(profile["source_root"])))):
+            raise BackupError("mcp_registration_mismatch")
+    except (TypeError, KeyError, AttributeError):
+        raise BackupError("mcp_documents_invalid") from None
+
+
+def mcp_snapshot(paths: Paths, images: list[dict]) -> dict:
+    """Validate only immutable runtime prerequisites; never traverse MCP outputs."""
+    receipt = mcp_runtime_receipt(paths.runtime / "images", images)
+    installation = small_json(paths.runtime / "deploy" / MCP_INSTALL, "mcp_install_receipt")
+    profile = {key: receipt[key] for key in ("release", "source_commit", "source_hashes")}
+    profile.update(install_root=str(paths.changedetection_mcp), runtime_root=str(paths.runtime),
+                   source_root=str(paths.source),
+                   before_config_file=mcp_before_config(installation))
+    try:
+        release = paths.changedetection_mcp / "releases" / receipt["release"]
+        current = paths.changedetection_mcp / "current"
+        if (receipt.get("restore_parent") != str(paths.changedetection_mcp.parent)
+                or not current.is_symlink() or release.is_symlink() or not release.is_dir()
+                or current.resolve(strict=True) != release.resolve(strict=True)):
+            raise BackupError("mcp_active_release_mismatch")
+        if (not (release / "venv/bin/python").is_file()
+                or not (release / "venv/pyvenv.cfg").is_file()
+                or not (release / "venv/pyvenv.cfg").stat().st_size):
+            raise BackupError("mcp_virtualenv_missing")
+        source = paths.source / "services/changedetection-mcp"
+        for name, digest in receipt["source_hashes"].items():
+            installed = release / name
+            if (installed.is_symlink() or not installed.is_file() or not installed.stat().st_size
+                    or hash_file(installed) != digest or hash_file(source / name) != digest):
+                raise BackupError("mcp_runtime_source_mismatch")
+        before = paths.runtime / "deploy" / profile["before_config_file"]
+        if before.is_symlink() or not before.is_file() or not before.stat().st_size:
+            raise BackupError("mcp_prechange_config_missing")
+        registration = tomllib.loads((paths.runtime / "deploy" / MCP_REGISTRATION).read_text())
+        verify_mcp_documents(profile, installation, registration, hash_file(before),
+                             stat.S_IMODE((paths.runtime / "deploy" / MCP_KEY).stat().st_mode))
+        return profile
+    except (OSError, ValueError, KeyError, TypeError):
+        raise BackupError("mcp_runtime_invalid") from None
+
+
+def archived_bytes(archive: Path, name: str, limit: int = 4 * 1024**2) -> bytes:
+    # archive_inventory has already refused duplicate, link and traversal members.
+    with tarfile.open(archive, "r:") as stream:
+        member = next((item for item in stream if str(PurePosixPath(item.name)) == name), None)
+        if member is None or not member.isfile() or not 0 < member.size <= limit:
+            raise BackupError("required_recovery_member_missing")
+        return stream.extractfile(member).read(limit + 1)
+
+
+def verify_expanded_recovery(stage: Path, image_root: Path, images: list[dict], manifest: dict) -> dict:
+    deployment, profile = manifest["deployment"], manifest["mcp"]
+    containers = deployment["containers"]
+    if set(containers) != {"changedetection", *SIDECARS}:
+        raise BackupError("deployment_service_set_mismatch")
+    for service, name in {"changedetection": APPS["changedetection"], **SIDECARS}.items():
+        item = containers[service]
+        if (item.get("container_name") != name
+                or not re.fullmatch(r"[a-f0-9]{64}", item.get("compose_config_hash", ""))):
+            raise BackupError("deployment_contract_invalid")
+    if containers["changedetection"]["image_id"] != manifest["apps"]["changedetection"]["image_id"]:
+        raise BackupError("deployment_capture_image_mismatch")
+    members = {item["path"]: item for item in manifest["recovery_members"] if item["type"] == "file"}
+    source_hashes = deployment["source_hashes"]
+    required = {"source/docker/changedetection/compose.yaml", "source/docker/changedetection/images.lock.json",
+                "runtime/deploy/changedetection.env"}
+    if not required.issubset(source_hashes):
+        raise BackupError("deployment_source_missing")
+    for name, digest in source_hashes.items():
+        if name not in members or members[name]["sha256"] != digest:
+            raise BackupError("deployment_source_capture_mismatch")
+    for helper, source_name in (("edsys-private-web-apps-control", "control.py"),
+                                ("edsys-private-web-apps-backup", "backup.py")):
+        if (members["installed/libexec/" + helper]["sha256"]
+                != members["source/services/private-web-apps/" + source_name]["sha256"]):
+            raise BackupError("installed_helper_source_mismatch")
+    receipt = mcp_runtime_receipt(image_root, images)
+    if (any(profile.get(key) != receipt[key] for key in ("release", "source_commit", "source_hashes"))
+            or receipt.get("restore_parent") != str(Path(profile["install_root"]).parent)):
+        raise BackupError("mcp_runtime_capture_mismatch")
+    for name in MCP_REQUIRED_FILES:
+        member = members.get("source/services/changedetection-mcp/" + name)
+        if not member or not member["size"]:
+            raise BackupError("mcp_recovery_source_missing")
+        if name in MCP_RUNTIME_FILES and member["sha256"] != receipt["source_hashes"][name]:
+            raise BackupError("mcp_runtime_source_mismatch")
+    recovery = stage / "recovery.tar"
+    verify_source_image_lock(json.loads(archived_bytes(recovery, "source/docker/changedetection/images.lock.json")),
+                             containers, source_hashes)
+    installation = json.loads(archived_bytes(recovery, "runtime/deploy/" + MCP_INSTALL))
+    registration = tomllib.loads(archived_bytes(recovery, "runtime/deploy/" + MCP_REGISTRATION).decode())
+    before = archived_bytes(recovery, "runtime/deploy/" + mcp_before_config(installation))
+    key = archived_bytes(recovery, "runtime/deploy/" + MCP_KEY, limit=4096).strip()
+    verify_mcp_documents(profile, installation, registration, hashlib.sha256(before).hexdigest(),
+                         members["runtime/deploy/" + MCP_KEY]["mode"])
+    store = json.loads(archived_bytes(stage / "changedetection.tar", "changedetection.json"))
+    application = store["settings"]["application"]
+    if application.get("api_access_token_enabled") is not True or not hmac.compare_digest(
+            key, application["api_access_token"].encode()):
+        raise BackupError("mcp_api_key_mismatch")
+    return {name: containers[name] for name in SIDECARS}
 
 
 def verify_image_bindings(root: Path, images: list[dict], apps: dict) -> None:
@@ -478,8 +766,8 @@ def verify_image_bindings(root: Path, images: list[dict], apps: dict) -> None:
                 raise BackupError("image_export_inventory_mismatch")
             filenames.add(filename)
             exported_ids.add(image_id)
-        for app in APPS:
-            image_id = apps[app].get("image_id")
+        for app in apps.values():
+            image_id = app.get("image_id")
             if not isinstance(image_id, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id):
                 raise BackupError("captured_image_id_invalid")
             if image_id not in exported_ids:
@@ -493,7 +781,8 @@ def verify_stage(stage: Path, image_root: Path) -> dict:
         if {p.name for p in stage.iterdir()} != PAYLOAD_FILES:
             raise BackupError("payload_file_set_mismatch")
         manifest = json.loads((stage / "manifest.json").read_text())
-        if manifest.get("schema") != 1 or manifest.get("scope") != SCOPE:
+        schema = manifest.get("schema")
+        if type(schema) is not int or schema not in FORMAT_TAGS or manifest.get("scope") != SCOPE:
             raise BackupError("manifest_schema_mismatch")
         if set(manifest.get("apps", {})) != set(APPS):
             raise BackupError("manifest_apps_mismatch")
@@ -513,11 +802,13 @@ def verify_stage(stage: Path, image_root: Path) -> dict:
         images = image_inventory(image_root)
         if images != manifest.get("images"):
             raise BackupError("image_hash_or_mode_mismatch")
-        verify_image_bindings(image_root, images, manifest["apps"])
-        return {"app_count": len(APPS), "member_count": sum(len(a["members"]) for a in manifest["apps"].values()),
+        sidecars = verify_expanded_recovery(stage, image_root, images, manifest) if schema == 2 else {}
+        verify_image_bindings(image_root, images, {**manifest["apps"], **sidecars})
+        return {"manifest_schema": schema, "app_count": len(APPS), "sidecar_count": len(sidecars),
+                "member_count": sum(len(a["members"]) for a in manifest["apps"].values()),
                 "state_and_recovery_bytes": total, "image_count": len(images),
                 "image_bytes": sum(i["size"] for i in images)}
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, tarfile.TarError):
         raise BackupError("stage_invalid") from None
 
 
@@ -564,7 +855,9 @@ class Repository:
             records = json.loads(self.call(["snapshots", "--json", snapshot], timeout=120))
             record, = records
             wanted = {str(paths.stage / "snapshot-payload"), str(paths.runtime / "images")}
-            if record["id"] != snapshot or not {SCOPE, FORMAT_TAG}.issubset(record.get("tags", [])):
+            tags = set(record.get("tags", []))
+            if (record["id"] != snapshot or SCOPE not in tags
+                    or len(tags.intersection(FORMAT_TAGS.values())) != 1):
                 raise BackupError("snapshot_scope_mismatch")
             if set(record.get("paths", [])) != wanted:
                 raise BackupError("snapshot_path_mismatch")
@@ -584,7 +877,7 @@ class Repository:
         except (ValueError, KeyError, StopIteration, TypeError):
             raise BackupError("snapshot_id_missing") from None
         metadata = self.metadata(snapshot, paths)
-        if generation not in metadata.get("tags", []):
+        if generation not in metadata.get("tags", []) or FORMAT_TAG not in metadata.get("tags", []):
             raise BackupError("snapshot_generation_mismatch")
         # Prove the exact new snapshot contains its required manifest and files.
         saved = self.call(["dump", snapshot, str(payload / "manifest.json")], timeout=120)
@@ -606,9 +899,19 @@ def prepare_generation(paths: Paths, generation: str, repository_path: Path | No
     sources = recovery_sources(paths)  # Refuse missing recovery prerequisites before stopping anything.
     images = image_inventory(paths.runtime / "images")
     space = preflight_space(paths, sources, images, repository_path)
+    for helper, source_name in (("edsys-private-web-apps-control", "control.py"),
+                                ("edsys-private-web-apps-backup", "backup.py")):
+        if hash_file(paths.libexec / helper) != hash_file(paths.source / "services/private-web-apps" / source_name):
+            raise BackupError("installed_helper_source_mismatch")
+    deployment = deployment_snapshot(paths)
+    mcp = mcp_snapshot(paths, images)
+    verify_image_bindings(paths.runtime / "images", images, deployment["containers"])
     apps = {app: capture_app(app, incoming / (app + ".tar"), paths) for app in APPS}
     make_archive(incoming / "recovery.tar", sources, seconds=120)
-    manifest = {"schema": 1, "scope": SCOPE, "generation": generation, "created_at": utc_now(),
+    if deployment_snapshot(paths) != deployment or mcp_snapshot(paths, images) != mcp:
+        raise BackupError("deployment_changed_during_capture")
+    manifest = {"schema": 2, "scope": SCOPE, "generation": generation, "created_at": utc_now(),
+                "deployment": deployment, "mcp": mcp,
                 "space_preflight": space,
                 "capture_limits": {"state_bytes_per_archive": MAX_STATE_BYTES, "cold_seconds": CAPTURE_SECONDS},
                 "apps": apps, "images": images,
@@ -647,7 +950,8 @@ def accepted_generation(paths: Paths, directory: Path) -> tuple[dict, dict, dt.d
         if hash_file(manifest_path) != receipt.get("manifest_sha256"):
             return None
         manifest = json.loads(manifest_path.read_text())
-        if (manifest.get("schema") != 1 or manifest.get("scope") != SCOPE
+        if (type(manifest.get("schema")) is not int or manifest["schema"] not in FORMAT_TAGS
+                or manifest.get("scope") != SCOPE
                 or manifest.get("generation") != directory.name
                 or set(manifest.get("apps", {})) != set(APPS)
                 or set(manifest.get("archives", {})) != PAYLOAD_FILES - {"manifest.json"}):
@@ -736,6 +1040,8 @@ def backup(paths: Paths, repository: Repository) -> dict:
             os.rename(payload, previous)
         os.rename(candidate, payload)
         summary = verify_stage(payload, paths.runtime / "images")
+        if summary["manifest_schema"] != 2:
+            raise BackupError("new_capture_requires_schema_2")
         snapshot = repository.backup(payload, paths, generation)
         # Recheck captured inputs after Restic; mutable image archives cannot be accepted.
         verify_stage(payload, paths.runtime / "images")
@@ -771,11 +1077,11 @@ def backup(paths: Paths, repository: Repository) -> dict:
 
 
 def restore(paths: Paths, repository: Repository, snapshot: str, target: Path) -> dict:
-    repository.metadata(snapshot, paths)
+    metadata = repository.metadata(snapshot, paths)
     if not target.is_absolute():
         raise BackupError("absolute_restore_target_required")
     resolved = target.resolve()
-    for forbidden in (paths.runtime.resolve(), paths.stage.resolve()):
+    for forbidden in (paths.runtime.resolve(), paths.stage.resolve(), paths.changedetection_mcp.resolve()):
         if resolved == forbidden or forbidden in resolved.parents or resolved in forbidden.parents:
             raise BackupError("live_restore_target_refused")
     if target.exists():
@@ -785,6 +1091,8 @@ def restore(paths: Paths, repository: Repository, snapshot: str, target: Path) -
     payload = target / str(paths.stage / "snapshot-payload").lstrip("/")
     images = target / str(paths.runtime / "images").lstrip("/")
     summary = verify_stage(payload, images)
+    if FORMAT_TAGS[summary["manifest_schema"]] not in metadata.get("tags", []):
+        raise BackupError("snapshot_format_mismatch")
     return {"status": "success", "snapshot_id": snapshot, "offsite": repository.offsite, **summary}
 
 

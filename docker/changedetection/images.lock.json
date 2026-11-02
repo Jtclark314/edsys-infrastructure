@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "qualified_on": "2026-11-01",
+  "images": {
+    "app": {
+      "image_id": "sha256:90e94ef1580146871fe6bf79f4201a292d63bbd8fd866d942bf447f69dc8d32e",
+      "build_tag": "edsys/changedetection-private:0.60.10-edsys1",
+      "architecture": "amd64",
+      "os": "linux"
+    },
+    "browser": {
+      "image_id": "sha256:8b65f839a3bc178bc923f129b50bc5527e02741a4bec75bd6ec0237642df8981",
+      "build_tag": "edsys/changedetection-browser:156.0.8078.73-edsys1",
+      "architecture": "amd64",
+      "os": "linux"
+    },
+    "egress": {
+      "image_id": "sha256:90e94ef1580146871fe6bf79f4201a292d63bbd8fd866d942bf447f69dc8d32e",
+      "build_tag": "edsys/changedetection-private:0.60.10-edsys1",
+      "architecture": "amd64",
+      "os": "linux"
+    }
+  },
+  "upstream": {
+    "changedetection": {
+      "version": "0.60.10",
+      "revision": "16974bf351cd68b1978af9494082b75efadaa8e0",
+      "image": "ghcr.io/dgtlmoon/changedetection.io@sha256:72f97681f390e4d6ae3e6585e1e0036449910f347144b766fc23910458566a1a",
+      "license": "Apache-2.0"
+    },
+    "sockpuppet": {
+      "revision": "d6c16815a231d0050eee22a8efc5c4afbbc987d9",
+      "archive_sha256": "43d2a0831f8537fb5f266cdb807783595dad18f90fc4684a19ac2703585b5b16",
+      "license": "Apache-2.0"
+    },
+    "chromium": {
+      "debian_version": "156.0.8078.73-1~deb13u1",
+      "source": "Debian trixie-security signed APT",
+      "license": "BSD and bundled dependency licenses"
+    },
+    "debian_base": "debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4"
+  },
+  "source_sha256": {
+    "Dockerfile.app": "ff9151f9197f20412a65ec5262cc32afc05ec6254aabb1481e2b8d0634255081",
+    "Dockerfile.browser": "7ae93b4ad980104d7e9b74f0f3bf489426010a5ae6647454e268ad090f19b38f",
+    "patch_app.py": "6dc8f3671140350524fd071a842cd164dcaa5f78823ee3a411fd7e8b928081b6",
+    "app_guard.py": "016b032b65e183147332a165e0d7026296b03f1123338ff2736a9177d5453bc6",
+    "egress_proxy.py": "776f01816cc232c2fc240e12122cc7c0e7a3ec3e09a3d2652af979fd62b204f4",
+    "patch_browser.py": "4072e8fa59065840f4d3b8ec8f8f6cf1a8f949fc952a1abcdb5b650df788f78f",
+    "browser-requirements.in": "f56c28457701e8c46de4f9f25f48bd38eb1450557d1b7086bee30c6a92126538",
+    "browser-requirements.lock": "db86658181128545101908ed8b85f029a6b8c539f972974d405e5a71eebe413a"
+  },
+  "runtime_source_sha256": {
+    "app:app_guard.py": "016b032b65e183147332a165e0d7026296b03f1123338ff2736a9177d5453bc6",
+    "app:egress_proxy.py": "776f01816cc232c2fc240e12122cc7c0e7a3ec3e09a3d2652af979fd62b204f4",
+    "egress:egress_proxy.py": "776f01816cc232c2fc240e12122cc7c0e7a3ec3e09a3d2652af979fd62b204f4"
+  },
+  "patched_runtime_sha256": {
+    "app:content_fetchers/requests.py": "5db82f36441d82fb4a02b73dc345a8a5db82eee554809bb5003f7fdfc5ffa438",
+    "app:content_fetchers/playwright.py": "8227ad4c062d440efce072189bca14ba521b9764812e43de3e3f13f8fd63615c",
+    "app:browser_steps/browser_steps.py": "d21935f352333647f077835189e61cca9a514267d5918ce45522b024eb9bb0c1",
+    "app:llm/client.py": "709a679ab2272693f785b666187e233681857d7d031f09efa207232e3f416087",
+    "app:llm/model_list.py": "cdd82e543b4207428cfb872e85cc541b95d65667846e20e0675cacc5dd816766",
+    "app:model/__init__.py": "41a50ad0e250e713a6537b10e18b9ae909abf5e95accb90c7d294e7c665648d2",
+    "app:forms.py": "0c9758fd5fd0a6a4136a0e86f522511213ec88b7403c89bc18e551308e50fbae",
+    "app:api/Watch.py": "c0ea4fd507bed0a9fa465c488d12988b80e447f61e6248dd6ee86163db08eb56",
+    "browser:chrome.py": "f1a47422787f730073b2f09a4a557f192c5221977632deb3608d2aa399bc6e85",
+    "browser:server.py": "53a2ec67ca4b08137b734bd3d509066fda09e53cd8684007a41d74aefcba6f14",
+    "app:blueprint/ui/edit.py": "0b758ff61d01d8fb5278738c1fc8b439cf5949770759dcc760b9b170bd4fb6a4"
+  },
+  "deployment_source_sha256": {
+    "compose.yaml": "7e5e71405edc0af826b16445d7b7f0b7fe29b2baa89835cfaa25a1f00e919b3c",
+    "initialize.py": "d874857061e1cb6a2cb527fb73b42c96b7c5fc523f59d2032cd36d1df2276971",
+    "healthcheck.py": "1c9e14f702f2ef9ceeb99940341e2b4167bb291bbd35f996aa21bbbd2f5f276f",
+    "configure_local_ai.py": "470855188ae031cad07db71d9ff3259c8a4e2094948141bdbed547bf37a3f899"
+  },
+  "browser_package_inventory_sha256": "7ea79030a468c32261a74b9590ba0cde3fea2d03cd2c12cc3091b26f0c5c8885"
+}

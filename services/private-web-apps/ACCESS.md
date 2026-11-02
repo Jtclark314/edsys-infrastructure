@@ -5,7 +5,7 @@ Tailscale Serve sends each private HTTPS route to its application access bridge:
 | Application | Private HTTPS | Bridge | Application backend | Access |
 | --- | --- | --- | --- | --- |
 | Stirling PDF | `9950x.taile832fe.ts.net:8452` | `127.0.0.1:8142` | `10.254.230.50:8080` (dedicated Docker network) | Current devices in the configured tailnet, including tagged devices |
-| changedetection.io | `9950x.taile832fe.ts.net:8453` | `127.0.0.1:8143` | `127.0.0.1:8141` | Exact configured owner identity |
+| changedetection.io | `9950x.taile832fe.ts.net:8453` | `127.0.0.1:8143` | `10.254.230.18:5000` | Exact configured owner identity |
 
 Both bridges require the exact configured Host and HTTPS indication from a
 loopback peer. changedetection retains the local-coder exact-owner boundary. Foreign
@@ -42,12 +42,13 @@ Synthetic tests cover tagged and external-shared peers; no live tagged/shared
 peer was available during qualification. Recheck forwarding semantics when
 changing the Serve implementation.
 
-The Stirling backend has no published host port and stays on its dedicated Docker
-network. Authorized public and private URL fetching uses that network's normal
-egress; the application deployment owns this policy. Its fixed address is the only non-loopback upstream
-allowed by the bridge. changedetection's published backend and both proxy
-listeners remain loopback-only. Configuration rejects arbitrary IP/DNS targets
-and any different endpoint pair. This boundary trusts processes on
+Both application backends have no published host ports. Stirling stays on its
+dedicated Docker network; its deployment owns authorized public/private URL
+fetching. changedetection uses an internal application network and a separate
+browser network, with a destination-checking gateway for outbound requests.
+The two fixed Docker endpoints are the only non-loopback upstreams allowed by
+this identity proxy. Its two listeners remain loopback-only. Configuration
+rejects arbitrary IP/DNS targets and any different endpoint pair. This boundary trusts processes on
 9950x: a local process can directly reach a no-password backend or forge Serve
 headers. The bridge does not claim process isolation or native application
 authentication. No credentials are put in browser URLs. Application cookies
@@ -111,9 +112,9 @@ stopping/disabling this user unit. Preserve application data and private config.
 Verification before acceptance:
 
 - Run `node --test tests/test_web_proxy.mjs` and validate the user unit.
-- Confirm both bridge listeners and changedetection's backend listen only on
-  `127.0.0.1`; confirm Stirling has no published host port and only its fixed
-  dedicated Docker endpoint. Check the
+- Confirm both bridge listeners bind only to `127.0.0.1`; confirm both apps
+  have no published host ports and use only their fixed Docker endpoints.
+  Check the
   final Serve JSON retains all preceding routes and no Funnel activation.
 - changedetection must deny missing/wrong owner identity. Stirling must admit
   configured-tailnet members without identity headers and deny missing/forged

@@ -19,7 +19,7 @@ ExecStop=/usr/local/libexec/edsys-private-web-apps-control stop
 # Also clean up after a failed or externally interrupted start.
 ExecStopPost=/usr/local/libexec/edsys-private-web-apps-control stop
 TimeoutStartSec=480
-TimeoutStopSec=150
+TimeoutStopSec=300
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7

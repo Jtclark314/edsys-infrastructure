@@ -3,7 +3,7 @@
 
 import json
 from pathlib import Path
-from urllib.request import Request, urlopen
+from urllib.request import Request, ProxyHandler, build_opener
 
 
 def main():
@@ -17,7 +17,8 @@ def main():
         "http://127.0.0.1:5000/api/v1/systeminfo",
         headers={"x-api-key": token},
     )
-    with urlopen(request, timeout=5) as response:
+    # Only this fixed, authenticated local health request bypasses egress.
+    with build_opener(ProxyHandler({})).open(request, timeout=5) as response:
         status = json.load(response)
     if not isinstance(status.get("watch_count"), int) or not status.get("version"):
         raise RuntimeError("Unexpected system information response")

@@ -1,34 +1,49 @@
 name: changedetection
-description: Private HTTP website change monitoring and snapshot comparison
+description: Private website, PDF, price, stock, browser and visual change monitoring
 host: 9950x
-runtime: Docker Compose; mount-guarded host startup
+runtime: Three Docker Compose services; mount-guarded host startup
+containers:
+  - edsys-changedetection
+  - edsys-changedetection-browser
+  - edsys-changedetection-egress
+images: images.lock.json
 ports:
-  - address: 127.0.0.1
-    host: 8141
-    container: 5000
+  - private_backend: 10.254.230.18:5000
+    host_published: false
   - owner_proxy_https: 8453
+networks:
+  app: {subnet: 10.254.230.16/28, internal: true}
+  browser: {subnet: 10.254.230.112/28, internal: true}
+  egress: {subnet: 10.254.230.96/28, internal: false}
+  gateway_ip_forwarding: false
 volumes:
   - source: /mnt/ai-store/edsys-private-services/changedetection
     target: /datastore
-    purpose: Private settings, tokens, watches, history, and snapshots
+    service: app
+    purpose: Private settings, tokens, watches, processor settings and all history
 environment:
   template: .env.example
   runtime: Private external env file; never committed
   timezone: America/New_York
   workers: 2
+  browser_sessions: 3
   default_fetcher: html_requests
   telemetry: disabled
-  private_target_addresses: blocked
+  private_target_addresses: Authorized through destination-checking proxy with explicit exclusions
   file_urls: blocked
-  llm_features: disabled
+  llm_features: Optional local model; new watches default off; CPU and concurrency bounded
 secrets_required:
   - API and RSS tokens generated in the private datastore
+  - Future explicitly selected target credentials and notification accounts remain private
 backup:
-  method: Stop app briefly; capture complete datastore; restart prior-running app; encrypted offsite backup
-  scope: Datastore, private runtime env, image digest, and source definition
+  method: Stop app briefly; capture complete datastore; restart prior-running stack; encrypted offsite backup
+  scope: Datastore, private env/access/MCP config, immutable app/browser image archives and matching source
+  browser_and_gateway_state: Ephemeral; no durable host mounts
 monitoring:
-  container_health: Authenticated systeminfo response using in-process private API token
-  functional: Synthetic initial and changed snapshots plus API/UI diff and restore
-restore_notes: Restore matching datastore and pinned image into an isolated candidate; never share writable state
+  app: Authenticated systeminfo response using private API token
+  browser: Wrapper health and Chromium version
+  gateway: Both private listeners and isolated network/forwarding configuration
+  functional: Synthetic text/browser/visual changes, TLS/origin/egress checks and local AI CPU/unload proof
+restore_notes: Restore matching cold datastore, pins and definitions into isolated networks; never share writable state
 owner: Jeremy
-last_verified: 2026-11-01 isolated candidate; production route acceptance owned by commissioning workflow
+last_verified: 2026-11-01 expanded isolated candidate; production and recovery acceptance owned by commissioning workflow

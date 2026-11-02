@@ -1,0 +1,26 @@
+name: edsys-changedetection
+status: candidate # Parent promotes after configured-Codex and recovery acceptance.
+description: Private local stdio bridge to the reviewed changedetection.io 0.60.10 REST API
+host: 9950x
+runtime: Official MCP Python SDK 2.2.0 in an isolated hash-locked Python 3.12 virtual environment
+ports: [] # No listener or web interface; Codex starts a local stdio subprocess.
+volumes:
+  - /home/jeremy/.local/share/edsys-changedetection-mcp/releases
+  - /home/jeremy/.local/share/edsys-changedetection-mcp/current
+  - /home/jeremy/.local/state/edsys-changedetection-mcp/artifacts
+environment:
+  CHANGEDETECTION_BASE_URL: http://10.254.230.18:5000 # Fixed private app address; no published host port.
+  CHANGEDETECTION_API_KEY_FILE: /mnt/ai-store/edsys-private-services/deploy/changedetection-mcp-api-key
+  CHANGEDETECTION_ARTIFACT_DIR: /home/jeremy/.local/state/edsys-changedetection-mcp/artifacts
+  CHANGEDETECTION_DENY_CIDRS_JSON: operator-supplied-exact-owned-app-browser-egress-networks
+secrets_required:
+  - Native API key in an owned 0600 file; never a literal environment/config value.
+backup:
+  policy: Private-services backup retains source, opaque immutable release archive, receipt, exact MCP registration/config rollback and protected native key.
+  artifacts: Private generated content is excluded; preserve needed artifacts with their owning workflow. No automatic expiry.
+monitoring:
+  protocol: Fresh MCP initialize/list_tools, schema/catalog, systeminfo and disposable synthetic returned-data checks.
+  backend: Existing private changedetection service health and dashboard.
+restore_notes: Follow README.md; restore opaque venv at its original path and preserve unrelated later Codex configuration. Validate key agreement without displaying it. Repeat candidate acceptance after recovery.
+owner: Jeremy / EdSys
+last_verified: pending-parent-acceptance

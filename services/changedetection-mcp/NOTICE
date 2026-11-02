@@ -1,0 +1,14 @@
+EdSys changedetection.io MCP bridge
+Copyright (c) 2026 EdSys contributors. Bridge source: MIT (LICENSE).
+
+api-spec.json is a JSON transformation of the changedetection.io 0.60.10
+docs/api-spec.yaml, merged with changedetectionio/processors/restock_diff/api.yaml
+using the same schema/example extension rules as the upstream API.
+Upstream revision: 16974bf351cd68b1978af9494082b75efadaa8e0.
+The original upstream YAML file hashes and transformed JSON hash are recorded in
+catalog-source.json. This derived API specification remains under the upstream
+Apache License 2.0 (LICENSE.upstream); it is not covered by the bridge MIT license.
+Source: https://github.com/dgtlmoon/changedetection.io/tree/0.60.10
+
+The bridge uses the official Model Context Protocol Python SDK, independently
+licensed with its installed dependencies. No proprietary implementation is used.

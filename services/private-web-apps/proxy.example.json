@@ -17,8 +17,8 @@
     {
       "name": "changedetection",
       "listenPort": 8143,
-      "upstreamHost": "127.0.0.1",
-      "upstreamPort": 8141,
+      "upstreamHost": "10.254.230.18",
+      "upstreamPort": 5000,
       "publicHost": "9950x.taile832fe.ts.net:8453",
       "maxBodyBytes": 33554432,
       "requestTimeoutMs": 1800000

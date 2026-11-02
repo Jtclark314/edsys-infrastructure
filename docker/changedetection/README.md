@@ -1,148 +1,154 @@
 # changedetection.io on 9950x
 
-Private website change monitoring with the upstream HTTP/text fetcher. This
-folder owns the deployable service definition; watch URLs, snapshots, tokens,
-settings, and logs remain outside Git.
+Private website, document, price and visual monitoring based on upstream
+changedetection.io 0.60.10. The dedicated Chromium service enables JavaScript,
+browser steps, interactive selection and screenshot comparison. Optional AI
+uses the already installed local Ollama model. The UI remains owner-only;
+its native REST API still requires an API key.
 
-## Version and scope
+See [CAPABILITIES.md](CAPABILITIES.md) for tested workflows and limits, and
+[images.lock.json](images.lock.json) for immutable runtime pins and source hashes.
+This directory owns app/browser/gateway deployment. The owner access proxy,
+backup controller and MCP bridge remain in their respective `services/` folders.
+No watch URLs, credentials, history, runtime env files or private test receipts
+belong in Git.
 
-- Official stable release: **0.60.10**, published 2026-10-26 and checked against
-  GitHub `releases/latest` on 2026-11-01.
-- Image: `ghcr.io/dgtlmoon/changedetection.io:0.60.10`, pinned in Compose to
-  `sha256:72f97681f390e4d6ae3e6585e1e0036449910f347144b766fc23910458566a1a`
-  (linux/amd64).
-- Upstream revision: `16974bf351cd68b1978af9494082b75efadaa8e0`.
-- No headless browser, browser profile, SMTP account, external notification
-  destination, LLM provider, or real watch is configured by installation.
-- The HTTP fetcher handles server-rendered content. JavaScript-dependent pages,
-  browser steps, screenshot comparisons, and authenticated browser workflows
-  are outside this initial qualification. Add a dedicated, isolated browser
-  only when a selected target needs one; never attach a personal browser.
+## Architecture and boundaries
 
-Primary references:
-[release](https://github.com/dgtlmoon/changedetection.io/releases/tag/0.60.10),
-[upstream Compose settings](https://github.com/dgtlmoon/changedetection.io/blob/0.60.10/docker-compose.yml),
-[API specification](https://github.com/dgtlmoon/changedetection.io/blob/0.60.10/docs/api-spec.yaml).
+| Component | Network and purpose | Limits |
+| --- | --- | --- |
+| App | Internal `10.254.230.16/28`, fixed backend `10.254.230.18:5000` | 2 CPU, 4 GiB, 256 PIDs; two workers |
+| Browser | Separate internal `10.254.230.112/28`; no host port | 4 CPU, 4 GiB, 512 PIDs; three Chromium sessions |
+| Gateway | App `.19`, browser `.115`, outward `.98` on `10.254.230.96/28` | 0.5 CPU, 256 MiB, 128 PIDs |
+| Owner proxy | Existing private HTTPS port 8453 | Owner identity checked before UI requests |
 
-## Access and resource bounds
+Docker 29 suppresses published ports on these internal networks. The owner
+proxy and local MCP therefore use the fixed private app IP; no app, CDP or
+proxy port is published. Only the gateway has an outward network. Its namespace
+IP forwarding is disabled. App and browser cannot directly address each other.
+All services drop Linux capabilities, run as UID/GID 1000 with read-only roots,
+and use bounded temporary filesystems. The browser has no host mounts, personal
+profile, account state, Docker socket or host network.
 
-| Purpose | Binding |
-| --- | --- |
-| Backend | `127.0.0.1:8141` -> container `5000` |
-| Owner-facing route | `https://9950x.taile832fe.ts.net:8453` |
-| Production bridge | `10.254.230.16/28` |
-| Isolated qualification bridge | `10.254.230.0/28` |
+The browser retains upstream `--no-sandbox`: this deployment relies on Docker
+containment and split networks, not Chromium's user-namespace sandbox. Web
+security and browser hang protections remain enabled. QUIC and unproxied WebRTC
+UDP are disabled. Sessions have a five-minute gateway connection deadline and
+a ten-minute browser cleanup backstop; the live editor advertises a four-minute
+lease. Closed sessions destroy their temporary browser profiles.
 
-The HTTPS route is owned by
-[`services/private-web-apps`](../../services/private-web-apps/ACCESS.md). It must
-verify the Tailnet owner before passing any request to the backend. The UI has
-no additional app password. Its backend must stay on loopback and the private
-Docker bridge. The API still requires the app-generated `x-api-key`; keep
-`api_access_token_enabled=true`. Shared unauthenticated diff access is disabled.
-The proxy must replace forwarded host/protocol headers with its verified values.
+Public websites and private LAN/other-node Tailnet pages are authorized.
+Every new HTTP/CONNECT destination, including redirects, nested resources and
+WebSockets, is resolved once, checked, then connected using the approved numeric
+address. Mixed public/forbidden DNS answers fail closed. Bounds cover DNS,
+connection setup, idle time, total lifetime and transferred bytes.
 
-The container runs as UID/GID 1000, with a read-only root filesystem, all Linux
-capabilities dropped, `no-new-privileges`, 1 CPU, 1 GiB memory, 128 PIDs, a 128 MiB
-temporary directory, two fetch workers, and rotating container logs. There is
-no host-network mode or Docker socket mount. Recheck subnet overlap before
-deploying elsewhere; the explicit subnet avoids the 9950x's exhausted automatic
-Docker address pools.
+Denied destinations include loopback, link-local/metadata, multicast, address
+translation/tunnelling prefixes, this stack's networks, Docker/Kubernetes
+management ports and the local model API from browser/watch fetches. Operator
+runtime settings additionally deny this machine's Tailnet addresses entirely
+and protect its LAN management ports. Denying its own Tailnet identity avoids
+inheriting access to privileged Tailscale Serve applications. Other hosts'
+ordinary HTTPS/private pages remain usable. Keep these host-address settings
+current when the machine or management services change.
 
-Version/anonymous-stat checks, remote LLM price fetching, and LLM features are
-disabled. File URLs and IANA-restricted/private target addresses are blocked.
-The latter is an outbound target guard; it does not prevent using the private
-UI. A future private target needs a deliberate configuration decision.
+Both fetchers verify TLS certificates. A private site with a self-signed
+certificate needs an explicitly approved CA trust addition. File URLs and
+arbitrary per-watch proxy/browser endpoints are refused. Custom HTTP headers,
+including explicit cookies, stay on the original origin. Credentialed
+cross-origin redirects are rejected, including redirects that could forward a
+POST body. Normal website cookie/session behavior remains Chromium's behavior.
 
-## Runtime and startup
+## Versions, source and licensing
 
-Use an env file outside Git, based on `.env.example`. The production datastore is
-`/mnt/ai-store/edsys-private-services/changedetection`, mounted at `/datastore`.
-It must exist and be writable only by the service owner. Compose refuses to
-create a missing host bind directory.
+The app derives from the pinned official Apache-2.0 image at revision
+`16974bf351cd68b1978af9494082b75efadaa8e0`. Narrow fail-closed patches restore
+TLS verification, scope credentials, enforce local AI bounds and complete the
+REST schema/readback for the installed open-source screenshot processor. A
+scalar-settings hydration fix preserves its crop/sensitivity fields when the
+native editor is reopened and saved. The
+UI's upstream disabled-processor default is explicitly cleared.
 
-`initialize.py` uses the pinned upstream datastore model only when that directory
-is empty. It creates fresh API/RSS tokens without creating the upstream's sample
-external watches. It leaves an existing datastore untouched and fails closed if
-a nonempty directory lacks `changedetection.json`.
+The browser uses Apache-2.0 Sockpuppet source pinned by commit and archive hash,
+with Debian's open-source Chromium 156.0.8078.73. It does not install Google
+Chrome or Widevine. Python browser dependencies are pinned with wheel hashes;
+Chromium and the base image are pinned. Other signed Debian packages are
+recorded in the build inventory, so rollback uses the retained image archive
+rather than assuming a future APT rebuild is byte-identical. Upstream license
+texts are retained under `licenses/` and in the images; Chromium and Debian
+package notices remain under `/usr/share/doc`.
 
-The root-managed startup unit must require the correct `/mnt/ai-store` mount and
-validate its filesystem identity before Compose starts. `restart: on-failure:5`
-permits bounded process-crash recovery without Docker boot auto-start bypassing
-that mount check. Use the owning private-services unit for normal lifecycle
-operations. The following are operator commands after its mount checks pass:
+Primary sources: [app release](https://github.com/dgtlmoon/changedetection.io/releases/tag/0.60.10),
+[API source](https://github.com/dgtlmoon/changedetection.io/blob/0.60.10/docs/api-spec.yaml),
+[Sockpuppet](https://github.com/dgtlmoon/sockpuppetbrowser/tree/d6c16815a231d0050eee22a8efc5c4afbbc987d9),
+[Chromium source](https://chromium.googlesource.com/chromium/src/).
+
+## Deployment and optional local AI
+
+Use a private env file based on `.env.example`; replace all three image values
+with the `image_id` values in `images.lock.json`. Set the actual host address
+exclusions and private owner URL. The datastore remains
+`/mnt/ai-store/edsys-private-services/changedetection`, mounted only into the app.
+It must exist with private ownership/permissions. The active settings file is
+`changedetection.json`; individual watch directories also contain their history
+and processor settings.
+
+Before changing an existing deployment, stop the exact app and retain its full
+cold datastore, previous env/source/access configuration and immutable image.
+While that original app container still exists in the stopped state, the
+following explicit helper seeds the approved existing local provider:
+
+```bash
+python3 docker/changedetection/configure_local_ai.py \
+  --container edsys-changedetection \
+  --datastore /mnt/ai-store/edsys-private-services/changedetection \
+  --base-url http://EXISTING-LOCAL-OLLAMA:11434
+```
+
+The helper verifies the selected container's datastore mount and API-key
+protection, preserves unrelated settings and ownership, and writes atomically.
+It is not an every-start reset. Local AI uses `ollama_chat/llama3.2:3b`, the same
+already installed model with the serializer that correctly emits `keep_alive=0`.
+The model and endpoint are allowlisted; no keys, cloud calls or model downloads
+are configured. Generation forces CPU execution, four threads, context 8,192,
+maximum 512 output tokens and a 120-second deadline. One cross-process lock bounds
+all inference paths; one summary worker and one native request attempt avoid
+parallel/repeated work. Global/per-watch monthly token budgets also apply.
+New watches default AI off. Raw diffs remain available and global restock AI
+fallback is off. The local Llama model has its own Meta Community License;
+its weights are not described as OSI-licensed software.
+
+Recreate only the owned old app network during cutover: its previous network
+was not internal. Do not modify unrelated networks. The mount-guarded private
+services controller owns startup and recovery. After its mount checks:
 
 ```bash
 docker compose --env-file /absolute/private/changedetection.env \
-  -f /srv/edsys/edsys-infrastructure/docker/changedetection/compose.yaml config --quiet
+  -f docker/changedetection/compose.yaml config --quiet
 docker compose --env-file /absolute/private/changedetection.env \
-  -f /srv/edsys/edsys-infrastructure/docker/changedetection/compose.yaml up -d
+  -f docker/changedetection/compose.yaml up -d --wait
 ```
 
-For an isolated candidate, use distinct project/container names, loopback port
-18141, the qualification subnet, and a separate datastore. Only that candidate
-may temporarily set `CHANGEDETECTION_ALLOW_PRIVATE_TARGETS=true` to fetch a local
-synthetic fixture. Return it to `false` before production qualification.
+An isolated candidate uses app/browser/outward networks `.0/28`, `.64/28`,
+`.32/28`, separate names and its own datastore. Never share writable state.
+Keep `.80/28` available for recovery qualification.
 
-## Verification
+## Verification and rollback
 
-```bash
-docker inspect edsys-changedetection --format '{{.State.Health.Status}}'
-docker exec edsys-changedetection python /opt/edsys/healthcheck.py
-curl --fail --silent --show-error http://127.0.0.1:8141/worker-health
-curl --silent --output /dev/null --write-out '%{http_code}\n' \
-  http://127.0.0.1:8141/api/v1/watch
-```
+`test_guards.py` covers destination pinning and exclusions, exact host/port
+rules, credential-origin scope, transport restrictions, CPU limits and the
+cross-process inference lock. Qualification also uses real synthetic HTTP,
+JavaScript, form, JSON, XML, PDF, product and visual changes; valid/invalid TLS;
+private peer access; credentialed redirects; nested requests; native UI selector
+previews; and actual local-model wire/CPU/unload evidence. Final image files must
+match the lock's source hashes. Live monitoring should check all three container
+health states and the owner UI/MCP route without publishing API tokens.
 
-Expect healthy, two healthy workers, and **403** for the API request without a
-key. `healthcheck.py` reads the private datastore's token in process, verifies
-that key enforcement is enabled, and queries `/api/v1/systeminfo`; it does not
-print tokens or watch data. Health proves app/API availability, not that a
-particular watched website is reachable or unchanged.
-
-Before commissioning or upgrading, use a controlled synthetic page to prove an
-initial snapshot, a changed snapshot, and an API/UI diff containing the old and
-new content. Pause the fixture before a restart/restore check, compare both
-snapshots again, then delete the test watch and stop its fixture. Verify the
-owner HTTPS route in a real browser, and reject non-owner/no-identity requests.
-Do not configure notifications or start real recurring watches as an acceptance
-shortcut. Keep private receipts outside Git.
-
-The isolated 2026-11-01 qualification verified an empty first start, rejected
-missing/invalid API keys, two healthy workers, an HTTP fixture changing from
-ALPHA/value 10 to BETA/value 20, two snapshots, and the corresponding diff. A
-restart preserved both snapshots and the diff. A stopped 10-file datastore
-capture had exact SHA-256 parity; an offline restored container reproduced both
-snapshots and the diff exactly. With production target restrictions enabled,
-loopback HTTP was blocked before a snapshot and a file URL was rejected with
-HTTP 400. The temporary watch and fixture containers were removed afterward.
-This backend qualification is separate from production owner-route/browser and
-offsite-backup acceptance, which belong to the commissioning workflow.
-
-## Backup, restore, and rollback
-
-Back up the **entire datastore** together with the private runtime env and exact
-Compose/script version. `changedetection.json` contains application settings and
-secret API/RSS tokens. Per-watch UUID directories contain `watch.json`, history
-indexes, snapshots, and related state; session-secret files also belong to the
-datastore. Watch pages and cookies can be sensitive. A single settings JSON or
-URL-list export is not a complete backup.
-
-For a consistent capture, stop only `edsys-changedetection` with the 45-second
-grace period, confirm it stopped, and copy the whole directory preserving modes
-and ownership. Restart it only if it was running before the capture, including
-on failure paths. Upload the completed private capture through the owning
-encrypted backup job. Never copy runtime state into this source directory.
-
-Restore into a **new** directory and a separate candidate container first. Use
-the exact pinned image and scripts, keep test watches paused, and verify JSON
-readability, API-key enforcement, watch counts, snapshot contents, and a real
-diff. After acceptance, stop the production container, retain the current
-datastore, select the restored path, and start through the mount guard. Only
-one app instance may write a datastore.
-
-For an upgrade, retain a stopped, complete pre-upgrade datastore copy and the
-old image digest. Upstream schema migrations can change multiple files. A
-rollback must restore the matching old datastore with the old image; changing
-only the image tag is not a safe rollback. To undo this new installation, stop
-its mount-guarded unit and owner proxy route, remove only its container/network,
-and keep its data and backup until separately authorized to delete them.
+Back up the complete stopped datastore, source/env/access definitions and all
+required immutable images. The browser/gateway have no durable user state.
+Retain a matching pre-change set separately from the new-state recovery set.
+To roll back, stop this stack, restore its matching old datastore/env/source and
+old network/binding, then restore the owner proxy/MCP configuration for that
+version. Verify authenticated API access and history after a cold start.
+Restoring only the JSON settings file is insufficient. The shared controller's
+exact-restored-state rehearsal is required before calling recovery qualified.

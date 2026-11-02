@@ -1,0 +1,26 @@
+# Chromium is the Debian open-source build; no Google Chrome/Widevine package.
+FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
+ARG CHROMIUM_VERSION=156.0.8078.73-1~deb13u1
+ARG SOCKPUPPET_REVISION=d6c16815a231d0050eee22a8efc5c4afbbc987d9
+ARG SOCKPUPPET_SHA256=43d2a0831f8537fb5f266cdb807783595dad18f90fc4684a19ac2703585b5b16
+LABEL org.opencontainers.image.source="https://github.com/dgtlmoon/sockpuppetbrowser"
+LABEL org.opencontainers.image.revision="d6c16815a231d0050eee22a8efc5c4afbbc987d9"
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium=${CHROMIUM_VERSION} chromium-common=${CHROMIUM_VERSION} \
+    ca-certificates python3 python3-venv tini xvfb xauth openbox \
+    fonts-liberation fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 1000 --create-home --shell /bin/false browser
+WORKDIR /usr/src/app
+RUN python3 -c "import urllib.request,hashlib,tarfile,io; b=urllib.request.urlopen('https://api.github.com/repos/dgtlmoon/sockpuppetbrowser/tarball/'+ '${SOCKPUPPET_REVISION}').read(); assert hashlib.sha256(b).hexdigest() == '${SOCKPUPPET_SHA256}'; t=tarfile.open(fileobj=io.BytesIO(b)); t.extractall('/tmp/sockpuppet',filter='data')" \
+    && cp /tmp/sockpuppet/*/backend/*.py /usr/src/app/ \
+    && cp /tmp/sockpuppet/*/LICENCE /usr/src/app/LICENSE.upstream \
+    && rm -rf /tmp/sockpuppet
+COPY browser-requirements.lock /usr/src/app/requirements.lock
+RUN python3 -m venv /usr/src/app/venv \
+    && /usr/src/app/venv/bin/pip install --no-cache-dir --only-binary=:all: --require-hashes -r requirements.lock
+COPY patch_browser.py /usr/src/app/patch_browser.py
+RUN python3 /usr/src/app/patch_browser.py && python3 -m compileall -q /usr/src/app/*.py
+ENV CHROME_BIN=/usr/bin/chromium PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+USER 1000:1000
+ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/usr/src/app/venv/bin/python", "/usr/src/app/server.py"]

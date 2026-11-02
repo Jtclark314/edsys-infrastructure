@@ -1,0 +1,4 @@
+aiohttp~=3.9
+loguru~=0.7
+psutil>=6,<8
+websockets>=11,<12

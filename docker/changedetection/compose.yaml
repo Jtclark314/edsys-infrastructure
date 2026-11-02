@@ -2,8 +2,8 @@ name: ${CHANGEDETECTION_PROJECT_NAME:-edsys-changedetection}
 
 services:
   changedetection:
-    # Official stable 0.60.10, verified 2026-11-01 (linux/amd64).
-    image: ghcr.io/dgtlmoon/changedetection.io:0.60.10@sha256:72f97681f390e4d6ae3e6585e1e0036449910f347144b766fc23910458566a1a
+    # Official stable 0.60.10 plus scoped transport/local-AI patches; see images.lock.json.
+    image: ${CHANGEDETECTION_IMAGE:?Set the qualified immutable app image}
     container_name: ${CHANGEDETECTION_CONTAINER_NAME:-edsys-changedetection}
     # Boot is owned by the mount-guarded host unit, not Docker auto-start.
     restart: on-failure:5
@@ -12,9 +12,9 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    cpus: 1.0
-    mem_limit: 1g
-    pids_limit: 128
+    cpus: 2.0
+    mem_limit: 4g
+    pids_limit: 256
     stop_grace_period: 45s
     entrypoint: [/bin/sh, -ec]
     command:
@@ -28,17 +28,36 @@ services:
       DEFAULT_SETTINGS_REQUESTS_WORKERS: "2"
       DEFAULT_SETTINGS_REQUESTS_TIMEOUT: "30"
       DEFAULT_FETCH_BACKEND: html_requests
+      DISABLED_PROCESSORS: ""
+      PLAYWRIGHT_DRIVER_URL: ws://${CHANGEDETECTION_EGRESS_APP_IP:?Set gateway app IP}:3128/browser-cdp
+      playwright_proxy_server: http://${CHANGEDETECTION_EGRESS_BROWSER_IP:?Set gateway browser IP}:3128
+      playwright_proxy_bypass: <-loopback>
+      PLAYWRIGHT_SERVICE_WORKERS: block
+      BROWSERSTEPS_MINUTES_KEEPALIVE: "4"
+      FAST_PUPPETEER_CHROME_FETCHER: "false"
+      HTTP_PROXY: http://${CHANGEDETECTION_EGRESS_APP_IP}:3128
+      HTTPS_PROXY: http://${CHANGEDETECTION_EGRESS_APP_IP}:3128
+      NO_PROXY: ""
+      REQUESTS_RETRY_MAX_COUNT: "1"
+      MINIMUM_SECONDS_RECHECK_TIME: "30"
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      OPENCV_FOR_THREADS_NUM: "2"
+      SCREENSHOT_MAX_HEIGHT: "20000"
+      LLM_TIMEOUT: "120"
+      LLM_LOCAL_TIMEOUT: "120"
+      LLM_SUMMARY_WORKERS: "1"
+      EDSYS_LLM_MODEL: ollama_chat/llama3.2:3b
+      EDSYS_LLM_BASE: ${CHANGEDETECTION_OLLAMA_BASE:?Set the existing local Ollama base}
       BASE_URL: ${CHANGEDETECTION_BASE_URL:?Set the private owner-protected HTTPS URL}
       USE_X_SETTINGS: "1"
       HIDE_REFERER: "true"
       DISABLE_VERSION_CHECK: "true"
-      LLM_FEATURES_DISABLED: "true"
-      LITELLM_FETCH_PRICING_FROM_GITHUB: "false"
+      LLM_FEATURES_DISABLED: "false"
+      LITELLM_LOCAL_MODEL_COST_MAP: "true"
       ALLOW_FILE_URI: "false"
-      # Candidate qualification may temporarily override this for its local fixture.
-      ALLOW_IANA_RESTRICTED_ADDRESSES: ${CHANGEDETECTION_ALLOW_PRIVATE_TARGETS:-false}
-    ports:
-      - "127.0.0.1:${CHANGEDETECTION_BACKEND_PORT:-8141}:5000"
+      # Public and LAN/Tailscale fetching is authorized; the egress gateway enforces exclusions.
+      ALLOW_IANA_RESTRICTED_ADDRESSES: "true"
     volumes:
       - type: bind
         source: ${CHANGEDETECTION_DATA_DIR:?Set the private datastore directory}
@@ -48,7 +67,7 @@ services:
       - ./initialize.py:/opt/edsys/initialize.py:ro
       - ./healthcheck.py:/opt/edsys/healthcheck.py:ro
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+      - /tmp:rw,noexec,nosuid,size=512m,mode=1777
     healthcheck:
       test: [CMD, python, /opt/edsys/healthcheck.py]
       interval: 30s
@@ -61,8 +80,115 @@ services:
         max-size: 10m
         max-file: "3"
 
+    networks:
+      default:
+        ipv4_address: ${CHANGEDETECTION_APP_IP:?Set app IP}
+    depends_on:
+      egress:
+        condition: service_healthy
+      browser:
+        condition: service_healthy
+
+  browser:
+    image: ${CHANGEDETECTION_BROWSER_IMAGE:?Set the qualified immutable Chromium image}
+    container_name: ${CHANGEDETECTION_BROWSER_CONTAINER_NAME:-edsys-changedetection-browser}
+    restart: on-failure:5
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 4.0
+    mem_limit: 4g
+    pids_limit: 512
+    shm_size: 256m
+    stop_grace_period: 30s
+    environment:
+      TZ: America/New_York
+      LOG_LEVEL: WARNING
+      MAX_CONCURRENT_CHROME_PROCESSES: "3"
+      DROP_EXCESS_CONNECTIONS: "false"
+      CONNECTION_QUEUE_TIMEOUT: "30"
+      MAX_BROWSER_SECONDS: "600"
+      CHROME_START_TIMEOUT: "25"
+      CHROME_SHUTDOWN_GRACE: "3"
+      SCREEN_WIDTH: "1440"
+      SCREEN_HEIGHT: "1080"
+      ALLOW_CDP_LOG: "false"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=1g,mode=1777
+      - /home/browser:rw,noexec,nosuid,size=32m,uid=1000,gid=1000,mode=0700
+    networks:
+      browser:
+        ipv4_address: ${CHANGEDETECTION_BROWSER_IP:?Set browser IP}
+    healthcheck:
+      test: [CMD, /usr/src/app/venv/bin/python, -c, 'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:8080/stats",timeout=5)); assert d.get("chrome_version")']
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+
+  egress:
+    image: ${CHANGEDETECTION_EGRESS_IMAGE:?Set the qualified immutable gateway image}
+    container_name: ${CHANGEDETECTION_EGRESS_CONTAINER_NAME:-edsys-changedetection-egress}
+    restart: on-failure:5
+    user: "1000:1000"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 0.5
+    mem_limit: 256m
+    pids_limit: 128
+    stop_grace_period: 15s
+    entrypoint: [python, /opt/edsys/egress_proxy.py]
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      EGRESS_APP_ADDRESS: ${CHANGEDETECTION_APP_IP}
+      EGRESS_BROWSER_ADDRESS: ${CHANGEDETECTION_BROWSER_IP}
+      EGRESS_APP_BIND_ADDRESS: ${CHANGEDETECTION_EGRESS_APP_IP}
+      EGRESS_BROWSER_BIND_ADDRESS: ${CHANGEDETECTION_EGRESS_BROWSER_IP}
+      EGRESS_DENY_NETWORKS: '["${CHANGEDETECTION_SUBNET}","${CHANGEDETECTION_BROWSER_SUBNET}","${CHANGEDETECTION_EGRESS_SUBNET}"]'
+      EGRESS_DENY_HOSTS: ${CHANGEDETECTION_DENY_HOSTS:?Set this host's Tailnet IPs}
+      EGRESS_PROTECTED_HOSTS: ${CHANGEDETECTION_PROTECTED_HOSTS:?Set this host's LAN IPs}
+      EGRESS_PROTECTED_PORTS: ${CHANGEDETECTION_PROTECTED_PORTS:?Set protected host management ports}
+    sysctls:
+      net.ipv4.ip_forward: "0"
+      net.ipv6.conf.all.forwarding: "0"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,mode=1777
+    networks:
+      default:
+        ipv4_address: ${CHANGEDETECTION_EGRESS_APP_IP}
+      browser:
+        ipv4_address: ${CHANGEDETECTION_EGRESS_BROWSER_IP}
+      egress:
+        ipv4_address: ${CHANGEDETECTION_EGRESS_IP:?Set gateway outward IP}
+        gw_priority: 1
+    healthcheck:
+      test: [CMD, python, -c, 'import os,urllib.request; opener=urllib.request.build_opener(urllib.request.ProxyHandler({})); [opener.open("http://"+os.environ[k]+":3128/health",timeout=3).read() for k in ("EGRESS_APP_BIND_ADDRESS","EGRESS_BROWSER_BIND_ADDRESS")]']
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+
 networks:
   default:
+    internal: true
     ipam:
       config:
-        - subnet: ${CHANGEDETECTION_SUBNET:-10.254.230.16/28}
+        - subnet: ${CHANGEDETECTION_SUBNET:?Set the internal app subnet}
+  browser:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${CHANGEDETECTION_BROWSER_SUBNET:?Set the internal browser subnet}
+  egress:
+    ipam:
+      config:
+        - subnet: ${CHANGEDETECTION_EGRESS_SUBNET:?Set the outbound gateway subnet}

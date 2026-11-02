@@ -54,6 +54,30 @@ class Fixture(unittest.TestCase):
     def fake_repository(self):
         return mock.Mock(environment={"RESTIC_REPOSITORY": str(self.root / "repository")})
 
+    def recovery_artifacts(self):
+        files = [self.paths.runtime / "deploy/stirling-pdf.env",
+                 self.paths.runtime / "deploy/changedetection.env", self.paths.runtime / "proxy.json",
+                 self.paths.mount_guard,
+                 self.paths.user_units / "edsys-private-web-apps-proxy.service"]
+        files += [self.paths.runtime / "deploy" / name for name in (
+            backup.MCP_KEY, backup.MCP_REGISTRATION, backup.MCP_INSTALL)]
+        files += [self.paths.system_units / name for name in (
+            "edsys-private-web-apps.service", "edsys-private-web-apps-backup.service",
+            "edsys-private-web-apps-backup.timer")]
+        files += [self.paths.libexec / name for name in (
+            "edsys-private-web-apps-control", "edsys-private-web-apps-mount-check",
+            "edsys-private-web-apps-backup")]
+        files += [self.paths.source / relative for relative in (
+            "docker/stirling-pdf/compose.yaml", "docker/changedetection/compose.yaml",
+            "docker/changedetection/initialize.py", "docker/changedetection/healthcheck.py",
+            "services/private-web-apps/backup.py", "services/private-web-apps/control.py",
+            "services/stirling-mcp/server.py", "services/stirling-mcp/bridge.py")]
+        files += [self.paths.source / "services/changedetection-mcp" / name for name in backup.MCP_REQUIRED_FILES]
+        files += [self.paths.source / "docker/changedetection" / name for name in backup.CHANGEDETECTION_SOURCE_FILES]
+        for path in files:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("offline-recovery-source-fixture\n")
+
     def payload(self, path=None):
         path = path or self.root / "payload"
         path.mkdir(mode=0o700, parents=True)
@@ -95,6 +119,123 @@ class Fixture(unittest.TestCase):
                 state["events"].append("mount-check")
             return b""
         return state, inspect, run
+
+
+class ExpandedFixture(Fixture):
+    def setUp(self):
+        super().setUp()
+        self.recovery_artifacts()
+        self.real_run = backup.run
+        self.compose = {"name": "edsys-changedetection", "services": {}}
+        self.containers = {}
+        self.config_hashes = {}
+        for number, (service, name) in enumerate({"changedetection": backup.APPS["changedetection"],
+                                                 **backup.SIDECARS}.items()):
+            if service != "changedetection":
+                self.image_ids[service] = "sha256:" + str(number + 3) * 64
+                path = self.image_root / (service + ".tar")
+                path.write_bytes(("offline-" + service + "-image").encode())
+                self.image_index.append({"file": path.name, "image_id": self.image_ids[service],
+                                         "sha256": backup.hash_file(path), "size": path.stat().st_size})
+            mounts = []
+            if service == "changedetection":
+                mounts = [{"type": "bind", "source": str(self.paths.runtime / "changedetection"),
+                           "target": "/datastore", "read_only": False}]
+                mounts += [{"type": "bind", "source": str(self.paths.source / "docker/changedetection" / filename),
+                            "target": "/opt/edsys/" + filename, "read_only": True}
+                           for filename in ("initialize.py", "healthcheck.py")]
+            self.compose["services"][service] = {"image": self.image_ids[service], "container_name": name,
+                                                  "volumes": mounts}
+            self.config_hashes[service] = backup.hashlib.sha256(service.encode()).hexdigest()
+            self.containers[service] = {
+                "Name": "/" + name, "Id": str(number + 6) * 64, "Image": self.image_ids[service],
+                "Config": {"Image": self.image_ids[service], "Labels": {
+                    "com.docker.compose.project": "edsys-changedetection", "com.docker.compose.service": service,
+                    "com.docker.compose.config-hash": self.config_hashes[service]}},
+                "State": {"Running": True},
+                "Mounts": [{"Type": "bind", "Source": item["source"], "Destination": item["target"],
+                            "RW": not item["read_only"]} for item in mounts]}
+        backup.atomic_json(self.image_root / "archives.json", self.image_index)
+        (self.paths.source / "docker/changedetection/compose.yaml").write_text(backup.yaml.safe_dump(self.compose))
+        self.write_image_lock()
+        release_name = "20261102T000000Z-0.1.0"
+        self.release = self.paths.changedetection_mcp / "releases" / release_name
+        self.release.mkdir(parents=True)
+        (self.paths.changedetection_mcp / "current").symlink_to(self.release, target_is_directory=True)
+        hashes = {}
+        for filename in backup.MCP_RUNTIME_FILES:
+            source = self.paths.source / "services/changedetection-mcp" / filename
+            shutil.copy2(source, self.release / filename)
+            hashes[filename] = backup.hash_file(source)
+        (self.release / "venv/bin").mkdir(parents=True)
+        (self.release / "venv/bin/python").write_text("offline-interpreter-fixture")
+        (self.release / "venv/pyvenv.cfg").write_text("home = /usr/bin\n")
+        archive = self.image_root / "changedetection-mcp-runtime-0.1.0.tar.zst"
+        archive.write_bytes(b"offline-qualified-runtime-archive")
+        self.runtime_receipt = {"kind": "isolated-python-runtime", "file": archive.name,
+            "sha256": backup.hash_file(archive), "size": archive.stat().st_size,
+            "python_version": "offline-fixture", "source_commit": "a" * 40, "release": release_name,
+            "restore_parent": str(self.paths.changedetection_mcp.parent), "source_hashes": hashes}
+        backup.atomic_json(self.image_root / backup.MCP_RECEIPT, self.runtime_receipt)
+        before = self.paths.runtime / "deploy/codex-config-before-changedetection-20261102T000000Z.toml"
+        before.write_text('model = "offline-fixture"\n')
+        before.chmod(0o600)
+        backup.atomic_json(self.paths.runtime / "deploy" / backup.MCP_INSTALL, {
+            "release": release_name, "source_commit": "a" * 40, "new_server": backup.MCP_SERVER,
+            "preserved_all_existing_settings": True, "before_config_file": before.name,
+            "before_sha256": backup.hash_file(before)})
+        key = self.paths.runtime / "deploy" / backup.MCP_KEY
+        key.write_text("offline-fixture-only\n")
+        key.chmod(0o600)
+        registration = ('[mcp_servers.edsys-changedetection]\n'
+            f'command = {json.dumps(str(self.paths.changedetection_mcp / "current/run.sh"))}\n'
+            '[mcp_servers.edsys-changedetection.env]\n'
+            f'CHANGEDETECTION_BASE_URL = {json.dumps(backup.MCP_BASE_URL)}\n'
+            f'CHANGEDETECTION_API_KEY_FILE = {json.dumps(str(key))}\n'
+            f'CHANGEDETECTION_ARTIFACT_DIR = {json.dumps(str(self.root / "mcp-output"))}\n')
+        (self.paths.runtime / "deploy" / backup.MCP_REGISTRATION).write_text(registration)
+
+    def write_image_lock(self):
+        self.image_lock = {"schema_version": 1, "images": {
+            role: {"image_id": self.image_ids[service], "producer": "offline-fixture"}
+            for role, service in (("app", "changedetection"), ("browser", "browser"), ("egress", "egress"))},
+            "source_sha256": {name: backup.hash_file(self.paths.source / "docker/changedetection" / name)
+                              for name in backup.CHANGEDETECTION_BUILD_FILES}}
+        backup.atomic_json(self.paths.source / "docker/changedetection/images.lock.json", self.image_lock)
+
+    def docker_read(self, command, **kwargs):
+        if command[0] == "tar":
+            return self.real_run(command, **kwargs)
+        self.assertEqual(command[:3], ["docker", "--host", "unix:///var/run/docker.sock"])
+        if command[3] == "compose":
+            if "--hash" in command:
+                return "".join(f"{name} {digest}\n" for name, digest in self.config_hashes.items()).encode()
+            return json.dumps(self.compose).encode()
+        if command[3:5] == ["image", "inspect"]:
+            for name, definition in self.compose["services"].items():
+                if command[-1] == definition["image"]:
+                    return self.image_ids[name].encode()
+        if command[3] == "inspect":
+            return json.dumps(list(self.containers.values())).encode()
+        self.fail("Unexpected Docker operation in read-only deployment check")
+
+    def deployment(self):
+        with mock.patch.object(backup, "run", side_effect=self.docker_read):
+            return backup.deployment_snapshot(self.paths)
+
+    def capture(self, app, target, paths):
+        backup.make_archive(target, [(paths.runtime / app, ".")], seconds=10)
+        return {"image_id": self.image_ids[app], "members": backup.archive_inventory(target, app=app)}
+
+    def payload(self, path=None):
+        path = super().payload(path)
+        backup.make_archive(path / "recovery.tar", backup.recovery_sources(self.paths), seconds=10)
+        manifest = json.loads((path / "manifest.json").read_text())
+        manifest.update(schema=2, deployment=self.deployment(), mcp=backup.mcp_snapshot(self.paths, manifest["images"]),
+                        recovery_members=backup.archive_inventory(path / "recovery.tar"))
+        manifest["archives"]["recovery.tar"] = backup.file_record(path / "recovery.tar", "recovery.tar")
+        backup.atomic_json(path / "manifest.json", manifest)
+        return path
 
 
 class VerificationTests(Fixture):
@@ -286,23 +427,7 @@ class ContainerContractTests(Fixture):
 class RecoverySourceTests(Fixture):
     def setUp(self):
         super().setUp()
-        files = [self.paths.runtime / "deploy/stirling-pdf.env",
-                 self.paths.runtime / "deploy/changedetection.env", self.paths.runtime / "proxy.json",
-                 self.paths.mount_guard,
-                 self.paths.user_units / "edsys-private-web-apps-proxy.service"]
-        files += [self.paths.system_units / name for name in (
-            "edsys-private-web-apps.service", "edsys-private-web-apps-backup.service",
-            "edsys-private-web-apps-backup.timer")]
-        files += [self.paths.libexec / name for name in (
-            "edsys-private-web-apps-control", "edsys-private-web-apps-mount-check",
-            "edsys-private-web-apps-backup")]
-        files += [self.paths.source / relative for relative in (
-            "docker/stirling-pdf/compose.yaml", "docker/changedetection/compose.yaml",
-            "services/private-web-apps/backup.py", "services/stirling-mcp/server.py",
-            "services/stirling-mcp/bridge.py")]
-        for path in files:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("offline-recovery-source-fixture\n")
+        self.recovery_artifacts()
 
     def test_mcp_entrypoint_and_bridge_source_are_captured(self):
         target = self.root / "recovery.tar"
@@ -318,6 +443,266 @@ class RecoverySourceTests(Fixture):
             with self.assertRaisesRegex(backup.BackupError, "recovery_source_missing"):
                 backup.prepare_generation(self.paths, "missing-mcp-fixture")
             capture.assert_not_called()
+
+
+class ExpandedRecoveryTests(ExpandedFixture):
+    def test_schema_2_capture_never_stops_or_starts_stateless_helpers(self):
+        for service in backup.SIDECARS:
+            self.containers[service]["State"]["Running"] = False
+        with mock.patch.object(backup, "run", side_effect=self.docker_read), \
+                mock.patch.object(backup, "capture_app", side_effect=self.capture) as capture:
+            payload = backup.prepare_generation(self.paths, "expanded-fixture")
+        self.assertEqual([call.args[0] for call in capture.call_args_list], list(backup.APPS))
+        result = backup.verify_stage(payload, self.image_root)
+        self.assertEqual((result["manifest_schema"], result["sidecar_count"]), (2, 2))
+        manifest = json.loads((payload / "manifest.json").read_text())
+        self.assertTrue(all(not manifest["deployment"]["containers"][name]["was_running"]
+                            for name in backup.SIDECARS))
+
+    def test_missing_sidecar_is_refused_before_cold_capture(self):
+        del self.containers["browser"]
+        with mock.patch.object(backup, "run", side_effect=self.docker_read), \
+                mock.patch.object(backup, "capture_app") as capture:
+            with self.assertRaisesRegex(backup.BackupError, "deployment_container_set_mismatch"):
+                backup.prepare_generation(self.paths, "missing-sidecar")
+            capture.assert_not_called()
+
+    def test_deployed_compose_configuration_must_match_source(self):
+        self.containers["egress"]["Config"]["Labels"]["com.docker.compose.config-hash"] = "0" * 64
+        with self.assertRaisesRegex(backup.BackupError, "deployment_source_runtime_mismatch"):
+            self.deployment()
+
+    def test_stateless_helper_cannot_hide_an_uncaptured_volume(self):
+        self.containers["browser"]["Mounts"].append({"Type": "volume", "Destination": "/unexpected"})
+        with self.assertRaisesRegex(backup.BackupError, "deployment_mount_contract_mismatch"):
+            self.deployment()
+
+    def test_sidecar_source_images_must_be_pinned(self):
+        self.compose["services"]["browser"]["image"] = "example.invalid/browser:latest"
+        with self.assertRaisesRegex(backup.BackupError, "deployment_image_not_pinned"):
+            self.deployment()
+
+    def test_sidecar_export_is_required_even_with_other_image_archives_present(self):
+        index = [entry for entry in self.image_index if entry["file"] != "browser.tar"]
+        backup.atomic_json(self.image_root / "archives.json", index)
+        with self.assertRaisesRegex(backup.BackupError, "active_image_export_missing"):
+            backup.verify_stage(self.payload(), self.image_root)
+
+    def test_app_and_egress_can_share_one_exact_retained_image(self):
+        image_id = self.image_ids["changedetection"]
+        self.image_ids["egress"] = image_id
+        self.compose["services"]["egress"]["image"] = image_id
+        self.containers["egress"]["Image"] = image_id
+        self.containers["egress"]["Config"]["Image"] = image_id
+        self.write_image_lock()
+        index = [entry for entry in self.image_index if entry["file"] != "egress.tar"]
+        backup.atomic_json(self.image_root / "archives.json", index)
+        (self.image_root / "egress.tar").unlink()
+        result = backup.verify_stage(self.payload(), self.image_root)
+        self.assertEqual(result["sidecar_count"], 2)
+
+    def test_changed_sidecar_image_without_new_export_fails_before_cold_capture(self):
+        image_id = "sha256:" + "9" * 64
+        self.image_ids["browser"] = image_id
+        self.compose["services"]["browser"]["image"] = image_id
+        self.containers["browser"]["Image"] = image_id
+        self.containers["browser"]["Config"]["Image"] = image_id
+        self.write_image_lock()
+        with mock.patch.object(backup, "run", side_effect=self.docker_read), \
+                mock.patch.object(backup, "capture_app") as capture:
+            with self.assertRaisesRegex(backup.BackupError, "active_image_export_missing"):
+                backup.prepare_generation(self.paths, "stale-sidecar-image")
+            capture.assert_not_called()
+
+    def test_stale_qualified_source_pin_fails_before_cold_capture(self):
+        self.image_lock["images"]["browser"]["image_id"] = "sha256:" + "9" * 64
+        backup.atomic_json(self.paths.source / "docker/changedetection/images.lock.json", self.image_lock)
+        with mock.patch.object(backup, "run", side_effect=self.docker_read), \
+                mock.patch.object(backup, "capture_app") as capture:
+            with self.assertRaisesRegex(backup.BackupError, "deployment_image_lock_mismatch"):
+                backup.prepare_generation(self.paths, "stale-source-pin")
+            capture.assert_not_called()
+
+    def test_invalid_qualified_source_lock_is_refused(self):
+        invalid = [dict(self.image_lock, schema_version=True),
+                   {"schema_version": 1, "images": {"app": self.image_lock["images"]["app"]}},
+                   {"schema_version": 1, "images": dict(self.image_lock["images"], browser={"image_id": "latest"})}]
+        for value in invalid:
+            with self.subTest(value=value):
+                backup.atomic_json(self.paths.source / "docker/changedetection/images.lock.json", value)
+                with self.assertRaisesRegex(backup.BackupError, "deployment_image_lock_invalid"):
+                    self.deployment()
+
+    def test_edited_build_recipe_requires_new_qualification(self):
+        (self.paths.source / "docker/changedetection/patch_app.py").write_text("unqualified-source-edit\n")
+        with mock.patch.object(backup, "run", side_effect=self.docker_read), \
+                mock.patch.object(backup, "capture_app") as capture:
+            with self.assertRaisesRegex(backup.BackupError, "deployment_build_source_mismatch"):
+                backup.prepare_generation(self.paths, "stale-build-recipe")
+            capture.assert_not_called()
+
+    def test_restored_source_image_lock_must_match_manifest_deployment(self):
+        path = self.payload()
+        self.image_lock["images"]["browser"]["image_id"] = "sha256:" + "9" * 64
+        backup.atomic_json(self.paths.source / "docker/changedetection/images.lock.json", self.image_lock)
+        backup.make_archive(path / "recovery.tar", backup.recovery_sources(self.paths), seconds=10)
+        manifest = json.loads((path / "manifest.json").read_text())
+        manifest["recovery_members"] = backup.archive_inventory(path / "recovery.tar")
+        manifest["archives"]["recovery.tar"] = backup.file_record(path / "recovery.tar", "recovery.tar")
+        manifest["deployment"]["source_hashes"]["source/docker/changedetection/images.lock.json"] = backup.hash_file(
+            self.paths.source / "docker/changedetection/images.lock.json")
+        backup.atomic_json(path / "manifest.json", manifest)
+        with self.assertRaisesRegex(backup.BackupError, "deployment_image_lock_mismatch"):
+            backup.verify_stage(path, self.image_root)
+
+    def test_missing_mcp_source_and_private_prerequisites_fail_before_cold_capture(self):
+        paths = [self.paths.source / "services/changedetection-mcp/catalog-source.json",
+                 self.paths.source / "docker/changedetection/egress_proxy.py"]
+        paths += [self.paths.runtime / "deploy" / name for name in (
+            backup.MCP_KEY, backup.MCP_REGISTRATION, backup.MCP_INSTALL)]
+        for number, path in enumerate(paths):
+            with self.subTest(number=number):
+                content, mode = path.read_bytes(), path.stat().st_mode & 0o777
+                path.unlink()
+                try:
+                    with mock.patch.object(backup, "capture_app") as capture:
+                        with self.assertRaises(backup.BackupError):
+                            backup.prepare_generation(self.paths, f"missing-mcp-{number}")
+                        capture.assert_not_called()
+                finally:
+                    path.write_bytes(content)
+                    path.chmod(mode)
+
+    def test_missing_mcp_runtime_archive_fails_before_cold_capture(self):
+        (self.image_root / self.runtime_receipt["file"]).unlink()
+        with mock.patch.object(backup, "run", side_effect=self.docker_read), \
+                mock.patch.object(backup, "capture_app") as capture:
+            with self.assertRaisesRegex(backup.BackupError, "mcp_runtime_archive_mismatch"):
+                backup.prepare_generation(self.paths, "missing-runtime-archive")
+            capture.assert_not_called()
+
+    def test_missing_virtualenv_is_not_a_qualified_active_runtime(self):
+        (self.release / "venv/pyvenv.cfg").unlink()
+        with self.assertRaisesRegex(backup.BackupError, "mcp_virtualenv_missing"):
+            backup.mcp_snapshot(self.paths, backup.image_inventory(self.image_root))
+
+    def test_active_mcp_release_must_match_retained_archive(self):
+        other = self.release.with_name("20261102T010000Z-0.1.1")
+        other.mkdir()
+        (self.paths.changedetection_mcp / "current").unlink()
+        (self.paths.changedetection_mcp / "current").symlink_to(other, target_is_directory=True)
+        with self.assertRaisesRegex(backup.BackupError, "mcp_active_release_mismatch"):
+            backup.mcp_snapshot(self.paths, backup.image_inventory(self.image_root))
+
+    def test_installed_mcp_code_must_match_captured_source_and_runtime_receipt(self):
+        (self.release / "bridge.py").write_text("different offline runtime")
+        with self.assertRaisesRegex(backup.BackupError, "mcp_runtime_source_mismatch"):
+            backup.mcp_snapshot(self.paths, backup.image_inventory(self.image_root))
+
+    def test_captured_api_key_must_match_captured_native_state_without_exposing_values(self):
+        (self.paths.runtime / "deploy" / backup.MCP_KEY).write_text("different-offline-key\n")
+        with self.assertRaisesRegex(backup.BackupError, "^mcp_api_key_mismatch$"):
+            backup.verify_stage(self.payload(), self.image_root)
+
+    def test_api_key_requires_private_mode(self):
+        (self.paths.runtime / "deploy" / backup.MCP_KEY).chmod(0o644)
+        with self.assertRaisesRegex(backup.BackupError, "mcp_key_permissions_invalid"):
+            backup.mcp_snapshot(self.paths, backup.image_inventory(self.image_root))
+
+    def test_registration_must_use_expected_launcher_endpoint_and_key(self):
+        path = self.paths.runtime / "deploy" / backup.MCP_REGISTRATION
+        original = path.read_text()
+        cases = ((backup.MCP_BASE_URL, "http://127.0.0.1:8141"),
+                 (backup.MCP_KEY, "unrelated-key"), ("current/run.sh", "other/run.sh"),
+                 (str(self.root / "mcp-output"), str(self.paths.runtime / "artifacts")))
+        for before, after in cases:
+            with self.subTest(after=after):
+                path.write_text(original.replace(before, after))
+                with self.assertRaisesRegex(backup.BackupError, "mcp_registration_mismatch"):
+                    backup.mcp_snapshot(self.paths, backup.image_inventory(self.image_root))
+
+    def test_exact_prechange_configuration_is_required(self):
+        installation = json.loads((self.paths.runtime / "deploy" / backup.MCP_INSTALL).read_text())
+        (self.paths.runtime / "deploy" / installation["before_config_file"]).unlink()
+        with self.assertRaisesRegex(backup.BackupError, "mcp_prechange_config_missing"):
+            backup.mcp_snapshot(self.paths, backup.image_inventory(self.image_root))
+
+    def test_installed_lifecycle_helper_must_match_captured_source_before_capture(self):
+        (self.paths.libexec / "edsys-private-web-apps-control").write_text("outdated offline helper")
+        with mock.patch.object(backup, "capture_app") as capture:
+            with self.assertRaisesRegex(backup.BackupError, "installed_helper_source_mismatch"):
+                backup.prepare_generation(self.paths, "outdated-helper")
+            capture.assert_not_called()
+
+    def test_source_change_during_capture_preserves_last_good(self):
+        receipt = {"snapshot_id": "c" * 64, "status": "success"}
+        backup.atomic_json(self.paths.stage / "CURRENT.json", receipt)
+        def changed_source(app, target, paths):
+            result = self.capture(app, target, paths)
+            if app == "changedetection":
+                with (paths.runtime / "deploy/changedetection.env").open("a") as stream:
+                    stream.write("changed-during-capture\n")
+            return result
+        with mock.patch.object(backup, "run", side_effect=self.docker_read), \
+                mock.patch.object(backup, "capture_app", side_effect=changed_source):
+            with self.assertRaisesRegex(backup.BackupError, "deployment_changed_during_capture"):
+                backup.prepare_generation(self.paths, "source-drift")
+        self.assertEqual(json.loads((self.paths.stage / "CURRENT.json").read_text()), receipt)
+
+
+class LegacyRestoreTests(Fixture):
+    def test_schema_1_full_snapshot_id_remains_supported(self):
+        identifier = "c" * 64
+        record = {"id": identifier, "tags": [backup.SCOPE, backup.FORMAT_TAGS[1]],
+                  "paths": [str(self.paths.stage / "snapshot-payload"), str(self.image_root)]}
+        repository = backup.Repository({})
+        with mock.patch.object(repository, "call", return_value=json.dumps([record]).encode()):
+            self.assertEqual(repository.metadata(identifier, self.paths), record)
+
+    def test_conflicting_format_tags_are_refused(self):
+        identifier = "c" * 64
+        record = {"id": identifier, "tags": [backup.SCOPE, *backup.FORMAT_TAGS.values()],
+                  "paths": [str(self.paths.stage / "snapshot-payload"), str(self.image_root)]}
+        repository = backup.Repository({})
+        with mock.patch.object(repository, "call", return_value=json.dumps([record]).encode()):
+            with self.assertRaisesRegex(backup.BackupError, "snapshot_scope_mismatch"):
+                repository.metadata(identifier, self.paths)
+
+    def test_schema_1_restore_needs_no_new_live_mcp_or_sidecars(self):
+        payload = self.payload()
+        target = self.root / "isolated-legacy-restore"
+        repository = mock.Mock()
+        repository.metadata.return_value = {"tags": [backup.SCOPE, backup.FORMAT_TAGS[1]]}
+        def restored_files(*args, **kwargs):
+            destination = target / str(self.paths.stage / "snapshot-payload").lstrip("/")
+            destination.parent.mkdir(parents=True)
+            shutil.copytree(payload, destination)
+            images = target / str(self.image_root).lstrip("/")
+            images.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(self.image_root, images)
+            return b""
+        repository.call.side_effect = restored_files
+        with mock.patch.object(backup, "deployment_snapshot", side_effect=AssertionError("live deployment read")), \
+                mock.patch.object(backup, "mcp_snapshot", side_effect=AssertionError("live MCP read")):
+            result = backup.restore(self.paths, repository, "c" * 64, target)
+        self.assertEqual((result["manifest_schema"], result["sidecar_count"]), (1, 0))
+
+    def test_restore_format_tag_must_match_manifest(self):
+        payload = self.payload()
+        target = self.root / "wrong-format-restore"
+        repository = mock.Mock()
+        repository.metadata.return_value = {"tags": [backup.SCOPE, backup.FORMAT_TAGS[2]]}
+        def restored_files(*args, **kwargs):
+            destination = target / str(self.paths.stage / "snapshot-payload").lstrip("/")
+            destination.parent.mkdir(parents=True)
+            shutil.copytree(payload, destination)
+            images = target / str(self.image_root).lstrip("/")
+            images.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(self.image_root, images)
+            return b""
+        repository.call.side_effect = restored_files
+        with self.assertRaisesRegex(backup.BackupError, "snapshot_format_mismatch"):
+            backup.restore(self.paths, repository, "c" * 64, target)
 
 
 class RunningStateTests(Fixture):
@@ -570,7 +955,36 @@ class RetentionTests(Fixture):
         self.assertTrue(items[-1][0].exists())
 
 
-class TransactionTests(Fixture):
+class TransactionTests(ExpandedFixture):
+    def test_mcp_key_mismatch_preserves_last_good_without_restic_write(self):
+        previous = self.payload(self.paths.stage / "snapshot-payload")
+        previous_hash = backup.hash_file(previous / "manifest.json")
+        receipt = {"snapshot_id": "c" * 64, "status": "success"}
+        backup.atomic_json(self.paths.stage / "CURRENT.json", receipt)
+        (self.paths.runtime / "deploy" / backup.MCP_KEY).write_text("mismatched-offline-key")
+        candidate = self.payload(self.paths.stage / "generations/mismatched-key-fixture")
+        repository = self.fake_repository()
+        with mock.patch.object(backup, "prepare_generation", return_value=candidate):
+            with self.assertRaisesRegex(backup.BackupError, "mcp_api_key_mismatch"):
+                backup.backup(self.paths, repository)
+        repository.backup.assert_not_called()
+        self.assertEqual(json.loads((self.paths.stage / "CURRENT.json").read_text()), receipt)
+        self.assertEqual(backup.hash_file(previous / "manifest.json"), previous_hash)
+
+    def test_new_capture_cannot_fall_back_to_schema_1(self):
+        previous = self.payload(self.paths.stage / "snapshot-payload")
+        old_hash = backup.hash_file(previous / "manifest.json")
+        receipt = {"snapshot_id": "c" * 64, "status": "success"}
+        backup.atomic_json(self.paths.stage / "CURRENT.json", receipt)
+        legacy = Fixture.payload(self, self.paths.stage / "generations/legacy-fixture")
+        repository = self.fake_repository()
+        with mock.patch.object(backup, "prepare_generation", return_value=legacy):
+            with self.assertRaisesRegex(backup.BackupError, "new_capture_requires_schema_2"):
+                backup.backup(self.paths, repository)
+        repository.backup.assert_not_called()
+        self.assertEqual(json.loads((self.paths.stage / "CURRENT.json").read_text()), receipt)
+        self.assertEqual(backup.hash_file(previous / "manifest.json"), old_hash)
+
     def test_stale_image_export_preserves_last_good_without_restic_write(self):
         previous = self.payload(self.paths.stage / "snapshot-payload")
         previous_hash = backup.hash_file(previous / "manifest.json")
@@ -665,12 +1079,14 @@ class TransactionTests(Fixture):
 
     def test_restore_cannot_write_into_live_state(self):
         repo = mock.Mock()
-        for target in (self.paths.runtime, self.paths.runtime / "changedetection", self.paths.stage):
+        for target in (self.paths.runtime, self.paths.runtime / "changedetection", self.paths.stage,
+                       self.paths.changedetection_mcp, self.paths.changedetection_mcp / "new-restore"):
             with self.subTest(target=target), self.assertRaises(backup.BackupError):
                 backup.restore(self.paths, repo, "c" * 64, target)
         repo.call.assert_not_called()
 
     def test_missing_recovery_artifacts_are_refused_before_cold_capture(self):
+        self.paths.mount_guard.unlink()
         with mock.patch.object(backup, "capture_app") as capture:
             with self.assertRaises(backup.BackupError):
                 backup.prepare_generation(self.paths, "test-generation")

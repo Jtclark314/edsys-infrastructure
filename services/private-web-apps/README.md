@@ -8,13 +8,13 @@ definitions live in those Docker folders. Private state never belongs in Git.
 | Application | Private URL | Backend |
 | --- | --- | --- |
 | Stirling PDF core | `https://9950x.taile832fe.ts.net:8452/` | Dedicated Docker IP `10.254.230.50:8080`, no published port |
-| changedetection.io | `https://9950x.taile832fe.ts.net:8453/` | Host loopback `127.0.0.1:8141` |
+| changedetection.io | `https://9950x.taile832fe.ts.net:8453/` | Dedicated Docker IP `10.254.230.18:5000`, no published port |
 
 See [ACCESS.md](ACCESS.md) for the exact Tailscale identity/origin boundary and
 [BACKUP.md](BACKUP.md) for consistent backup, exact-snapshot restore and limits.
 Local host processes are trusted. No Funnel, public tunnel or LAN app listener
 is part of this deployment. Stirling may fetch public and private LAN/Tailnet
-HTTP(S) pages as authorized. changedetection retains its public-target guard and starts without real watches.
+HTTP(S) pages as authorized. changedetection may monitor public and private LAN/Tailnet targets through its destination-checking gateway and starts without real watches.
 
 ## Startup and data
 
