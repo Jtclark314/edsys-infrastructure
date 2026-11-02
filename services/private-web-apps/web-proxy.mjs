@@ -222,7 +222,11 @@ function secureCookies(headers) {
 
 function responseHeaders(headers, config) {
   const result = { ...secureCookies(cleanHeaders(headers)), 'x-frame-options': 'DENY',
-    'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
+    // Native form navigation needs its same-origin Origin header. no-referrer
+    // makes that Origin null; keep external referrers suppressed without
+    // weakening the request gate's rejection of null/cross-origin writes.
+    'referrer-policy': config?.name === 'changedetection' ? 'same-origin' : 'no-referrer',
+    'cache-control': 'no-store' };
   if (config?.name === 'stirling-pdf') {
     const existing = result['content-security-policy'];
     result['content-security-policy'] = existing

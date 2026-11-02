@@ -387,7 +387,7 @@ test('forwarding rebuilds trusted fields while preserving app auth, cookies and 
       'x-forwarded-for', 'forwarded', 'proxy-authorization', 'x-remove-me']) assert.equal(received[key], undefined, key);
     assert.equal(result.headers['set-cookie'].length, 2);
     assert.equal(result.headers['x-frame-options'], 'DENY');
-    assert.equal(result.headers['referrer-policy'], 'no-referrer');
+    assert.equal(result.headers['referrer-policy'], 'same-origin');
     assert.equal(result.headers['cache-control'], 'no-store');
   } finally { await f.close(); }
 });
@@ -699,4 +699,25 @@ test('multi-route listener startup binds only IPv4 loopback and cleans up a part
     });
     await new Promise(resolve => probe.close(resolve));
   } finally { await new Promise(resolve => blocker.close(resolve)); }
+});
+
+test('changedetection form policy preserves same-origin writes and rejects null or foreign origins', async () => {
+  const f = await fixture((req, res) => { res.end('saved'); });
+  try {
+    const h = { ...headers(), 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document',
+      'sec-fetch-site': 'same-origin', 'content-type': 'application/x-www-form-urlencoded' };
+    const result = await call(f.port, { method: 'POST', path: '/edit/fixture',
+      headers: { ...h, origin: `https://${base.publicHost}` } }, ['title=fixture']);
+    assert.equal(result.status, 200);
+    assert.equal(result.headers['referrer-policy'], 'same-origin');
+    for (const origin of ['null', 'https://foreign.invalid']) {
+      assert.equal((await call(f.port, { method: 'POST', path: '/edit/fixture',
+        headers: { ...h, origin } }, ['title=blocked'])).status, 403);
+    }
+  } finally { await f.close(); }
+  const other = await fixture((req, res) => res.end('unchanged'), stirling);
+  try {
+    const result = await call(other.port, { headers: headers(stirling) });
+    assert.equal(result.headers['referrer-policy'], 'no-referrer');
+  } finally { await other.close(); }
 });
