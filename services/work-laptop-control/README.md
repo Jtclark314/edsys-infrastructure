@@ -12,7 +12,7 @@ Human viewing remains Sunshine/Moonlight; Fleet inventory remains a separate ser
   request expiration, process timeout, metadata-only audit, hourly artifact expiry.
 - `controller.py`: authenticated SSH carries atomic JSON requests and private
   SCP artifacts. Serializes hub callers. No request replay after an uncertain result.
-- `mcp_server.py`: seven discoverable Codex tools. Python runtime pins `mcp==2.2.0`.
+- `mcp_server.py`: seven discoverable Codex tools. Python runtime pins `mcp==2.3.0`.
   No additional model API, API key, server port, firewall rule, or public endpoint.
 
 ## Installation
@@ -28,7 +28,12 @@ Copy `agent.ps1` and `install.ps1` into the user-local root. As administrator ru
 
 The task requires the user to be signed in. The installer applies an ACL restricted
 to that user, SYSTEM and administrators. No login credentials are stored.
-Create a dedicated hub Python venv and install `mcp==2.2.0`. Hub private config:
+Create a new dedicated hub Python venv and install the hash-locked
+`requirements.lock` with `uv pip sync --require-hashes`. The matching fully pinned
+`requirements.in` records the accepted dependency set. Retain the previous venv
+and switch the hub `venv` pointer only after controller tests and fresh stdio
+initialization, exact schema comparison and a read-only status probe. Restore
+the prior directory/pointer to roll back. Hub private config:
 `~/.local/share/edsys-work-laptop-control/config.json`, mode 0600:
 
 ```json

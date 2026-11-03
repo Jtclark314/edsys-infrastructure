@@ -40,7 +40,7 @@ For long operations, add `asynchronous=true` (Stirling's `async=true` POST flag)
 
 ## Installation and recovery
 
-Source owner: `edsys-infrastructure/services/stirling-mcp/`. Official MCP SDK 2.2.0 and all 27 transitive dependencies are pinned with SHA256 hashes in `requirements.lock`; they match the SDK line already qualified for the local operations MCP. This is independent of Codex CLI/Desktop updates. Dependency changes require a new lock and requalification, not a floating install.
+Source owner: `edsys-infrastructure/services/stirling-mcp/`. Official MCP SDK 2.3.0 and all 27 transitive dependencies are pinned with SHA256 hashes in `requirements.lock`; they match the SDK line already qualified for the local operations MCP. This is independent of Codex CLI/Desktop updates. Dependency changes require a new lock and requalification, not a floating install.
 
 Permanent layout:
 
@@ -69,4 +69,4 @@ Run offline checks from this source directory with the isolated Python:
 
 `verify_live.py` performs an explicitly requested synthetic-only acceptance against the operator-selected backend: fresh stdio initialize and exact tool listing, real catalog/schema discovery, synchronous two-PDF merge, asynchronous merge with polling and file download, secret-file encryption/decryption, PDF page/text checks, SHA256 checks and byte-identical input preservation. The generated test password never enters tool arguments or logs and is removed after its check. It saves evidence/fixtures under the supplied private work directory, never production documents. It requires the existing `pdfinfo`/`pdftotext` utilities. It is a manual verification tool, not a scheduler or monitor.
 
-Primary integration references: [official Python SDK release 2.2.0](https://github.com/modelcontextprotocol/python-sdk/releases/tag/v2.2.0), [SDK server documentation](https://py.sdk.modelcontextprotocol.io/servers/), and the deployed core's `/v1/api-docs`. Dependency licenses remain with their distributions. Only the new bridge source is covered by the adjacent MIT license.
+Primary integration references: [official Python SDK release 2.3.0](https://github.com/modelcontextprotocol/python-sdk/releases/tag/v2.3.0), [SDK server documentation](https://py.sdk.modelcontextprotocol.io/servers/), and the deployed core's `/v1/api-docs`. Dependency licenses remain with their distributions. Only the new bridge source is covered by the adjacent MIT license.

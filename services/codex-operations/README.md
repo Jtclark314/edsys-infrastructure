@@ -79,10 +79,13 @@ Run as Jeremy on the canonical 9950x:
 bash services/codex-operations/install.sh
 ```
 
-This installs an isolated user venv with `mcp==2.2.0`, accepted transitive
+This installs an isolated user venv with `mcp==2.3.0`, accepted transitive
 versions from `requirements.lock`, and the launcher
-`/home/jeremy/.local/bin/edsys-operations-mcp`. Installation does not register
-the server or touch household configuration. Existing private-file/SSH/Docker
+`/home/jeremy/.local/bin/edsys-operations-mcp`. For dependency maintenance, stage a new dedicated venv with a hash-checked
+copy of this pinned package set, qualify offline tests and fresh stdio schemas/
+read-only backend calls, then switch the runtime `venv` pointer atomically.
+Retain the previous venv directory and restore it at the original path to roll
+back. Installation does not register the server or touch household configuration. Existing private-file/SSH/Docker
 authority must remain available; missing access fails without alternate tokens.
 
 Register the launcher as stdio with an explicit 20-tool allowlist and

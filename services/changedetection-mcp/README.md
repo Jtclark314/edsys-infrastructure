@@ -2,7 +2,7 @@
 
 An MIT-licensed local **stdio** adapter for the pinned Apache-2.0
 changedetection.io **0.60.10** REST API. Codex starts the process; it opens no
-listener and has no web interface. It uses the official Python MCP SDK 2.2.0
+listener and has no web interface. It uses the official Python MCP SDK 2.3.0
 in an isolated Python 3.12 environment with hash-locked dependencies.
 
 This is a separate integration, not a native upstream MCP implementation. No

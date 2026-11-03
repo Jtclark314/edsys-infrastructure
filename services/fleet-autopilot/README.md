@@ -304,3 +304,17 @@ transaction. Retain the previous agent directory and enrollment identity, stop
 only the exact managed agent process before replacing files, then verify signed
 heartbeats and the limited readiness task. Rollback restores the retained agent
 and stops/removes the readiness task if returning to an agent without this feature.
+
+### MCP dependency maintenance (2026-11-03)
+
+Fleet/Proxmox retain MCP SDK 1.29.0: SDK 2.3.0 removes the imported
+`mcp.server.fastmcp.FastMCP` API and requires a separately qualified source
+migration. Do not replace the SDK as a dependency-only update. The CA bundle
+is explicitly pinned to `certifi==2026.10.23` in `pyproject.toml`/`uv.lock`.
+A CA-only maintenance patch can retain every other installed package and the
+active Fleet release: first retain hash-checked old/new certifi wheels plus
+private package metadata, qualify bundle loading, verified HTTPS and fresh
+read-only Fleet/Proxmox stdio, then install only the selected wheel with
+`--require-hashes --no-deps`. Restore the retained old wheel for rollback;
+no Fleet worker, gateway, database, shared Codex backend or guest restart is
+required. Keep the private receipt with that release's recovery material.

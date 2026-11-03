@@ -26,7 +26,11 @@ requires an unlocked desktop. Locked and secure UAC desktops are not bypassed.
 Hub state is `~/.local/share/edsys-nimo-desktop-control`, mode 0700, with a
 0600 `config.json` naming the existing pinned SSH config/alias and Nimo root.
 Symlink `edsys-nimo`, `edsys-nimo-mcp`, and `edsys-nimo-view` into `~/.local/bin`; the MCP wrapper
-uses its own venv pinned to `mcp==2.2.0`. Register `edsys-nimo` as a stdio MCP
+uses its own venv pinned to `mcp==2.3.0`. The accepted full dependency set is
+`requirements.in`; install a new venv from the hash-locked `requirements.lock`
+using `uv pip sync --require-hashes`, qualify the controller tests and fresh
+stdio schema/read-only status, then switch the `venv` pointer. Retain the prior
+venv directory for rollback at its original path. Register `edsys-nimo` as a stdio MCP
 using the wrapper. Install `edsys-nimo-view.desktop` into
 `~/.local/share/applications`. The viewer reads a private 0600 `stream.json`
 containing Nimo's Tailnet address and launches the locally pinned Moonlight
