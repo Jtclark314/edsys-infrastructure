@@ -20,6 +20,42 @@ host therefore requires a working NVIDIA driver and NVIDIA Container Toolkit.
 Plex hardware acceleration and hardware-accelerated video encoding remain
 application settings in the persistent `/srv/plex-config` runtime state.
 
+## Plex Web cookie isolation
+
+Use `http://plex.edsys.local:32400/web` for browser launchers. The private DNS
+record in `plex-web-dns.conf` is installed on `edrouter-node0` as
+`/etc/dnsmasq.d/05-edsys-plex-web.conf`. Both Pi-hole nodes forward this local
+zone to the router. Other applications keep their existing addresses.
+
+Cookies are shared across ports at an IP address. Accumulated analytics and
+application cookies at `192.168.50.50` caused a reproducible Plex HTTP 400;
+the same request without cookies returned 200. The dedicated hostname keeps
+those IP-scoped cookies out of Plex requests without changing cookie settings
+for other apps. Do not use the Plex hostname for other applications or set
+parent-domain cookies for it. This changes browser navigation only; Plex's
+container, authentication policy, libraries and native-client discovery remain
+unchanged. Keep numeric-IP monitoring endpoints independent of browser links.
+
+DNS deployment requires a private copy of the current router dnsmasq config,
+an absent/conflict check for the destination, `dnsmasq --test`, and one
+dnsmasq-only restart. Verify the new record through the router and both
+Pi-holes, existing local/public lookups, then the Plex web and identity pages.
+Do not restart the router or Plex. Update the EdSys and generated Master
+dashboard links together and verify Nimo's saved launch paths.
+
+Plex browser settings belong to an origin. For an existing signed-in browser,
+transfer settings only within that browser between the exact old and new Plex
+origins, with strict sender/origin checks. Never place authentication values in
+URLs, console output, files, Git or RAG. Other devices may need one normal
+Plex sign-in at the new address. Off-LAN DNS/client acceptance is separate.
+
+Recovery: restore only the changed navigation fields. Remove the unchanged
+`05-edsys-plex-web.conf` file, validate dnsmasq and restart only dnsmasq. Retain
+newer unrelated DNS edits and browser settings. The numeric-IP web address is
+a recovery route but still shares cookies with the other applications.
+
+Protocol reference: [RFC 6265, cookie isolation](https://www.rfc-editor.org/rfc/rfc6265#section-8.5).
+
 ## Plex security maintenance — 2026-11-01
 
 The accepted public release is 1.43.5.11079-b3b13e506-ls330. Its immutable
