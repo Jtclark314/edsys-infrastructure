@@ -21,13 +21,17 @@ current terms before extending its use beyond evaluation.
 ## Configuration and operation
 
 The native workspace is `%USERPROFILE%\Documents\VisioMcp\EdSysPilot`. Its
-`.codex\config.toml` holds the pinned command and visible output settings. The
-accepted native CLI uses `%USERPROFILE%\.codex\visio.config.toml`, selected by
-`codex -p visio -C <workspace>`. This additive profile disables unrelated
-plugin/apps and the three previously configured non-Visio MCPs only within that
-profile. The original global configuration and software versions are preserved.
-Project-only MCP discovery was insufficient in the installed CLI's `mcp get`;
-the dedicated profile resolved the server successfully.
+`.codex\config.toml` holds the pinned command and visible output settings.
+The accepted native worker uses `codex exec --ignore-user-config` with explicit
+pilot-only model/server settings and existing authentication. The Nimo launcher
+collects a bounded request and invokes this worker; inspection selects its
+read-only tool allowlist. Global defaults are preserved.
+
+An additive `%USERPROFILE%\.codex\visio.config.toml` profile remains available
+for native CLI use. Its connection was verified with all eight tools and a real
+schema call after making the server required. Interactive TUI and direct Codex
+Desktop app use are not independently qualified; the accepted bounded route is
+the native worker/launcher or 9950x handoff.
 
 Launch command:
 
@@ -47,9 +51,9 @@ on the native desktop: it creates the workspace/named profile, accepts identical
 existing configuration and refuses conflicting files without replacing them.
 It never edits the default config. `install-launchers.ps1` creates/reads back the **Visio AI
 Pilot** Desktop and Start menu shortcuts. It refuses conflicting existing
-launchers. The shortcut starts native Codex with the dedicated profile; it does
-not create or change a diagram until requested. Native CLI automation is the
-accepted route; Desktop app profile selection is not separately qualified.
+launchers. The shortcut accepts a one-line request or UTF-8 brief file, then uses the
+qualified worker. It creates or changes a diagram only when requested. Native
+CLI worker automation is the accepted route.
 
 From 9950x:
 
@@ -73,7 +77,9 @@ an uncertain timeout. Inspect existing receipts/processes first.
 
 `run_native_codex.py` reuses existing ChatGPT authentication without copying it,
 uses an ephemeral run and read-only shell sandbox, and explicitly supplies only
-the pilot MCP settings. Its `--read-only` mode also removes diagram-management,
+the pilot MCP settings. `required=true` is mandatory: optional startup produced
+tool-less sessions during acceptance; making the server required resolved them.
+A deliberate broken-server test failed before model execution. Its `--read-only` mode also removes diagram-management,
 creation, mutation and validation tools; application open/read/discovery remain.
 Shell read-only mode alone does not restrict MCP writes. An inspection must not
 save, export, repair, close/reopen the source, or substitute another drawing.

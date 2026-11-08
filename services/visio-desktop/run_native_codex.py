@@ -31,6 +31,8 @@ def invoke(root, prompt, run, receipt, read_only):
         args += ["-c", "mcp_servers.visio-local." + key + "=" + json.dumps(server[key])]
     for key, value in server.get("env", {}).items():
         args += ["-c", "mcp_servers.visio-local.env." + key + "=" + json.dumps(value)]
+    # Do not continue as a tool-less model session if Visio initialization fails.
+    args += ["-c", "mcp_servers.visio-local.required=true"]
     if read_only:
         args += ["-c", "mcp_servers.visio-local.enabled_tools=" + json.dumps(
             ["manage_visio", "read_diagram", "content_search", "get_visual_model_schema"])]

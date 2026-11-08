@@ -20,6 +20,7 @@ def main():
     (root / ".codex").mkdir(exist_ok=True)
     lines = [
         'model = "gpt-6-astra"', '', '[mcp_servers.visio-local]',
+        'required = true',
         'command = ' + json.dumps(str(dotnet)),
         'args = ' + json.dumps(["tool", "exec", PACKAGE, "--yes"]),
         'startup_timeout_sec = 120', 'tool_timeout_sec = 180', '',

@@ -12,7 +12,12 @@ release status and terms. Preserve the user's requested read/edit/save scope.
 ## Select the execution route
 
 - On Nimo's native Windows desktop, use the connected `visio-local` MCP. The
-  installed `visio` Codex profile provides the scoped model/server settings.
+  native worker supplies isolated model/server settings per invocation. Outside
+  the worker, use the workspace's `Open-VisioPilot.ps1` intake or
+  `run_native_codex.py` with a staged brief. Keep Visio `required=true`; a
+  successful config lookup alone does not prove runtime tools are available.
+  The native CLI profile connection passed an actual schema call; interactive
+  TUI and direct Codex Desktop app use are not independently qualified.
 - On 9950x, use `/srv/edsys/edsys-infrastructure/services/visio-desktop/handoff.py`.
   `status` checks readiness; `run --prompt /absolute/prompt.txt` stages a bounded
   prompt and launches the existing interactive Windows worker. For inspection,
