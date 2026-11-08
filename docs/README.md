@@ -63,6 +63,9 @@ This folder documents deployment standards for EdSys infrastructure. It should s
 - `../services/local-coder/README.md` - pinned CPU-only Qwen3.6 coding agent,
   OpenCode, isolated browser profile and separate desktop tools.
 
+- `../services/visio-desktop/README.md` - official pinned Visio Desktop MCP
+  evaluation on Nimo, native Codex handoff, source models and recovery boundaries.
+
 - `../services/homeowner-companion/README.md` - independent non-AI homeowner
   app user service, exact LAN bind and private Tailscale HTTPS route.
 

@@ -1,0 +1,201 @@
+{
+  "purpose": "visio-evaluation",
+  "asOf": "2026-11-07",
+  "pages": [
+    {
+      "name": "Example RFI Review",
+      "title": "Foothills RFI Review - Illustrative Example",
+      "subtitle": "EXAMPLE ONLY | Roles and steps are illustrative, not an adopted project procedure or record status",
+      "lanes": [
+        "Field team",
+        "Project team",
+        "Design review"
+      ],
+      "nodes": [
+        {
+          "id": "F1",
+          "text": "Capture question",
+          "lane": "Field team",
+          "kind": "process",
+          "status": "Example",
+          "source": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "id": "F2",
+          "text": "Check source revision",
+          "lane": "Project team",
+          "kind": "process",
+          "status": "Example",
+          "source": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "id": "F3",
+          "text": "Draft or revise RFI",
+          "lane": "Project team",
+          "kind": "process",
+          "status": "Example",
+          "source": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "id": "F4",
+          "text": "Issue reviewed RFI",
+          "lane": "Project team",
+          "kind": "process",
+          "status": "Example",
+          "source": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "id": "F5",
+          "text": "Review and respond",
+          "lane": "Design review",
+          "kind": "process",
+          "status": "Example",
+          "source": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "id": "F6",
+          "text": "Response resolves question?",
+          "lane": "Project team",
+          "kind": "decision",
+          "status": "Example",
+          "source": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "id": "F7",
+          "text": "Verify field resolution",
+          "lane": "Field team",
+          "kind": "process",
+          "status": "Example",
+          "source": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "id": "F8",
+          "text": "Record closeout",
+          "lane": "Project team",
+          "kind": "process",
+          "status": "Example",
+          "source": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "source": "F1",
+          "target": "F2",
+          "label": "Question",
+          "id": "F-E01",
+          "status": "Example",
+          "asOf": "2026-11-07",
+          "provenance": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "source": "F2",
+          "target": "F3",
+          "label": "Current source checked",
+          "id": "F-E02",
+          "status": "Example",
+          "asOf": "2026-11-07",
+          "provenance": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "source": "F3",
+          "target": "F4",
+          "label": "Reviewed draft",
+          "id": "F-E03",
+          "status": "Example",
+          "asOf": "2026-11-07",
+          "provenance": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "source": "F4",
+          "target": "F5",
+          "label": "Issued question",
+          "id": "F-E04",
+          "status": "Example",
+          "asOf": "2026-11-07",
+          "provenance": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "source": "F5",
+          "target": "F6",
+          "label": "Response",
+          "id": "F-E05",
+          "status": "Example",
+          "asOf": "2026-11-07",
+          "provenance": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "source": "F6",
+          "target": "F7",
+          "label": "Yes",
+          "id": "F-E06",
+          "status": "Example",
+          "asOf": "2026-11-07",
+          "provenance": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "source": "F6",
+          "target": "F3",
+          "label": "No: clarify",
+          "id": "F-E07",
+          "status": "Example",
+          "asOf": "2026-11-07",
+          "provenance": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        },
+        {
+          "source": "F7",
+          "target": "F8",
+          "label": "Verification evidence",
+          "id": "F-E08",
+          "status": "Example",
+          "asOf": "2026-11-07",
+          "provenance": {
+            "reference": "Synthetic training example, owner-authorized Visio evaluation"
+          }
+        }
+      ],
+      "auxiliarySourceIDs": [
+        "LANE-FIELD",
+        "LANE-PROJECT",
+        "LANE-DESIGN",
+        "LANE-LIST"
+      ],
+      "decorations": [
+        "Foothills RFI Review - Illustrative Example",
+        "EXAMPLE ONLY | Roles and steps are illustrative, not an adopted project procedure or record status",
+        "Example",
+        "EXAMPLE ONLY",
+        "EXAMPLE ONLY \u2022 Rectangle: process | Diamond: decision | Arrow: directed handoff \u2022 As of 2026-11-07"
+      ]
+    }
+  ]
+}

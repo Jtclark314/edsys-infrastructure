@@ -1,0 +1,327 @@
+{
+  "purpose": "visio-evaluation",
+  "asOf": "2026-11-07",
+  "pages": [
+    {
+      "name": "AI Work Map",
+      "title": "EdSys AI Work Map",
+      "subtitle": "Documented roles plus Visio evaluation path | 2026-11-07 | Not a live health map",
+      "nodes": [
+        {
+          "id": "A1",
+          "text": "Jeremy request",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/obsidian/source-of-truth/Strategy/EdSys and Foothills Codex Idea Portfolio.md",
+            "sha256": "bf796de2a4a340c7d6fe6b32b7e2728b71e7448f0050f2ba8ce06643ab5c62ac",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/obsidian/source-of-truth/Strategy/EdSys and Foothills Codex Idea Portfolio.md"
+          }
+        },
+        {
+          "id": "A2",
+          "text": "Codex on 9950x",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/obsidian/source-of-truth/Strategy/EdSys and Foothills Codex Idea Portfolio.md",
+            "sha256": "bf796de2a4a340c7d6fe6b32b7e2728b71e7448f0050f2ba8ce06643ab5c62ac",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/obsidian/source-of-truth/Strategy/EdSys and Foothills Codex Idea Portfolio.md"
+          }
+        },
+        {
+          "id": "A3",
+          "text": "Reviewed project sources",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/obsidian/source-of-truth/Strategy/EdSys and Foothills Codex Idea Portfolio.md",
+            "sha256": "bf796de2a4a340c7d6fe6b32b7e2728b71e7448f0050f2ba8ce06643ab5c62ac",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/obsidian/source-of-truth/Strategy/EdSys and Foothills Codex Idea Portfolio.md"
+          }
+        },
+        {
+          "id": "A4",
+          "text": "Read-only code intelligence",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/CODEX_LOCAL_CODE_INTELLIGENCE.md",
+            "sha256": "0645c53ab846393e51228ab98c9a083e5f10112bcbf4d6c2a982279f90f4db74",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/CODEX_LOCAL_CODE_INTELLIGENCE.md"
+          }
+        },
+        {
+          "id": "A5",
+          "text": "Grounded EdSys knowledge",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/EDSYS_GROUNDED_RAG.md",
+            "sha256": "c8e861c4b73acf4e0081b0536e2999bd1ed9320ed26c46ecdb3088543e185a94",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/EDSYS_GROUNDED_RAG.md"
+          }
+        },
+        {
+          "id": "A6",
+          "text": "Human review",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/obsidian/source-of-truth/Strategy/EdSys and Foothills Codex Idea Portfolio.md",
+            "sha256": "bf796de2a4a340c7d6fe6b32b7e2728b71e7448f0050f2ba8ce06643ab5c62ac",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/obsidian/source-of-truth/Strategy/EdSys and Foothills Codex Idea Portfolio.md"
+          }
+        },
+        {
+          "id": "A7",
+          "text": "Native Codex on Nimo",
+          "status": "Evaluation",
+          "source": {
+            "reference": "Owner-authorized Visio evaluation, 2026-11-07"
+          }
+        },
+        {
+          "id": "A8",
+          "text": "Local Visio MCP",
+          "status": "Evaluation",
+          "source": {
+            "reference": "Owner-authorized Visio evaluation, 2026-11-07"
+          }
+        },
+        {
+          "id": "A9",
+          "text": "Visio Desktop",
+          "status": "Evaluation",
+          "source": {
+            "reference": "Owner-authorized Visio evaluation, 2026-11-07"
+          }
+        },
+        {
+          "id": "A10",
+          "text": "Editable diagram bundle",
+          "status": "Evaluation",
+          "source": {
+            "reference": "Owner-authorized Visio evaluation, 2026-11-07"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "source": "A1",
+          "target": "A2",
+          "label": "Task",
+          "id": "A-E01"
+        },
+        {
+          "source": "A3",
+          "target": "A2",
+          "label": "Evidence",
+          "id": "A-E02"
+        },
+        {
+          "source": "A4",
+          "target": "A2",
+          "label": "Search and advisory context",
+          "id": "A-E03"
+        },
+        {
+          "source": "A5",
+          "target": "A2",
+          "label": "Source-grounded context",
+          "id": "A-E04"
+        },
+        {
+          "source": "A2",
+          "target": "A6",
+          "label": "Review consequential actions",
+          "id": "A-E05"
+        },
+        {
+          "source": "A2",
+          "target": "A7",
+          "label": "Staged diagram brief",
+          "id": "A-E06"
+        },
+        {
+          "source": "A7",
+          "target": "A8",
+          "label": "Local stdio",
+          "id": "A-E07"
+        },
+        {
+          "source": "A8",
+          "target": "A9",
+          "label": "Native automation",
+          "id": "A-E08"
+        },
+        {
+          "source": "A9",
+          "target": "A10",
+          "label": "Save and export",
+          "id": "A-E09"
+        },
+        {
+          "source": "A10",
+          "target": "A6",
+          "label": "Reconcile and inspect",
+          "id": "A-E10"
+        }
+      ],
+      "decorations": [
+        "EdSys AI Work Map",
+        "Documented roles plus Visio evaluation path | 2026-11-07 | Not a live health map",
+        "Documented",
+        "Evaluation"
+      ]
+    },
+    {
+      "name": "Evidence to Answer",
+      "title": "EdSys Evidence to Answer",
+      "subtitle": "Documented EdSys factual-answer route | Evaluation drawing | No live health claims",
+      "nodes": [
+        {
+          "id": "K1",
+          "text": "Reviewed EdSys sources",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/EDSYS_GROUNDED_RAG.md",
+            "sha256": "c8e861c4b73acf4e0081b0536e2999bd1ed9320ed26c46ecdb3088543e185a94",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/EDSYS_GROUNDED_RAG.md"
+          }
+        },
+        {
+          "id": "K2",
+          "text": "Clean RAG mirror",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/EDSYS_GROUNDED_RAG.md",
+            "sha256": "c8e861c4b73acf4e0081b0536e2999bd1ed9320ed26c46ecdb3088543e185a94",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/EDSYS_GROUNDED_RAG.md"
+          }
+        },
+        {
+          "id": "K3",
+          "text": "Grounding index",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/EDSYS_GROUNDED_RAG.md",
+            "sha256": "c8e861c4b73acf4e0081b0536e2999bd1ed9320ed26c46ecdb3088543e185a94",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/EDSYS_GROUNDED_RAG.md"
+          }
+        },
+        {
+          "id": "K4",
+          "text": "User question",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/EDSYS_GROUNDED_RAG.md",
+            "sha256": "c8e861c4b73acf4e0081b0536e2999bd1ed9320ed26c46ecdb3088543e185a94",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/EDSYS_GROUNDED_RAG.md"
+          }
+        },
+        {
+          "id": "K5",
+          "text": "Classify EdSys factual question",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/EDSYS_GROUNDED_RAG.md",
+            "sha256": "c8e861c4b73acf4e0081b0536e2999bd1ed9320ed26c46ecdb3088543e185a94",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/EDSYS_GROUNDED_RAG.md"
+          }
+        },
+        {
+          "id": "K6",
+          "text": "Retrieve source evidence",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/EDSYS_GROUNDED_RAG.md",
+            "sha256": "c8e861c4b73acf4e0081b0536e2999bd1ed9320ed26c46ecdb3088543e185a94",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/EDSYS_GROUNDED_RAG.md"
+          }
+        },
+        {
+          "id": "K7",
+          "text": "Model with grounding pack",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/EDSYS_GROUNDED_RAG.md",
+            "sha256": "c8e861c4b73acf4e0081b0536e2999bd1ed9320ed26c46ecdb3088543e185a94",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/EDSYS_GROUNDED_RAG.md"
+          }
+        },
+        {
+          "id": "K8",
+          "text": "Citation validation gate",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/EDSYS_GROUNDED_RAG.md",
+            "sha256": "c8e861c4b73acf4e0081b0536e2999bd1ed9320ed26c46ecdb3088543e185a94",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/EDSYS_GROUNDED_RAG.md"
+          }
+        },
+        {
+          "id": "K9",
+          "text": "Grounded answer",
+          "status": "Documented",
+          "source": {
+            "reference": "EdSys-Master/docs/EDSYS_GROUNDED_RAG.md",
+            "sha256": "c8e861c4b73acf4e0081b0536e2999bd1ed9320ed26c46ecdb3088543e185a94",
+            "url": "https://github.com/Jtclark314/EdSys-Master/blob/main/docs/EDSYS_GROUNDED_RAG.md"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "source": "K1",
+          "target": "K2",
+          "label": "Reviewed summaries",
+          "id": "K-E01"
+        },
+        {
+          "source": "K2",
+          "target": "K3",
+          "label": "Build index",
+          "id": "K-E02"
+        },
+        {
+          "source": "K3",
+          "target": "K6",
+          "label": "Source retrieval",
+          "id": "K-E03"
+        },
+        {
+          "source": "K4",
+          "target": "K5",
+          "label": "Question",
+          "id": "K-E04"
+        },
+        {
+          "source": "K5",
+          "target": "K6",
+          "label": "EdSys factual route",
+          "id": "K-E05"
+        },
+        {
+          "source": "K6",
+          "target": "K7",
+          "label": "Grounding pack",
+          "id": "K-E06"
+        },
+        {
+          "source": "K7",
+          "target": "K8",
+          "label": "Draft answer",
+          "id": "K-E07"
+        },
+        {
+          "source": "K8",
+          "target": "K9",
+          "label": "Release after validation",
+          "id": "K-E08"
+        }
+      ],
+      "decorations": [
+        "EdSys Evidence to Answer",
+        "Documented EdSys factual-answer route | Evaluation drawing | No live health claims",
+        "Documented",
+        "Evaluation"
+      ]
+    }
+  ],
+  "sourceRepositoryRevision": "f0855a825f1c5494d531d5bdf42886649137d90d"
+}
