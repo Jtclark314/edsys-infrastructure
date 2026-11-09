@@ -19,6 +19,8 @@ services:
     env_file:
       - path: /etc/edsys-container-recovery/env/plex.env
         required: false
+    environment:
+      TZ: America/New_York
     deploy:
       resources:
         reservations:

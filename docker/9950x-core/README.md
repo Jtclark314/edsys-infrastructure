@@ -20,6 +20,31 @@ host therefore requires a working NVIDIA driver and NVIDIA Container Toolkit.
 Plex hardware acceleration and hardware-accelerated video encoding remain
 application settings in the persistent `/srv/plex-config` runtime state.
 
+## Plex maintenance timezone
+
+Plex uses `TZ=America/New_York` from this Compose definition. Its persistent
+Scheduled Tasks settings retain start hour `2` and end hour `5`, so maintenance
+runs from 2–5 a.m. Eastern and follows daylight saving changes automatically.
+Before the 2026-11-07 correction, the container used UTC and this same window
+ran from 9 p.m. to midnight Eastern Standard Time. The evening activity was
+progressing loudness analysis after library scans had finished.
+
+For a timezone change, preserve the current Compose/environment definitions,
+preferences and consistent database backups privately, confirm playback is
+idle, validate Compose, and recreate only Plex:
+
+```bash
+docker compose -f docker/9950x-core/compose.yaml config --quiet
+docker compose -f docker/9950x-core/compose.yaml up -d --no-deps --pull never --no-build --timeout 60 plex
+docker exec plex date '+%Y-%m-%d %H:%M:%S %Z %z'
+```
+
+Verify server health, authenticated library/file identities, retained scheduled
+hours and inactive maintenance outside the window. Existing hourly scans and
+processing triggered by new media can still show activity outside maintenance.
+Recovery restores the previous Plex timezone entry and recreates only Plex
+with the same pinned image and persistent mounts.
+
 ## Plex Web cookie isolation
 
 Use `http://plex.edsys.local:32400/web` for browser launchers. The private DNS
