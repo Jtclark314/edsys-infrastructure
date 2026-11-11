@@ -40,3 +40,34 @@ EdSys-Master's `docs/EDSYS_FINANCE.md` and reviewed Obsidian summary record
 sanitized current state. Owner review of pay, reserve, variable spending and
 monthly bills is required for a cash forecast; successful bank sync does not
 prove historical statement completeness.
+
+## Local Finance Tools companion
+
+The Codex analysis/reporting companion was installed and operator-verified on
+9950x on 2026-11-10 Eastern. Source is the owning application's
+`edsys-finance/integrations/finance_tools/`; that directory owns the bounded
+local bridge, analysis, separate planning workspace, report engine and
+operating reference. Independent functional forward-testing, report layout
+QA and disposable local restoration passed.
+
+The companion uses the existing `edsys-finance-api` container for read-only
+main-account queries and the existing conditional cash forecast. It adds no
+web listener, public route, bank synchronization, paid analyst submission or
+ledger migration. Owner datasets and report packages belong in the private
+local workspace `~/.local/share/edsys-finance-tools`, outside Git and RAG. The
+MCP server and skill are named `edsys-finance`; there is no separate web UI.
+
+An immutable installed release is selected under
+`~/.local/share/edsys-finance-tools/runtime/current`, with CLI and MCP launchers
+in `~/.local/bin`. The installed recovery hook
+`edsys-backup.service.d/61-finance-tools.conf` runs the root-owned
+`/usr/local/libexec/edsys-finance-tools-backup` helper before the existing
+encrypted backup. It stages an online SQLite backup and hash-checked report
+artifacts under `/srv/edsys-backup/staging/finance-tools/current`, retaining
+the prior stage. The existing Restic include covers it; no additional timer
+or Finance container restart is introduced. Local staging and an actual
+disposable restore passed database integrity and artifact-hash checks;
+new-stage encrypted/offsite retrieval remains a separate verification gate.
+
+See the owning [Finance Tools README](/home/jeremy/code/foothills-project-portal/edsys-finance/integrations/finance_tools/README.md)
+and `EdSys-Master/docs/EDSYS_FINANCE.md` for scope and verified acceptance.
