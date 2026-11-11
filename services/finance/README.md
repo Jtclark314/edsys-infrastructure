@@ -71,3 +71,24 @@ new-stage encrypted/offsite retrieval remains a separate verification gate.
 
 See the owning [Finance Tools README](/home/jeremy/code/foothills-project-portal/edsys-finance/integrations/finance_tools/README.md)
 and `EdSys-Master/docs/EDSYS_FINANCE.md` for scope and verified acceptance.
+
+## Scheduled workbook maintenance
+
+The authorized source is the owning application's
+[scheduled workbook integration](https://github.com/Jtclark314/foothills-project-portal/blob/main/edsys-finance/integrations/scheduled_workbook/README.md).
+Commissioned and operator-verified on 2026-11-11 Eastern, its dedicated
+`edsys-finance-workbook.timer` runs at 06:00 and 18:00
+America/New_York, running the existing all-connection bank ingestion before
+main-account analysis and current-month native Google Sheets maintenance.
+The daily 01:35 bank-only timer remains unchanged. The new job has no web UI
+or public route. Its actual systemd run passed native readback, visual review,
+transaction reconciliation and independent preservation checks for every other tab.
+
+Private job configuration, embedded managed-cell state and latest/success
+receipts belong under `~/.local/share/edsys-finance-tools/scheduled-workbook`.
+The installed Finance Tools backup extension snapshots only those checkpoints
+under the runner's shared lock; run logs and exports are excluded. Live staging
+and a disposable local restore passed database, artifact-hash and checkpoint
+binding checks. New-stage encrypted/offsite retrieval remains unverified.
+The existing backup hook and Restic stage include require no additional timer
+or include rule.
