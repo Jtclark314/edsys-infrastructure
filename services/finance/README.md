@@ -92,3 +92,24 @@ and a disposable local restore passed database, artifact-hash and checkpoint
 binding checks. New-stage encrypted/offsite retrieval remains unverified.
 The existing backup hook and Restic stage include require no additional timer
 or include rule.
+
+### Dedicated Finance Sheets connection
+
+The owning application's
+[Finance Sheets integration](https://github.com/Jtclark314/foothills-project-portal/blob/main/edsys-finance/integrations/finance_sheets/README.md)
+provides a root Unix-socket broker and unprivileged MCP worker for the pinned
+workbook. Native preflight, a full systemd retry and independent live acceptance
+passed on 2026-11-11 Eastern. Generic Drive transport returned HTTP 404 during
+repair; its metadata reads later recovered, with cause unverified. The scheduled
+finance workflow uses this independent dedicated connection.
+
+`edsys-finance-sheets.service` uses `Type=notify` so the dependent workbook unit
+waits for its protected socket. Writes stay within the current-month tab and
+configured year; year mismatch stops operational preflight/writes, while
+historical reads remain available. There is no web UI or public listener.
+Existing root-held authorization is reused without copying or rewriting it.
+The private nine-field `/etc/edsys-finance-sheets/config.json` includes the
+workbook year. Existing backup includes already select it and its referenced
+root auth; no helper, staging or include change was added. A disposable local
+settings copy/restore passed schema, hash and permission checks. New encrypted
+snapshot/offsite capture remains unverified.
