@@ -86,13 +86,13 @@ def test_anythingllm_verifier_rejects_extra_workspace_and_drift() -> None:
     failures = verifier.validate_inventory([workspace], stats, manifest)
     assert any("similarityThreshold" in failure for failure in failures)
     assert verifier.validate_inventory([workspace, workspace], stats, manifest) == [
-        "expected one AnythingLLM workspace, found 2"
+        "expected one managed AnythingLLM workspace, found 2"
     ]
 
 
-def test_anythingllm_verifier_requires_explicit_local_first_assistance_model() -> None:
+def test_anythingllm_verifier_preserves_explicit_local_model() -> None:
     verifier = load_script("anythingllm-rag-verify.py")
-    workspace = {**verifier.EXPECTED_WORKSPACE, "chatModel": "edsys-knowledge-local-first"}
+    workspace = {**verifier.EXPECTED_WORKSPACE, "chatModel": "edsys-coder-local"}
     stats = {
         "document_count": 1,
         "non_managed_document_count": 0,
@@ -103,8 +103,36 @@ def test_anythingllm_verifier_requires_explicit_local_first_assistance_model() -
     manifest = {"workspaceSlug": "edsys-rag-current", "documents": {"doc": {}}}
     assert verifier.validate_inventory([workspace], stats, manifest) == []
 
-    for model in ("edsys-chat-local", "edsys-chat-cloud", "edsys-knowledge-openai", "unknown-model", "", None):
+    for model in ("edsys-chat-local", "edsys-chat-cloud", "edsys-knowledge-local-first", "edsys-knowledge-openai", "unknown-model", "", None):
         workspace["chatModel"] = model
         failures = verifier.validate_inventory([workspace], stats, manifest)
         assert len(failures) == 1
-        assert "workspace chatModel expected 'edsys-knowledge-local-first'" in failures[0]
+        assert "workspace chatModel expected 'edsys-coder-local'" in failures[0]
+
+
+def test_inventory_scopes_managed_workspace_without_removing_user_workspace(tmp_path) -> None:
+    verifier = load_script("anythingllm-rag-verify.py")
+    database = tmp_path / "anythingllm.db"
+    fields = list(verifier.EXPECTED_WORKSPACE)
+    columns = ", ".join(f'"{name}"' for name in fields)
+    placeholders = ", ".join("?" for _ in fields)
+    with sqlite3.connect(database) as connection:
+        connection.execute(f"CREATE TABLE workspaces (id INTEGER PRIMARY KEY, {columns})")
+        for row_id, overrides in [(1, {}), (2, {"name": "Testing", "slug": "testing"})]:
+            values = {**verifier.EXPECTED_WORKSPACE, **overrides}
+            connection.execute(
+                f"INSERT INTO workspaces (id, {columns}) VALUES (?, {placeholders})",
+                [row_id, *(values[field] for field in fields)],
+            )
+        connection.execute("CREATE TABLE workspace_documents (id, docId, workspaceId, metadata)")
+        connection.execute("CREATE TABLE document_vectors (docId)")
+        connection.execute(
+            "INSERT INTO workspace_documents VALUES (1, 'managed-doc', 1, ?)",
+            ('{"docSource":"EdSysVault_RAG"}',),
+        )
+        connection.execute("INSERT INTO document_vectors VALUES ('managed-doc')")
+    workspaces, stats = verifier.load_inventory(database)
+    assert [workspace["slug"] for workspace in workspaces] == ["edsys-rag-current"]
+    assert stats["document_count"] == stats["vector_count"] == 1
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT count(*) FROM workspaces").fetchone()[0] == 2

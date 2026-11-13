@@ -15,10 +15,12 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 SOURCE = Path(__file__).resolve().parents[1]
-BINARY = '/mnt/ai-store/apps/local-coder/opencode-1.18.31/node_modules/.bin/opencode'
+sys.path.insert(0, str(SOURCE))
+from knowledge import ProjectMemory
+BINARY = '/mnt/ai-store/apps/local-coder/opencode-2.2.7/opencode'
 RUNTIME = Path('/mnt/ai-store/local-coder')
 TOOLS = {
-    'edsys': ['edsys_session_context', 'edsys_save_checkpoint', 'edsys_search_records', 'edsys_search_history'],
+    'edsys': ['session_context', 'save_checkpoint', 'search_records', 'read_record', 'search_history', 'read_history'],
     'browser': ['browser_navigate', 'browser_snapshot'],
     'desktop': ['desktop_screenshot'],
     'code_intelligence': ['code_intelligence_search_code'],
@@ -72,9 +74,9 @@ class Fixture(BaseHTTPRequestHandler):
             self.respond(404, {})
             return
         messages = body['messages']
-        system = '\n'.join(str(m.get('content')) for m in messages if m['role'] == 'system')
+        system = '\n'.join(str(m.get('content')) for m in messages if m['role'] in ['system','developer'])
         last_user = next((str(m.get('content', '')) for m in reversed(messages) if m['role'] == 'user'), '')
-        utility = any(marker in system for marker in [
+        utility = not body.get('tools') or any(marker in system for marker in [
             'You are a title generator.', 'Summarize what was done in this conversation.',
             'You are a context summarization agent.',
         ])
@@ -90,7 +92,8 @@ class Fixture(BaseHTTPRequestHandler):
                         'reasoning_effort': body.get('reasoning_effort'),
                         'has_reasoning_effort': 'reasoning_effort' in body,
                         'fixture_tool_result': any(m['role'] == 'tool' and 'LOCAL_FIXTURE_TOOL_OK' in str(m.get('content')) for m in messages),
-                        'project_guidance': 'PROFILE_PROJECT_GUIDANCE_4829' in system})
+                        'project_guidance': 'PROFILE_PROJECT_GUIDANCE_4829' in json.dumps(body),
+                        'private_checkpoint': 'PROFILE_PRIVATE_MEMORY_7391' in json.dumps(body)})
         done = any(m['role'] == 'tool' for m in messages)
         delta = {'role': 'assistant', 'content': 'LOCAL_PROFILE_FIXTURE_OK'}
         finish = 'stop'
@@ -98,18 +101,18 @@ class Fixture(BaseHTTPRequestHandler):
             if self.server.label.startswith('delegate-'):
                 subtype = self.server.label.removeprefix('delegate-')
                 marker = 'PROFILE_CHILD_GENERAL' if subtype == 'general' else 'PROFILE_CHILD_EXPLORE'
-                name, arguments = 'task', {'description': 'Synthetic read-only local child',
+                name, arguments = 'subagent', {'description': 'Synthetic read-only local child',
                                           'prompt': marker + ': return the fixture marker without tools.',
-                                          'subagent_type': subtype}
+                                          'agent': subtype}
             else:
-                name, arguments = 'edsys_edsys_session_context', {}
+                name, arguments = 'edsys_session_context', {}
             if name in names:
                 delta = {'role': 'assistant', 'tool_calls': [{'index': 0, 'id': 'call_profile_fixture',
                          'type': 'function', 'function': {'name': name, 'arguments': json.dumps(arguments)}}]}
                 finish = 'tool_calls'
             else:
                 CAPTURE[-1]['missing_expected_tool'] = name
-        evidence = RUNTIME / 'evidence/profile-qualification'
+        evidence = RUNTIME / 'evidence/v2-profile-qualification'
         evidence.mkdir(parents=True, exist_ok=True)
         (evidence / 'request-metadata.json').write_text(json.dumps(CAPTURE, indent=2) + '\n')
         self.send_response(200)
@@ -125,12 +128,18 @@ class Fixture(BaseHTTPRequestHandler):
 
 def main():
     os.umask(0o077)
+    real_catalog = subprocess.check_output([
+        '/mnt/ai-store/apps/local-coder/desktop-venv-2.3.0/bin/python',
+        str(SOURCE / 'tests/context_mcp_catalog.py'),
+    ], cwd=SOURCE, text=True)
+    assert set(json.loads(real_catalog)) == set(TOOLS['edsys']), 'Synthetic MCP names differ from the real catalog'
     config = json.loads((SOURCE / 'opencode.json').read_text())
     assert config['enabled_providers'] == ['edsys-local']
     assert set(config['provider']) == {'edsys-local'}
     assert config['provider']['edsys-local']['options']['baseURL'] == 'http://127.0.0.1:11435/v1'
     server = ThreadingHTTPServer(('127.0.0.1', 0), Fixture)
     threading.Thread(target=server.serve_forever, daemon=True).start()
+    memory = None
     try:
         with tempfile.TemporaryDirectory(prefix='opencode-profile-fixture-') as folder:
             root = Path(folder)
@@ -138,12 +147,9 @@ def main():
             project.mkdir()
             subprocess.run(['git', 'init', '-q', str(project)], check=True)
             (project / 'AGENTS.md').write_text('PROFILE_PROJECT_GUIDANCE_4829. Synthetic read-only fixture; one local child is authorized.\n')
-            # Preserve production context-read hooks, but never run the archive event
-            # hook against production history from a synthetic client.
-            plugin = root / 'fixture-plugin.mjs'
-            plugin.write_text("import { EdSysProjectContext } from " +
-                              json.dumps((SOURCE / 'context-plugin.mjs').as_uri()) +
-                              ";\nexport const ProfileFixture = async input => {const hooks=await EdSysProjectContext(input);delete hooks.event;return hooks;};\n")
+            memory = ProjectMemory(project)
+            memory.save(0, 'V2 synthetic continuity acceptance', [],
+                        ['PROFILE_PRIVATE_MEMORY_7391'], [], [], [])
             for index, (label, agent, variant) in enumerate([
                 ('general-default', 'local-general', None), ('general-fast', 'local-general', 'fast'),
                 ('general-normal', 'local-general', 'normal'), ('code-default', 'local-code', None),
@@ -153,23 +159,23 @@ def main():
                 server.label = label
                 candidate = deepcopy(config)
                 candidate['provider']['edsys-local']['options']['baseURL'] = f'http://127.0.0.1:{server.server_port}/v1'
-                for name in candidate['mcp']:
-                    candidate['mcp'][name] = {'type': 'local', 'command': [sys.executable, str(Path(__file__).resolve()), '--mcp-fixture', name],
-                                            'enabled': True, 'timeout': 15000}
-                candidate['plugin'] = [plugin.as_uri()]
+                for name in candidate['mcp']['servers']:
+                    candidate['mcp']['servers'][name] = {'type': 'local', 'command': [sys.executable, str(Path(__file__).resolve()), '--mcp-fixture', name],
+                                            'disabled': False, 'codemode': False, 'timeout': 15000}
+                candidate['plugins'] = [(SOURCE / 'context-plugin-v2').as_uri()]
                 home = root / str(index)
                 home.mkdir()
                 shutil.copytree(RUNTIME / 'cache', home / 'cache')
                 shutil.copytree(RUNTIME / 'config', home / 'config')
                 env = {k: v for k, v in os.environ.items() if not k.startswith(('OPENCODE_', 'OTEL_'))}
-                env.update({'XDG_DATA_HOME': str(home / 'data'), 'XDG_STATE_HOME': str(home / 'state'),
+                env.update({'PWD':str(project), 'XDG_DATA_HOME': str(home / 'data'), 'XDG_STATE_HOME': str(home / 'state'),
                             'XDG_CACHE_HOME': str(home / 'cache'), 'XDG_CONFIG_HOME': str(home / 'config'),
                             'OPENCODE_CONFIG_CONTENT': json.dumps(candidate), 'OPENCODE_DISABLE_PROJECT_CONFIG': '1',
                             'OPENCODE_DISABLE_MODELS_FETCH': '1', 'OPENCODE_DISABLE_AUTOUPDATE': '1', 'OPENCODE_PURE': '0'})
-                command = [BINARY, 'run', '--dir', str(project), '--agent', agent, '--format', 'json']
+                command = [BINARY, 'run', '--standalone', '--agent', agent, '--format', 'json']
                 if variant:
-                    command += ['--variant', variant]
-                result = subprocess.run(command + ['PROFILE_MAIN: ' + label], env=env, capture_output=True,
+                    command += ['--model', 'edsys-local/edsys-qwen36-coder:latest#' + variant]
+                result = subprocess.run(command + ['PROFILE_MAIN: ' + label], env=env, cwd=project, capture_output=True,
                                         text=True, timeout=90)
                 assert result.returncode == 0, (label, result.stderr[-1000:])
                 assert '"type":"error"' not in result.stdout, (label, result.stdout[-1000:])
@@ -180,7 +186,8 @@ def main():
                 'build-default', 'delegate-general', 'delegate-explore', 'child-general', 'child-explore',
             }
             assert substantive and all(row['model'] == 'edsys-qwen36-coder:latest' for row in substantive)
-            assert all(row['project_guidance'] for row in substantive)
+            assert all(row['project_guidance'] for row in CAPTURE)
+            assert all(row['private_checkpoint'] for row in CAPTURE)
             for label in ['general-default', 'general-fast', 'general-normal', 'code-default', 'build-default']:
                 assert any(row['label'] == label and row['fixture_tool_result'] for row in substantive), label
             for row in substantive:
@@ -189,8 +196,8 @@ def main():
                 if row['label'] in ['build-default', 'delegate-general', 'delegate-explore']:
                     assert {server + '_' + tool for server, tools in TOOLS.items() for tool in tools} <= names, row
                 if row['label'].startswith(('general-', 'code-')):
-                    assert {'edsys_edsys_session_context', 'edsys_edsys_save_checkpoint'} <= names, row
-                    assert not names.intersection({'edsys_edsys_search_records', 'edsys_edsys_search_history',
+                    assert {'edsys_session_context', 'edsys_save_checkpoint'} <= names, row
+                    assert not names.intersection({'edsys_search_records', 'edsys_search_history',
                                                    'github_get_me', 'desktop_desktop_screenshot',
                                                    'context7_resolve_library_id', 'microsoft_learn_microsoft_docs_search'}), row
                     if row['label'].startswith('general-'):
@@ -198,14 +205,14 @@ def main():
                     else:
                         assert {'browser_browser_snapshot', 'code_intelligence_code_intelligence_search_code'} <= names, row
                 if row['label'].startswith('child-'):
-                    assert 'edsys_edsys_save_checkpoint' not in names, row
+                    assert 'edsys_save_checkpoint' not in names, row
                 if row['label'] == 'general-fast':
                     assert row['reasoning_effort'] == 'none' and row['has_reasoning_effort'], row
                 else:
                     assert not row['has_reasoning_effort'], row
             assert any(row['label'] == 'child-general' for row in substantive)
             assert any(row['label'] == 'child-explore' for row in substantive)
-            evidence = RUNTIME / 'evidence/profile-qualification'
+            evidence = RUNTIME / 'evidence/v2-profile-qualification'
             evidence.mkdir(parents=True, exist_ok=True)
             (evidence / 'request-metadata.json').write_text(json.dumps(CAPTURE, indent=2) + '\n')
             print(json.dumps({'synthetic_requests': len(CAPTURE), 'local_context_tool_roundtrips': sum(row['fixture_tool_result'] for row in CAPTURE),
@@ -213,6 +220,8 @@ def main():
                               'fast_none_transmitted': True, 'default_effort_unset': True,
                               'guidance_retained': True, 'real_model_calls': 0}))
     finally:
+        if memory is not None:
+            shutil.rmtree(memory.folder, ignore_errors=True)
         server.shutdown()
         server.server_close()
 

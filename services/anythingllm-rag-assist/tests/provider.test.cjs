@@ -6,7 +6,7 @@ const vm = require("node:vm");
 const crypto = require("node:crypto");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "provider.cjs"), "utf8");
-const pinnedHash = "3208973be792e4b616c2048945fa6541c836c7acd97025081c34f43858b86305";
+const pinnedHash = "f45c64b9a2334523aca1fb637825eee4b6a8ed7bcbb91bf2ba5c970da76ae30f";
 
 function fixture({ hash = pinnedHash, realCrypto = false, readFailure = false } = {}) {
   const calls = { order: [], nativeConstructors: [], assistConstructors: [], generations: 0, staticCalls: [] };

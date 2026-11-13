@@ -8,14 +8,15 @@ AnythingLLM-only model. Individual AnythingLLM workspaces may still have their
 own saved provider/model selection; verify those settings before assuming the
 Compose default controls an existing workspace.
 
-The managed `EdSys-RAG-Current` workspace explicitly uses LiteLLM with
-the application alias `edsys-knowledge-local-first` in strict Query mode and
-`router_id=null`. Its pinned connector attempts `edsys-chat-local` first and
-allows at most one bounded `edsys-knowledge-openai` handoff when needed.
-The read-only RAG verifier requires that exact application alias; it rejects
-direct local/cloud aliases and inherited defaults. Three immutable read-only
-provider mounts opt only this alias into the extension and retain upstream
-behavior for other models and configured embedding engines. See the
+On 2026-11-12, the managed `EdSys-RAG-Current` workspace explicitly uses
+LiteLLM with `edsys-coder-local` in strict Query mode and `router_id=null`.
+The additional `Testing` workspace retains its inherited provider/model
+settings. The upgrade preserved both workspaces and their saved settings.
+Three immutable read-only provider mounts enable the optional
+`edsys-knowledge-local-first` application alias. Only that alias attempts
+`edsys-chat-local` before a bounded `edsys-knowledge-openai` handoff; ordinary
+models such as the current managed selection retain upstream behavior and
+the configured embedder. See the
 [connector policy and recovery guide](../../services/anythingllm-rag-assist/README.md).
 Its workspace prompt describes the selected chat model separately from the
 embedding model and vector store. HA conversational voice has its own OpenAI
@@ -35,9 +36,21 @@ docker compose --project-name anythingllm -f docker/anythingllm/compose.yaml ps
 
 Use project name `anythingllm` so this source manages the existing Compose project. Confirm `/mnt/ai-store` and both private env files before recovery. Do not create replacement env files in the repository.
 
-The image is pinned to AnythingLLM `1.15.0`, digest
-`sha256:00903f6311607b661d40f9e1d0e027d61e28a7b002ea9d1b7cad7763d26099f9`,
-verified live on 2026-08-10. Upgrade only in a separate maintenance gate:
+The image is pinned to AnythingLLM `1.19.0`, digest
+`sha256:daf5a6ae9d363ed578e7d41e2d0668c7eaa604bd90b0ff27435f893b0906833e`,
+qualified and deployed on 2026-11-12 with adapter release `v1.1.0`. A stopped
+storage copy and SQLite integrity check preceded migration. An isolated
+rehearsal and production verification preserved the two workspaces, 21 chats,
+77 documents and 863 vectors. All 14 positive and 10 negative retrieval cases
+passed; no embedding model or stored vector was replaced.
+
+The older global verifier additionally assumes a sole workspace and active
+`edsys-knowledge-local-first` selection. Those profile checks do not describe
+the preserved current settings. Use the retrieval gate with explicit
+workspace-baseline equality; do not delete `Testing` or change models to make
+that historical profile check pass.
+
+Upgrade only in a separate maintenance gate:
 back up the retained data, review and pull a candidate by exact digest, then
-test it against the sole managed `EdSys-RAG-Current` workspace before updating
+test it against the retained workspaces before updating
 the tracked pin. Do not run an unreviewed `docker compose pull`.

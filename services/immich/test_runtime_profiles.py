@@ -85,4 +85,17 @@ class RuntimeProfileTests(unittest.TestCase):
             out=self.render(json.loads((ROOT/"profiles"/f"v3.3.5-{backend}.json").read_text()))
             self.assertEqual(out["services"]["immich-machine-learning"]["image"],m.UPGRADE_IMAGES[backend])
 
+    def test_reviewed_versions_preserve_rollback_and_refuse_implicit_downgrade(self):
+        for version, images in m.REVIEWED_IMAGES.items():
+            for backend in ("cpu", "cuda"):
+                with self.subTest(version=version, backend=backend):
+                    profile=json.loads((ROOT/"profiles"/f"{version}-{backend}.json").read_text())
+                    rendered=self.render(profile)
+                    self.assertEqual(rendered["services"]["immich-server"]["image"],images["server"])
+                    self.assertEqual(rendered["services"]["immich-machine-learning"]["image"],images[backend])
+                    for role in ("database", "redis"):
+                        self.assertEqual(rendered["services"][role]["image"],images.get(role,m.IMAGES[role]))
+                    with self.assertRaisesRegex(ValueError,"explicit_upgrade_profile_required"):
+                        m.render(rendered,Path("/state"),Path("/photos"),False)
+
 if __name__=="__main__": unittest.main()

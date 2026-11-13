@@ -1,3 +1,4 @@
+import base64
 import json
 from pathlib import Path
 import sqlite3
@@ -90,6 +91,61 @@ class HistoryTests(unittest.TestCase):
         self.assertGreater(record['total_characters'], 50000)
         final = history.read(row['id'], record['total_characters'] - 100)
         self.assertIn('OVERFLOW-RETAINED-4981', final['text'])
+
+    def test_v2_conversations_remain_searchable_after_native_deletion(self):
+        self.ingest()
+        with sqlite3.connect(self.source) as db:
+            db.executescript('''
+                CREATE TABLE session_v2(id TEXT,directory TEXT,title TEXT);
+                CREATE TABLE session_message(id TEXT,session_id TEXT,type TEXT,data TEXT);
+                CREATE TABLE session_part(message_id TEXT,session_id TEXT,ordinal INTEGER,type TEXT,data TEXT);
+            ''')
+            db.execute('INSERT INTO session_v2 VALUES (?,?,?)', ('v2', str(self.project), 'V2 retained conversation'))
+            db.execute('INSERT INTO session_message VALUES (?,?,?,?)',
+                       ('m2','v2','user',json.dumps({'content':[{'type':'text','text':'V2 goldenrod question'}]})))
+            db.execute('INSERT INTO session_part VALUES (?,?,?,?,?)',
+                       ('a2','v2',0,'text',json.dumps({'type':'text','text':'V2 turquoise answer'})))
+        self.ingest()
+        with sqlite3.connect(self.source) as db:
+            db.execute('DELETE FROM session_message')
+            db.execute('DELETE FROM session_part')
+        self.ingest()
+        restored = self.root / 'v2-restored.sqlite'
+        database_copy(self.archive, restored)
+        history = History(self.project, restored)
+        for word in ('bluebird', 'goldenrod', 'turquoise'):
+            result = history.search(word)['results']
+            self.assertEqual(len(result), 1)
+            self.assertIn(word, history.read(result[0]['id'])['text'])
+
+    def test_v2_media_survives_native_blob_deletion_and_restore(self):
+        media = b'\x89PNG\x00private-fixture-media\xff'
+        with sqlite3.connect(self.source) as db:
+            db.executescript('''
+                CREATE TABLE session_v2(id TEXT,directory TEXT,title TEXT);
+                CREATE TABLE session_message(id TEXT,session_id TEXT,type TEXT,data TEXT);
+                CREATE TABLE session_part(message_id TEXT,session_id TEXT,ordinal INTEGER,type TEXT,data TEXT);
+                CREATE TABLE blob(hash TEXT,mime TEXT,bytes INTEGER,data BLOB);
+                CREATE TABLE blob_ref(session_id TEXT,message_id TEXT,hash TEXT,seq INTEGER);
+            ''')
+            db.execute('INSERT INTO session_v2 VALUES (?,?,?)', ('v2', str(self.project), 'Media fixture'))
+            db.execute('INSERT INTO blob VALUES (?,?,?,?)', ('mediafixturehash','image/png',len(media),media))
+            db.execute('INSERT INTO blob_ref VALUES (?,?,?,?)', ('v2','m2','mediafixturehash',1))
+        self.ingest()
+        with sqlite3.connect(self.source) as db:
+            db.execute('DELETE FROM blob_ref')
+            db.execute('DELETE FROM blob')
+        self.ingest()
+        restored = self.root / 'media-restored.sqlite'
+        database_copy(self.archive, restored)
+        history = History(self.project, restored)
+        row = history.search('mediafixturehash')['results'][0]
+        self.assertEqual(row['kind'], 'media-blob')
+        record = json.loads(history.read(row['id'])['text'])
+        self.assertEqual(base64.b64decode(record['data_base64']), media)
+        other = self.root / 'other'
+        other.mkdir()
+        self.assertEqual(History(other, restored).search('mediafixturehash')['results'], [])
 
 
 if __name__ == '__main__':

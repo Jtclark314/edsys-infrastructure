@@ -3,7 +3,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createHash } = require("node:crypto");
 
-const UPSTREAM_SHA256 = "3208973be792e4b616c2048945fa6541c836c7acd97025081c34f43858b86305";
+// AnythingLLM 1.19.0 native LiteLLM provider. Retain the immutable v1.0.0
+// release alongside this adapter for recovery to the prior image.
+const UPSTREAM_SHA256 = "f45c64b9a2334523aca1fb637825eee4b6a8ed7bcbb91bf2ba5c970da76ae30f";
 const upstreamPath = path.join(__dirname, "edsys-upstream-litellm.cjs");
 let upstreamBytes;
 try {

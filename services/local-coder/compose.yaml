@@ -2,7 +2,7 @@ name: edsys-local-coder
 
 services:
   ollama-coder:
-    image: ollama/ollama@sha256:020e4134285e2ef4d8fd801234176de3b4faadc992a3eb06c8e66a2f9d4c4ba2
+    image: ollama/ollama@sha256:910d0d8107b538fb0894e63163eb195de0cc7aefcbc666dc62d3b18f71124592
     container_name: ollama-coder
     restart: unless-stopped
     # The shared GPU serves cameras, embeddings, voice, and the desktop.
@@ -22,6 +22,7 @@ services:
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
       OLLAMA_NO_CLOUD: "1"
+      OLLAMA_NOPRUNE: "1"
       OLLAMA_NUM_PARALLEL: "1"
       OLLAMA_MAX_LOADED_MODELS: "1"
       OLLAMA_MAX_QUEUE: "4"
@@ -38,8 +39,20 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      # New engine metadata is isolated from the immutable shared weights and
+      # legacy manifests. NOPRUNE also prevents pruning these mountpoints.
+      - type: bind
+        source: /mnt/ai-store/local-coder/ollama-metadata
+        target: /root/.ollama/models/metadata
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/ai-store/local-coder/ollama-manifests-v2
+        target: /root/.ollama/models/manifests-v2
+        bind:
+          create_host_path: false
     healthcheck:
-      test: [CMD, ollama, list]
+      test: [CMD, ollama, show, "edsys-qwen36-coder:latest"]
       interval: 30s
       timeout: 10s
       retries: 3

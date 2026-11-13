@@ -23,6 +23,14 @@ used after a Docker daemon restart or host reboot.
 - Runtime status, notification URLs, environment files, and rollback snapshots
   remain outside Git.
 
+The November 13, 2026 AI-storage closeout adds both `/mnt/data-500g` and
+`/mnt/ai-store` as Docker mount prerequisites, with explicit pre-start mountpoint
+checks. This prevents auto-restart containers from opening an empty root-disk
+fallback before ordered recovery can inspect storage. Applying the drop-in used
+only `daemon-reload`; it did not restart Docker. Future daemon starts fail if
+either critical store is unavailable. Seaweed and the native ClickHouse backup
+binds also refuse to create missing host paths.
+
 The one-shot `langfuse-minio-init` service and historical AnythingLLM migration
 container are intentionally absent. The legacy 9950x UniFi project is excluded
 because the authoritative controller runs on `edrouter-node0`.

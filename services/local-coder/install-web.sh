@@ -19,7 +19,7 @@ else:
             'upstreamPort': 4096, 'backendPassword': secrets.token_urlsafe(48)}
     config.write_text(json.dumps(data))
     config.chmod(0o600)
-(root / 'server.env').write_text('OPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD=' + data['backendPassword'] + '\n')
+(root / 'server.env').write_text('OPENCODE_PASSWORD=' + data['backendPassword'] + '\n')
 (root / 'server.env').chmod(0o600)
 serve = subprocess.check_output(['tailscale', 'serve', 'status', '--json'])
 snapshot = root / 'serve-before.json'

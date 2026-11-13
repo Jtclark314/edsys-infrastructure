@@ -1,6 +1,6 @@
 services:
   anythingllm:
-    image: mintplexlabs/anythingllm@sha256:00903f6311607b661d40f9e1d0e027d61e28a7b002ea9d1b7cad7763d26099f9
+    image: mintplexlabs/anythingllm@sha256:daf5a6ae9d363ed578e7d41e2d0668c7eaa604bd90b0ff27435f893b0906833e
     container_name: anythingllm
     restart: unless-stopped
     networks: [ai-net]
@@ -10,9 +10,9 @@ services:
     volumes:
       - /mnt/ai-store/anythingllm:/app/server/storage
       - /mnt/ai-store/rag/docs/EdSysVault_RAG:/obsidian:ro
-      - /opt/edsys-rag-assist/releases/v1.0.0/provider.cjs:/app/server/utils/AiProviders/liteLLM/index.js:ro
-      - /opt/edsys-rag-assist/releases/v1.0.0/assist.cjs:/app/server/utils/AiProviders/liteLLM/edsys-rag-assist.cjs:ro
-      - /opt/edsys-rag-assist/releases/v1.0.0/upstream.cjs:/app/server/utils/AiProviders/liteLLM/edsys-upstream-litellm.cjs:ro
+      - /opt/edsys-rag-assist/releases/v1.1.0/provider.cjs:/app/server/utils/AiProviders/liteLLM/index.js:ro
+      - /opt/edsys-rag-assist/releases/v1.1.0/assist.cjs:/app/server/utils/AiProviders/liteLLM/edsys-rag-assist.cjs:ro
+      - /opt/edsys-rag-assist/releases/v1.1.0/upstream.cjs:/app/server/utils/AiProviders/liteLLM/edsys-upstream-litellm.cjs:ro
     env_file:
       - /etc/edsys-secrets/openai.env
       - /etc/edsys-secrets/anythingllm-litellm.env

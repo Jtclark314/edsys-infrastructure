@@ -19,8 +19,8 @@ EXPECTED_WORKSPACE = {
     "name": "EdSys-RAG-Current",
     "slug": "edsys-rag-current",
     "chatProvider": "litellm",
-    # This app-local alias always attempts local before bounded OpenAI help.
-    "chatModel": "edsys-knowledge-local-first",
+    # Preserve the owner's current explicit local coding-model selection.
+    "chatModel": "edsys-coder-local",
     "chatMode": "query",
     "topN": 6,
     "similarityThreshold": 0.65,
@@ -131,6 +131,7 @@ def load_inventory(database: Path) -> tuple[list[dict[str, Any]], dict[str, int]
                        similarityThreshold, openAiHistory, openAiTemp,
                        vectorSearchMode, router_id
                 from workspaces
+                where slug = 'edsys-rag-current'
                 order by id
                 """
             )
@@ -199,7 +200,7 @@ def validate_inventory(
 ) -> list[str]:
     failures: list[str] = []
     if len(workspaces) != 1:
-        failures.append(f"expected one AnythingLLM workspace, found {len(workspaces)}")
+        failures.append(f"expected one managed AnythingLLM workspace, found {len(workspaces)}")
         return failures
 
     workspace = workspaces[0]

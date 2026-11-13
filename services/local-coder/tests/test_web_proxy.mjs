@@ -28,6 +28,36 @@ test('identity, proxy route, and browser-origin boundaries fail closed', () => {
   assert.throws(() => createProxy({}), /configuration/);
 });
 
+test('authenticated V1 session bookmarks redirect to V2 without reaching the backend', async () => {
+  const proxy = createProxy(config);
+  proxy.listen(0, '127.0.0.1'); await once(proxy, 'listening');
+  const port = proxy.address().port;
+  const path = '/L2ZpeHR1cmU/session/ses_Fixture123';
+  try {
+    const response = await new Promise((resolve, reject) => {
+      http.get({ host: '127.0.0.1', port, path, headers: base }, res => {
+        res.resume(); res.on('end', () => resolve(res));
+      }).on('error', reject);
+    });
+    assert.equal(response.statusCode, 307);
+    assert.equal(response.headers.location,
+      `/server/${Buffer.from(`https://${config.publicHost}`).toString('base64url')}/session/ses_Fixture123`);
+    assert.equal(response.headers['cache-control'], 'no-store');
+    const denied = await fetch(`http://127.0.0.1:${port}${path}`, { redirect: 'manual' });
+    assert.equal(denied.status, 403);
+    assert.equal(denied.headers.get('location'), null);
+    const api = await new Promise((resolve, reject) => {
+      http.get({ host: '127.0.0.1', port, path: '/api/session/ses_Fixture123', headers: base }, res => {
+        res.resume(); res.on('end', () => resolve(res));
+      }).on('error', reject);
+    });
+    assert.equal(api.statusCode, 502, 'API request must reach the deliberately unavailable backend');
+    assert.equal(api.headers.location, undefined);
+  } finally {
+    proxy.closeAllConnections(); proxy.close();
+  }
+});
+
 test('authorized streaming HTTP and upgrades work; rejected requests never reach backend', async () => {
   let calls = 0;
   const upstream = http.createServer((req, res) => {

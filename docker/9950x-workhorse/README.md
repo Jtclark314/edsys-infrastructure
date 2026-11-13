@@ -24,6 +24,10 @@ Operator-facing human/admin interfaces bind to the 9950x LAN and Tailnet address
 ```bash
 cd /srv/edsys/edsys-infrastructure
 scripts/deploy/prepare-9950x-workhorse.sh
+mountpoint -q /mnt/ai-store
+# Restore the private Seaweed identity file before starting the object store.
+sudo install -d -o 1000 -g 1000 -m 0700 /mnt/ai-store/langfuse/seaweedfs
+sudo install -d -o 101 -g 101 -m 0750 /mnt/ai-store/langfuse/clickhouse-backups
 docker compose -f docker/9950x-workhorse/compose.yaml config --quiet
 docker compose -f docker/9950x-workhorse/compose.yaml up -d
 ```
@@ -40,13 +44,48 @@ Renovate is configured with a `manual` Compose profile because it requires a loc
 
 CrowdSec is deployed detection-only. There is no firewall, reverse-proxy, or SSH bouncer in this stack; add blocking only after baseline review.
 
+## Stable AI upgrade — November 13, 2026
+
+The November 12 release audit was implemented with exact image digests:
+LiteLLM 1.109.1, Langfuse web/worker 4.79.0, PostgreSQL 16.16/17.12,
+ClickHouse 26.10.3.7, Redis 7.4.12, Valkey 8.1.11 and the dated SearXNG build
+listed below. Database/cache maintenance stays on qualified compatible branches.
+Core inference/RAG/speech and media have separate owning definitions under
+`docker/9950x-ai`, `docker/anythingllm`, `services/local-coder` and `services/immich`.
+
+LiteLLM passed official signing-key verification and an isolated migration before
+promotion. Its 13 original scoped keys, six DB-managed models, 29 visible models,
+30 metadata tables and all 106,876 checkpointed history IDs were retained.
+Authenticated local chat, 384D float/base64 embeddings, scoped permission denial,
+14 positive/10 negative production retrieval cases and a redacted Langfuse
+callback passed. Configuration, aliases, provider connections and routes were
+preserved. The old database/image state remains private recovery material.
+
+Langfuse reached 3.227.1 first, with all required version 3 migrations complete,
+then 4.79.0 after a fresh PostgreSQL/ClickHouse/Redis checkpoint. Five gated
+version 4 backfill rows remain intentionally dormant. `legacy` writes, native
+OTEL `dual_write`, disabled preview and disabled historic backfill preserve
+existing SDK/API integrations and historical reads. Do not enable backfill while
+legacy batch writes remain active. A future data-model cutover requires its own
+producer/read/evaluator qualification. An image-only rollback across the schema
+upgrade is not a recovery procedure; use the matching checkpoint and guide.
+
+Docker requires `/mnt/data-500g` and `/mnt/ai-store` before future daemon starts,
+with explicit mountpoint checks preceding auto-restart containers. Only systemd
+was reloaded during commissioning; the Docker process was preserved. New object
+and native-backup binds refuse missing source paths. Restore/provision their
+directories/configuration on the actual AI Store before creating containers;
+never initialize replacement data on a root-filesystem fallback.
+
 ## Workhorse observability for the AI Portal
 
 Langfuse, Loki, and Grafana Alloy are the standard Workhorse observability path for the AI Portal:
 
 - LiteLLM emits Langfuse OTEL traces with Workhorse/Portal tags and request metadata.
 - LiteLLM `turn_off_message_logging=true` keeps prompts/responses redacted in Langfuse.
-- The `langfuse-minio-init` one-shot service creates the required private MinIO `langfuse` bucket before Langfuse/worker startup.
+- SeaweedFS supplies the private `langfuse` S3 bucket, with original credentials,
+  `events/` and `media/` prefixes and no host-published listener. See
+  `services/workhorse-ai-maintenance/README.md` for migration/recovery acceptance.
 - Alloy collects Docker container logs into Loki; the Portal only exposes bounded, redacted lookups for an allow-list of Workhorse containers.
 - Loki's singleton Compactor enforces the configured seven-day filesystem retention policy. The 15-minute delete delay is selected for this single-process deployment, which has no separate index-gateway replicas, while avoiding unbounded local chunk growth; see Grafana's [retention documentation](https://grafana.com/docs/loki/latest/operations/storage/retention/).
 - The Portal resolves Langfuse traces asynchronously by request ID because Langfuse ingestion is not immediate.
@@ -56,7 +95,7 @@ Smoke checks:
 ```bash
 curl -fsS http://192.168.50.50:3012/api/public/health
 curl -fsS http://192.168.50.50:3100/ready
-docker compose -f docker/9950x-workhorse/compose.yaml up -d langfuse-minio-init
+# Object-store checks require the private S3 identity; never print it.
 ```
 
 ## SearXNG web grounding
@@ -75,6 +114,26 @@ Smoke test:
 ```bash
 curl -fsS 'http://192.168.50.50:3017/search?q=USA%20FIFA%20World%20Cup%202026%20standings&format=json'
 ```
+
+The 2026-11-12 Eastern upgrade pins SearXNG's rolling build
+`2026.11.12+de722ab1b` and Valkey `8.1.11` by immutable image digests in Compose.
+An isolated rehearsal and production both returned real HTML and JSON search
+results. The production LAN/Tailnet bindings, mounts, explicit environment and
+private settings stayed unchanged. Both formats remain enabled.
+
+Valkey's effective RDB policy remains `save 30 1`, with `appendonly no`; this is
+RDB persistence, not disabled persistence. Before the scoped recreation, SearXNG
+was stopped and a consistent live RDB plus hashed key/value/absolute-expiry
+fingerprints were captured privately. The new cache loaded that state and
+matched the fingerprints before SearXNG restarted. Its original on-disk RDB
+state was restored after loading; the existing save policy remains in effect.
+
+For rollback, checkpoint current cache state/expiry again, then stop only
+`searxng` and `searxng-redis` and use the matching prior cached image identities
+from the private pre-promotion record. Preserve settings, mounts and routes;
+change only these two image fields, since other workhorse migrations are
+independent. Cache snapshots, original image identities and verified receipts
+remain outside Git under the protected maintenance record.
 
 ## Alloy Docker-socket recovery
 
@@ -186,7 +245,17 @@ Recurring broker smoke testing is installed on 9950x as `edsys-litellm-broker-sm
 
 - Runtime state: `/opt/edsys-workhorse` plus named Docker volumes for database-heavy components. LiteLLM broker snapshots/service keys under `/opt/edsys-workhorse/litellm/` are private runtime recovery material and must stay out of Git.
 - Backrest receives read-only mounts for existing EdSys backup/source paths in this first pass.
-- Add explicit backup classifications to `EdSys-Master` once each service is accepted into the long-term baseline.
+- Native database staging and the S3 export extend the existing encrypted backup
+  job without another timer. See `services/workhorse-ai-maintenance/` for exact
+  database-before-object ordering, hashes and isolated restore commands.
+- Seaweed's private identity is `/opt/edsys-workhorse/langfuse/seaweedfs-s3.json`,
+  owned by UID 1000 with mode 0600. Data is under
+  `/mnt/ai-store/langfuse/seaweedfs`. Legacy MinIO-named private environment fields
+  remain compatibility names for the unchanged credential pair.
+- The retired MinIO profile retains its original volume/image as a frozen
+  recovery source. After cutover, new objects exist only in Seaweed; rollback
+  requires reconciling that delta or the complete matching database/object
+  checkpoint, rather than simply switching back to the old store.
 - Do not commit generated `.env`, live settings, Docker volumes, logs, databases, or UI-generated exports.
 
 ## Reachability

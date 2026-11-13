@@ -37,6 +37,17 @@ export function createProxy(config) {
       res.writeHead(403, { 'content-type': 'text/plain', 'cache-control': 'no-store' });
       return res.end('Verified owner access through Tailscale HTTPS is required.');
     }
+    // V1 bookmarks and the managed desktop shortcut encode a project directory.
+    // V2 routes by server origin while retaining the same migrated session IDs.
+    // Redirect only after owner verification and do not cache it across rollback.
+    const legacy = /^\/([A-Za-z0-9_-]+)\/session\/(ses_[A-Za-z0-9]+)$/.exec(req.url);
+    if (legacy && Buffer.from(legacy[1], 'base64url').toString('utf8').startsWith('/')
+      && ['GET', 'HEAD'].includes(req.method)) {
+      const serverID = Buffer.from(`https://${config.publicHost}`).toString('base64url');
+      res.writeHead(307, { location: `/server/${serverID}/session/${legacy[2]}`,
+        'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-frame-options': 'DENY' });
+      return res.end();
+    }
     const upstream = http.request({ hostname: '127.0.0.1', port: config.upstreamPort,
       path: req.url, method: req.method, headers: headers(req, config) }, response => {
       res.writeHead(response.statusCode, { ...response.headers,

@@ -9,21 +9,27 @@ Owner: Jeremy. Host: 9950x. Runtime state and qualification evidence are under
 - Official Qwen3.6-35B-A3B Q8_0 weights, pinned by manifest and full weight hash
   in `artifacts.json`. Ollama calls the architecture 36.0B including its other
   components; this is the requested 35B-A3B family, not another model.
-- Ollama 0.33.2 at the existing reviewed image digest; a separate
+- Ollama 0.40.16 at the reviewed immutable image digest; a separate
   `ollama-coder` service publishes only `127.0.0.1:11435`. Its internal broker
   address is `http://ollama-coder:11434` on the existing workhorse network.
 - CPU-only inference: 12 CPU quota/threads, 48 GiB memory ceiling, no swap,
   one active request/model, four queued requests, and two-minute idle unload.
   No GPU device is admitted. Root filesystem and shared model store are
   read-only, capabilities are dropped, and privilege escalation is disabled.
+  The new engine has two isolated writable metadata caches, owned by UID 0 with
+  mode 0700; weights and legacy manifests remain read-only. `OLLAMA_NOPRUNE=1`
+  protects the cache mountpoints and prevents model pruning. Health requires
+  the exact `edsys-qwen36-coder:latest` alias, not merely an empty successful list.
 - `edsys-qwen36-coder:latest` is the local configured alias: 262,144 context,
   16,384 maximum generated tokens, Qwen's precise-coding sampling settings,
   and preserved upstream vision/tool/thinking behavior. OpenCode permits two-hour
   inference waits and the identity bridge allows a 125-minute idle upstream wait
   for large CPU-only prompts. Here `latest` names
   the local alias; weights and engine are explicitly pinned.
-- OpenCode 1.18.31 and Playwright MCP 0.0.81 are locked in the npm manifest.
-  Python MCP 2.2.0 and Pillow 12.3.0 plus dependencies use `requirements.lock`.
+- OpenCode 2.2.7 is a SHA-256-verified official release binary, pinned in
+  `opencode-client.lock.json`. Playwright MCP 0.0.85 is locked in the npm manifest.
+  Python MCP 2.3.0 and Pillow 13.0.0 plus dependencies use `requirements.lock`
+  and a separate versioned Python environment; the V1 environments remain for rollback.
 - OpenCode model, auxiliary model, and subagents all use the local provider.
   Reasoning content is preserved across calls. Sharing and automatic upgrades
   are disabled; the launcher uses private XDG state and disables project config
@@ -82,15 +88,14 @@ edsys-code run --agent local-code 'Build and test this feature'
 
 Local General keeps native file, shell and public-web tools. Local Code adds
 the isolated browser and local Code Intelligence. Both retain the exact
-`edsys_edsys_session_context` and `edsys_edsys_save_checkpoint` tools for the
+`edsys_session_context` and `edsys_save_checkpoint` tools for the
 existing continuity workflow, while hiding records/history, desktop and other
 external MCP schemas. General math, writing and software work does not require
 EdSys retrieval. The existing Build/Plan agents, default `all` launcher,
 instructions, model route and server registrations remain unchanged; configured
 MCP connections can still initialize, and the fixed EdSys briefing still enters
 these profiles. This reduces tool-schema context, not every source of overhead.
-Delegated helpers still use their existing local profiles. Their checkpoint
-denial covers both the legacy name and the actual server-qualified tool name.
+Delegated helpers still use their existing local profiles. Delegated helpers cannot call the shared checkpoint-save tool.
 
 The separate native effort selector offers Default, Normal and Fast on the
 same Qwen model (`normal` and `fast` in the CLI). The agent selector changes
@@ -106,14 +111,16 @@ Do not use `/nothink`: the official Qwen 3.6 model card does not support that
 soft switch.
 
 Validate a candidate with `python3 -m unittest discover -s tests -p test_profiles.py`
-and `python3 tests/qualify_profiles.py`. The latter uses only a local synthetic
-provider/MCP fixture and the installed client; no Qwen/cloud inference or
-production session database is used. Validate against the running pinned v1
-schema with `python3 tests/validate_profiles.py`. Current upstream v2
-configuration examples are not interchangeable with this pinned v1 client.
+and `python3 tests/qualify_profiles.py`. The latter checks the real local MCP
+catalog, then uses a synthetic provider/MCP fixture and the installed client;
+no Qwen/cloud inference or production session database is used. Validate the
+running V2 catalogs with `python3 tests/validate_profiles.py`. The V2 config
+preserves supported legacy provider/agent syntax and uses native
+MCP server groups and the ported V2 context plugin. V1 hook implementations and
+server API paths are not compatible with V2.
 Apply only after active sessions finish, using the existing guarded reload.
 
-The deployed API confirmed OpenCode 1.18.31, only `edsys-local`, both optional
+The earlier V1 deployment API confirmed OpenCode 1.18.31, only `edsys-local`, both optional
 variants and all seven connected MCP servers. Authenticated 9950x Chrome verified
 both new selectors and Normal selection for the calculator. Actual Nimo Chrome
 separately verified File tree, Show agent, Command palette and Server status
@@ -139,7 +146,7 @@ sessions and reloads instructions on subsequent model turns, including after
 compaction. This is external context, not model training.
 
 Pinned OpenCode's `OPENCODE_DISABLE_PROJECT_CONFIG=1` also suppresses automatic
-root AGENTS loading. Keep provider isolation. The reviewed `context-plugin.mjs` automatically supplies
+root AGENTS loading. Keep provider isolation. The reviewed `context-plugin-v2/index.js` automatically supplies
 the current worktree's root AGENTS (CLAUDE fallback), latest private checkpoint
 and grounding freshness on every model call and before compaction. The
 `edsys_session_context` tool provides an explicit refresh when needed. Nested
@@ -257,7 +264,8 @@ access fails closed. Other processes running as Jeremy remain within the same
 OS trust boundary. Neither service grants sudo access.
 
 Verify with `systemctl --user status edsys-local-coder-web{,-proxy}.service`,
-the HTTPS `/global/health` and `/mcp` endpoints, and
+the owner-authenticated HTTPS `/api/info`, `/api/mcp` and `/api/session/active`
+endpoints, `python3 tests/validate_profiles.py`, and
 `node --test tests/test_web_proxy.mjs`. Nimo HTTPS/browser loading and a controlled
 service restart passed. Full-host reboot acceptance remains to be confirmed.
 
@@ -298,7 +306,7 @@ docker exec ollama-coder ollama show edsys-qwen36-coder
 docker exec ollama-coder ollama ps
 edsys-code --version
 edsys-code mcp list
-/mnt/ai-store/apps/local-coder/desktop-venv/bin/python -m unittest discover -s tests -v
+/mnt/ai-store/apps/local-coder/desktop-venv-2.3.0/bin/python -m unittest discover -s tests -v
 ```
 
 The nonblocking applications tier in the ordered recovery manifest includes
@@ -336,7 +344,7 @@ direct Google Drive restore were verified on 2026-09-19. Do not copy raw qualifi
 
 ## Context acceptance notes
 
-Twenty Python unit tests and two hook tests passed. A local protocol fixture
+The earlier V1 acceptance passed twenty Python unit tests and two hook tests. A local protocol fixture
 captured actual OpenCode parent, child and continuation requests and proved that
 each received both project guidance and private checkpoint content even with
 all MCP tools disabled. This protocol test uses a fake provider; it is evidence
@@ -362,6 +370,60 @@ The complete coding/delegation/terminal/checkpoint fixture took about 11 minutes
 on this CPU configuration. These are bounded observations, not a general benchmark.
 
 
+## V2 upgrade and recovery (2026-11-12 Eastern)
+
+The client, provider wire format, context plugin, private archive and web UI were
+migrated together. V2 imports V1 sessions into new tables in the same SQLite DB;
+`history.py` archives both generations without replacing earlier versions,
+including V2 media blobs now stored separately from message JSON.
+The existing Basic credential and Tailscale owner bridge are preserved. The
+bridge redirects owner-authenticated V1 session bookmarks to their migrated V2
+URLs without caching across rollback. Browser acceptance checks the original
+welcome URL and the retained interrupted calculator chat. Nimo’s actual custom
+`Open Code.url` already targets the root URL; its name, icon lines and contents
+were preserved. Existing pre-upgrade owner tabs may need an ordinary app reload;
+authentication storage was not cleared.
+No prompt history, credentials, checkpoint payloads or captures enter Git/RAG.
+
+Use `python3 web_state.py --require-idle` before a controlled restart. V1 status
+is project-scoped, so the guard enumerates every retained project; V2 uses the
+process-wide `/api/session/active` endpoint and separately detects terminal `run`
+clients using the same private runtime. A standalone CLI in another chat is
+preserved even when the web API is idle. Checking only the initial project
+can otherwise miss active work. The launcher resets `PWD` to its actual current
+directory so V2's CLI and automatic context resolve the correct project.
+
+The official binary installer validates the immutable release archive checksum
+and its reported version before replacing the versioned executable. The npm
+manifest now owns only the Playwright client, independently of OpenCode. Direct
+MCP tool schemas remain enabled (`codemode: false`) so focused profiles and child
+checkpoint denials retain their qualified behavior. Lightweight permissions use
+the real `edsys_session_context`/`edsys_save_checkpoint` wire names; the
+qualification fixture verifies those names against the real local MCP catalog.
+
+The V2 acceptance passes 37 Python tests and seven Node tests, including native
+media retention after deletion/restore, standalone-client idle protection and
+legacy-link/API separation. The installed-client fixture verifies the real MCP
+catalog before 23 simulated requests and five context roundtrips. Real local
+Qwen changed only the disposable parser, passed four tests (20 input cases),
+and recalled both automatic project/checkpoint markers absent from its prompt.
+A focused real context MCP call returned the correct project and checkpoint
+without writing one; the check was stopped after retaining the completed tool
+result. Native question UI, browser, desktop and GitHub read
+checks passed. All 17 original sessions and 871 final V1 archive versions remain.
+A new local restore checks 22 payload hashes, both SQLite DBs and new V2 history.
+The old offsite and 136K-input benchmarks were not repeated for this upgrade.
+
+Before promotion, SQLite-consistent V1 snapshots and saved calculator files were
+retained under the private maintenance directory. Jeremy explicitly authorized
+stopping the active request; its native chat now shows Interrupted. Preserve this
+final V1 snapshot and the original V1 client/Python environments for rollback.
+Restore a matching V1 source/config and database snapshot with both services and
+the archive timer stopped; never point the V1 binary at the migrated V2 database.
+Retain the displaced V2 databases, WAL/SHM siblings and private files together,
+then restore with owner-only permissions and reverify context, history and access.
+The two Ollama metadata caches are disposable; original models remain authoritative.
+
 ## Retention and coding integrations (2026-09-19)
 
 `history.py` stores observed session/message/part versions and checkpoint revisions
@@ -375,7 +437,10 @@ expires or deletes observed records. Session idle events and the user-level
 The first import includes existing retained sessions. Changes created and deleted
 between captures cannot be recovered, and material removed before activation is
 not recreated. The live OpenCode database remains the conversation source.
-Automatic compaction remains enabled, while tool-output pruning is disabled.
+Automatic compaction remains enabled. V2 uses checkpoint-based context
+compaction and ignores the legacy `prune` flag, which has therefore been removed.
+The private append-only archive retains observed raw V1 and V2 conversation
+versions and full overflow files independently of the active model context.
 
 `edsys_search_history` and `edsys_read_history` provide bounded, project-scoped
 retrieval with an explicit cross-project option. Earlier versions are searchable;
@@ -388,11 +453,13 @@ The normal profile now connects seven MCP servers: EdSys, browser, desktop,
 Code Intelligence, GitHub, Context7 and Microsoft Learn. Code Intelligence and
 the two documentation connections are available in every profile. GitHub is
 available in `all` and `code`; the narrower browser/desktop profiles omit it.
-The official GitHub MCP 1.12.2 executable is release-checksum verified and pinned
+The official GitHub MCP 2.1.0 executable is release-checksum verified and pinned
 in `github-mcp.lock.json`; `install-integrations.py` restores that exact artifact.
 The wrapper retrieves the existing `gh` credential into child-process environment,
 never source/config/output. Enabled GitHub groups are repositories, issues, pull
-requests, Actions and users; existing account scopes still apply.
+requests, Actions and users; the previously available `get_me` read tool is
+explicitly retained after its move to the V2 context group. Other context-group
+tools are not enabled. Existing account scopes still apply.
 
 Context7 and Microsoft Learn use their public remote MCP endpoints. Built-in
 web search is enabled explicitly for the local provider using the public Exa

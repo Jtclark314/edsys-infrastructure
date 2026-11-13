@@ -1,6 +1,7 @@
 # Immich on 9950x
 
-Production version/backend acceptance: **3.3.5 / CUDA ML / optimized models v2; final acceptance October 25, 2026 Eastern**.
+Production version/backend acceptance: **3.4.1 / CUDA ML / optimized models v2;
+PostgreSQL 14.25 / Redis 8.10.3; maintenance acceptance November 13, 2026 Eastern**.
 The existing 2.5.6 instance moved to 9950x on October 24, 2026 Eastern;
 the subsequent authorized iCloud copy and pre-upgrade indexing were verified.
 Current acceptance belongs in `EdSys-Master/docs/IMMICH.md`. The retained
@@ -52,11 +53,13 @@ byte checks passed. Do not print rendered configuration.
 
 ## Explicit version and ML profiles
 
-The reviewed profiles are `profiles/v3.3.5-cpu.json` and
-`profiles/v3.3.5-cuda.json`. They pin server and matching ML image manifests;
-PostgreSQL and Redis retain their qualified image identities. Supply the
-selected file through `render_compose.py --profile`. A source using a reviewed
-3.3.5 tag or digest refuses an omitted profile, preventing accidental rendering
+Current reviewed profiles are `profiles/v3.4.1-cpu.json` and
+`profiles/v3.4.1-cuda.json`. They pin server, matching ML and Redis manifests,
+plus the immutable PostgreSQL 14.25 maintenance image described in
+`postgres14-patch/README.md`. The older 3.3.5 profiles remain available for
+matched-data recovery. Supply the selected file through
+`render_compose.py --profile`. A source using a reviewed
+application tag or digest refuses an omitted profile, preventing accidental rendering
 of legacy 2.5.6 images. This automatic detection does not cover unreviewed
 future image versions. Legacy source artifacts retain their
 deliberate pre-upgrade/rollback behavior.
@@ -66,13 +69,29 @@ media paths. Accept production CPU behavior before changing only the matching
 ML backend to CUDA. Do not point a disposable candidate at the production PG
 directory or start both clusters on the same data. Runtime acceptance:
 
-- CPU 3.3.5 storage, migration, API and original/index parity:
-  **verified in production before CUDA cutover, including semantic search**.
-- CUDA provider/model behavior and bounded coexistence/release:
-  **verified with actual GPU-backed ML and a disposable upload/index/delete test**;
-  **verified GPU attribution and idle model release; Plex/Frigate remained healthy; minimum observed free VRAM 1,002 MiB (observed headroom, not a guarantee)**.
-- Final source and indexing parity:
-  **verified all 11,515 asset/reference IDs, 3,833 Live links, accounts/collections, all enabled indexing prerequisites and 19 idle queues in two snapshots 30 seconds apart**.
+- An isolated actual-database restore and production CPU 3.4.1 both passed
+  owner/asset API reads, retained-thumbnail byte comparison, semantic search,
+  and executed queries through the real CLIP and face vector indexes.
+- CUDA 3.4.1 selected its NVIDIA `nv_tensorrt_rtx` execution provider. Text
+  search and a retained-thumbnail visual inference passed; the latter returned
+  a finite normalized 512-dimension embedding. The configured 60-second idle
+  worker shutdown was observed. Frigate retained seven fresh camera feeds with
+  zero skipped FPS. Minimum observed free VRAM was 846 MiB during concurrent
+  GPU activity; this observation does not guarantee future headroom.
+- All 11,607 retained original references / 50,612,421,998 bytes passed SHA256
+  readback after maintenance. Asset identity, owners, Live Photo references,
+  account/password and six session records, and persisted system configuration
+  matched the fresh pre-upgrade checkpoint. Scoped maintenance API keys were
+  revoked after read verification.
+
+The vendor 3.4.1 template's Valkey 9.1.3 could not read the existing Redis 7.4
+RDB format 12 in rehearsal. Production therefore retains the Redis product
+family at 8.10.3, using its own fresh cold queue state. No queues were discarded
+or replaced from the older candidate. PostgreSQL remains major 14 with the
+qualified vector 0.8.1 / VectorChord 0.4.3 extensions unchanged; the offline
+derivative changes only PostgreSQL server/client packages and required libpq.
+The final 14.25 patch does not extend PostgreSQL 14's upstream support lifetime;
+a vendor-compatible major migration remains a separate lifecycle follow-up.
 
 The profiles use model revision `v2` while retaining `ViT-B-32__openai`,
 `buffalo_l` and `PP-OCRv5_mobile`. ML has one worker, one request thread,
@@ -167,17 +186,22 @@ Exact snapshot identities and raw receipts remain private. Existing backup
 schedules/retention and all earlier recovery stages remain protected; this
 scoped acceptance does not establish health of the unrelated broad collector.
 
-Rollback from 3.3.5 must stop the guarded stack and use the matching retained
-pre-upgrade 2.5.6 PostgreSQL directory plus old Compose/images. Never start
-2.5.6 against the database after 3.3.5 migrations. The older family-services
-checkpoint predates the import and is not its rollback database. Protect new
+Rollback from 3.4.1 must stop the guarded stack and use the matching retained
+pre-upgrade 3.3.5 cold PostgreSQL/cache/configuration checkpoint and old images.
+Never start an older app against a newly migrated database. The exact patched
+PG 14.25 image is also exported to private NVMe backup staging, with its archive
+hash, verified OCI blob hashes, build recipe and signed-package evidence; it
+can be recovered after loss of the Docker disk. For the earlier 3.3.5 → 2.5.6
+recovery stage, retain its separate matched pre-3.3.5 database. The older
+family-services checkpoint predates the import and is not a current rollback
+database. Protect new
 uploads/account changes before any rollback; retain original media, matched
 cold checkpoints and encrypted backups. Full running-application disaster
 recovery with regenerated derivatives was not exercised by file/dump recovery.
 
 ## Bounded AI enhancement trials — October 25, 2026
 
-Production configuration remains 3.3.5/CUDA/v2 with `ViT-B-32__openai`; no new
+At that historical trial, production remained 3.3.5/CUDA/v2 with `ViT-B-32__openai`; no new
 model/index rebuild, caption writes or production Power Tools deployment was
 performed. A fixed CPU-only 64-image/320-caption COCO pilot produced 74.69%
 source-image rank-one recall for the current model, 85.94% for SigLIP and

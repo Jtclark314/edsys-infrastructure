@@ -6,17 +6,17 @@ source_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 mountpoint -q /mnt/ai-store
 command -v pwsh >/dev/null
 test -r /home/jeremy/code/EdSys-Master/docs/context-packs/LOCAL_CODER_STARTUP.md
-"/mnt/ai-store/apps/local-coder/desktop-venv/bin/python" -m unittest discover -s "$source_dir/tests" -v
-node --test "$source_dir/tests/test_context_plugin.mjs"
+"/mnt/ai-store/apps/local-coder/desktop-venv-2.3.0/bin/python" -m unittest discover -s "$source_dir/tests" -v
+node --test "$source_dir/tests/test_context_plugin.mjs" "$source_dir/tests/test_context_plugin_v2.mjs"
 python3 - "$source_dir" <<'PY'
 import json, pathlib, subprocess, sys, urllib.request
 source = pathlib.Path(sys.argv[1])
+sys.path.insert(0, str(source))
+from web_state import status
 # This is a controlled restart, never an implicit cancellation of a user task.
 active = subprocess.run(['systemctl','--user','is-active','--quiet','edsys-local-coder-web.service']).returncode == 0
 if active:
-    with urllib.request.urlopen('https://9950x.taile832fe.ts.net:8444/session/status',timeout=15) as response:
-        sessions=json.load(response)
-    if any(value.get('type') != 'idle' for value in sessions.values()):
+    if not status()['idle']:
         raise SystemExit('OpenCode has active work; let it finish or explicitly stop it before applying context')
 destination=pathlib.Path('/home/jeremy/.local/bin/edsys-powershell')
 target=source/'edsys-powershell'
@@ -37,15 +37,16 @@ PY
 python3 - "$source_dir" <<'PY'
 import json, pathlib, subprocess, sys, time, urllib.request
 source = pathlib.Path(sys.argv[1])
+sys.path.insert(0, str(source))
+from web_state import read_api
 active = subprocess.run(['systemctl','--user','is-active','--quiet','edsys-local-coder-web.service']).returncode == 0
 if not active:
     subprocess.run([str(source/'edsys-code'),'--tools','code','mcp','list'],check=True)
     raise SystemExit(0)
 for attempt in range(20):
     try:
-        with urllib.request.urlopen('https://9950x.taile832fe.ts.net:8444/mcp',timeout=30) as response:
-            groups=json.load(response)
-        expected=set(json.loads((source/'opencode.json').read_text())['mcp'])
+        groups={item['name']:item['status'] for item in read_api('/api/mcp')['data']}
+        expected=set(json.loads((source/'opencode.json').read_text())['mcp']['servers'])
         if set(groups)==expected and all(v.get('status')=='connected' for v in groups.values()):
             print('Web MCP connections verified:', ', '.join(sorted(groups)))
             break

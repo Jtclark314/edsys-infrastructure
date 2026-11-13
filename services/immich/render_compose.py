@@ -28,18 +28,36 @@ UPGRADE_IMAGES = {
     "cuda": "ghcr.io/immich-app/immich-machine-learning:v3.3.5-cuda@sha256:24ed8ee229b5ed2c9dbfd923a1e17276f97beeefc58992953b2afe2dc860a723",
 }
 
+# Reviewed linux/amd64 app/cache manifests resolved on 2026-11-12 Eastern.
+# The 3.4.1 database is the bounded offline postgres14-patch derivative;
+# previous profiles remain available for matched-data recovery and rehearsals.
+REVIEWED_IMAGES = {
+    "v3.3.5": UPGRADE_IMAGES,
+    "v3.4.1": {
+        "server": "ghcr.io/immich-app/immich-server:v3.4.1@sha256:4351dd621899ecc8ed317ae87cdcaeb968ec8ba4f9d8053d913a73eb6f6dd7c2",
+        "cpu": "ghcr.io/immich-app/immich-machine-learning:v3.4.1@sha256:0fd58356ac250e2fc306f89a56a431181d708677d63ba2867c8b205484856652",
+        "cuda": "ghcr.io/immich-app/immich-machine-learning:v3.4.1-cuda@sha256:a45780b161de250f49784d58c01f7c91c5a82542f50f1dd1956b5c11ebe5c7c6",
+        "redis": "docker.io/library/redis:8.10.3@sha256:e2728231060693472a8efb488dd139a8142a01bd0612ae70429bf5b5be924be1",
+        "database": "sha256:69028c6878742baf8d93a798523b4edc8341721dc6bc76df087abab18f294631",
+    },
+}
+
 
 def images_for(profile: dict | None) -> dict:
     images = dict(IMAGES)
     if profile is None:
         return images
     if (set(profile) != {"version", "backend", "model_revision"}
-            or profile["version"] != "v3.3.5"
+            or profile["version"] not in REVIEWED_IMAGES
             or profile["backend"] not in ("cpu", "cuda")
             or profile["model_revision"] != "v2"):
         raise ValueError("unapproved_upgrade_profile")
-    images["immich-server"] = UPGRADE_IMAGES["server"]
-    images["immich-machine-learning"] = UPGRADE_IMAGES[profile["backend"]]
+    reviewed = REVIEWED_IMAGES[profile["version"]]
+    images["immich-server"] = reviewed["server"]
+    images["immich-machine-learning"] = reviewed[profile["backend"]]
+    for role in ("database", "redis"):
+        if role in reviewed:
+            images[role] = reviewed[role]
     return images
 
 
@@ -49,8 +67,9 @@ def bind(source: Path, target: str) -> dict:
 
 def render(source: dict, state: Path, media: Path, candidate: bool, profile: dict | None = None) -> dict:
     if profile is None:
-        reviewed = {image.rsplit("@", 1)[-1] for image in UPGRADE_IMAGES.values()}
-        reviewed_tags = {image.split("@", 1)[0] for image in UPGRADE_IMAGES.values()}
+        manifests = [image for version in REVIEWED_IMAGES.values() for image in version.values()]
+        reviewed = {image.rsplit("@", 1)[-1] for image in manifests}
+        reviewed_tags = {image.split("@", 1)[0] for image in manifests}
         application = source.get("services", {})
         if any(application.get(role, {}).get("image", "").rsplit("@", 1)[-1] in reviewed
                or application.get(role, {}).get("image", "").split("@", 1)[0] in reviewed_tags

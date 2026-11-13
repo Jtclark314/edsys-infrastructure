@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Guarded immutable provider mounts and model-only workspace activation."""
+"""Historical v1.0.0 assistance activator for AnythingLLM 1.15.0.
+
+This guarded one-time workflow does not upgrade the current image or adapter.
+See README.md for the qualified 1.19.0 / v1.1.0 deployment and recovery notes.
+"""
 import argparse
 import copy
 import hashlib

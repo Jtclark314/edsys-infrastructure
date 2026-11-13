@@ -1,0 +1,7 @@
+{
+  "name": "edsys-local-project-context",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./index.js"
+}

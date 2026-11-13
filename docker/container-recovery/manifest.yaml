@@ -93,7 +93,7 @@ tiers:
           - langfuse-postgres
           - langfuse-redis
           - langfuse-clickhouse
-          - langfuse-minio
+          - langfuse-seaweedfs
           - searxng-redis
           - loki
           - alloy

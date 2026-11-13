@@ -2,7 +2,7 @@ name: ai
 
 services:
   ollama:
-    image: ollama/ollama@sha256:020e4134285e2ef4d8fd801234176de3b4faadc992a3eb06c8e66a2f9d4c4ba2
+    image: ollama/ollama@sha256:910d0d8107b538fb0894e63163eb195de0cc7aefcbc666dc62d3b18f71124592
     container_name: ollama
     restart: unless-stopped
     networks: [ai-net]
@@ -34,7 +34,7 @@ services:
       --preload-model hey_jarvis
 
   qdrant:
-    image: qdrant/qdrant@sha256:75eab8c4ba42096724fdcfde8b4de0b5713d529dde32f285a1f86fdcb2c9e50c
+    image: qdrant/qdrant@sha256:9bfc89f9914fc14876a88c05270685921a55b8877b254a98bcc1cc2f0a424cd2
     container_name: qdrant
     restart: unless-stopped
     networks: [ai-net]
@@ -45,7 +45,7 @@ services:
       - /mnt/ai-store/qdrant:/qdrant/storage
 
   infinity:
-    image: michaelf34/infinity@sha256:11e8b3921b9f1a58965afaad4a844c435c9807cbc82c51e47cb147b7d977fc88
+    image: ghcr.io/michaelfeil/infinity_v3@sha256:b4d29fc70afc024fa430eae05ac11e074e736dd3fc13d756090479fcfa2460e3
     container_name: infinity
     restart: unless-stopped
     networks: [ai-net]
@@ -53,7 +53,7 @@ services:
       - "127.0.0.1:7997:7997"
       - "192.168.50.50:7997:7997"
     volumes:
-      - /mnt/ai-store/infinity:/app/.cache
+      - /mnt/ai-store/infinity:/app/.cache:ro
     deploy:
       resources:
         reservations:
@@ -62,20 +62,31 @@ services:
               count: all
               capabilities: [gpu]
     command:
-      - v2
-      - --host
+      - --hostname
       - 0.0.0.0
       - --port
       - "7997"
       - --model-id
+      - /app/.cache/huggingface/hub/models--michaelfeil--bge-small-en-v1.5/snapshots/ab7b31bd10f9bfbb915a28662ec4726b06c6552a
+      - --served-model-name
       - michaelfeil/bge-small-en-v1.5
-      - --device
+      - --torch-device
       - cuda
       - --device-id
       - "0"
+      - --dtype
+      - float16
+      - --tokenization-workers
+      - "2"
+      - --max-batch-tokens
+      - "8192"
+      - --max-sequence-length
+      - "512"
+      - --max-client-batch-size
+      - "512"
 
   whisper:
-    image: rhasspy/wyoming-whisper@sha256:9501d2659eee83b6eead98d53842193e5fed011eda6c5b1c3ad36f3146b28fed
+    image: rhasspy/wyoming-whisper@sha256:ba6fcb6056ebe237d15a325381763a80af2fc8fcedaa04f6a714a7375eb20d80
     container_name: whisper
     restart: unless-stopped
     networks: [ai-net]
@@ -84,11 +95,13 @@ services:
       - "192.168.50.50:10300:10300"
     volumes:
       - /mnt/ai-store/whisper/data:/data
+    environment:
+      HF_HUB_OFFLINE: "1"
     command: >
       --model base --language en --uri tcp://0.0.0.0:10300
 
   piper:
-    image: rhasspy/wyoming-piper@sha256:c874e4a04657ae3381332ee5d0c8c70a310dae6722892840f530ac0890b44eb3
+    image: rhasspy/wyoming-piper@sha256:0f4598a8f8a984275f67c066d7cd96d26ef2601947d0372b8f32c82ae18fb7cd
     container_name: piper
     restart: unless-stopped
     networks: [ai-net]

@@ -5,11 +5,12 @@
   "source_manifest_sha256": "0218f872e86baa9c7610509f27db36a7bc52eea7afee24688f81ca74ffcb6c77",
   "model_blob_sha256": "7d8298ddcbce81ae5b237e42cd551db8352cf362564caa826b5ded02041fdfeb",
   "model_blob_bytes": 38696955136,
-  "ollama_image": "ollama/ollama@sha256:020e4134285e2ef4d8fd801234176de3b4faadc992a3eb06c8e66a2f9d4c4ba2",
-  "ollama_version": "0.33.2",
-  "opencode_version": "1.18.31",
-  "opencode_npm_integrity": "sha512-J95feefeWwtIaw3irx76WjzWcgQXxmuHmDVphvs5ep9X30fBJ6T6bFhw50i9Kx50MG/xPn5w2pafXIfNtdry9w==",
-  "playwright_mcp_version": "0.0.81",
-  "mcp_python_version": "2.2.0",
-  "pillow_version": "12.3.0"
+  "ollama_image": "ollama/ollama@sha256:910d0d8107b538fb0894e63163eb195de0cc7aefcbc666dc62d3b18f71124592",
+  "ollama_version": "0.40.16",
+  "opencode_version": "2.2.7",
+  "playwright_mcp_version": "0.0.85",
+  "mcp_python_version": "2.3.0",
+  "pillow_version": "13.0.0",
+  "opencode_client_sha256": "89a6cee227b54bc011179c528a5e63176032462b1a5e21723b616801cddc2ca7",
+  "github_mcp_version": "2.1.0"
 }

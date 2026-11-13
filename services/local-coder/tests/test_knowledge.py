@@ -184,7 +184,7 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(cfg['permission']['external_directory'],'allow')
         self.assertEqual(cfg['agent']['general']['permission']['edsys_save_checkpoint'],'deny')
         self.assertEqual(cfg['agent']['explore']['permission']['edsys_save_checkpoint'],'deny')
-        self.assertIn('edsys',cfg['mcp'])
+        self.assertIn('edsys',cfg['mcp']['servers'])
         for path in cfg['instructions']:
             self.assertTrue(Path(path).is_file())
 

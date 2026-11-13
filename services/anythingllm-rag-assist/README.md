@@ -1,7 +1,10 @@
 # AnythingLLM local-first knowledge assistance
 
-Status: v1.0.0 deployed and native local document-Q&A verified on 2026-10-17.
-Installed cloud-handoff mechanics also passed with a controlled local-help signal.
+Status: immutable adapter `v1.1.0` is installed and qualified for AnythingLLM
+`1.19.0` as of 2026-11-12. The current managed workspace uses the native
+`edsys-coder-local` route; the optional assistance alias remains available.
+The original `v1.0.0` local-answer and controlled cloud-handoff qualification
+was completed on 2026-10-17 and is historical evidence.
 
 This extension lets the managed `EdSys-RAG-Current` document-Q&A workspace
 attempt a source-backed local answer before requesting bounded OpenAI help.
@@ -10,9 +13,10 @@ HA conversational voice and the Portal's separate router retain their own polici
 
 ## Selection and integration
 
-The verified workspace settings are strict Query mode, `chatProvider=litellm`,
-`chatModel=edsys-knowledge-local-first`, and `router_id=null`. Deployment changed
-only the workspace's `chatModel` field; the prior selection was `edsys-chat-local`.
+The assistance opt-in settings are strict Query mode, `chatProvider=litellm`,
+`chatModel=edsys-knowledge-local-first`, and `router_id=null`. The 2026-11-12
+image upgrade preserved the observed `edsys-coder-local` managed selection and
+the separate `Testing` workspace; it did not activate assistance.
 
 Only the exact application-local alias `edsys-knowledge-local-first` opts in.
 It is not a broker model. Other model selections retain native LiteLLM behavior.
@@ -22,8 +26,8 @@ remaining AnythingLLM's vector store. Retrieval and prompt assembly occur
 before the local/cloud answer decision. No native model-router records,
 classifier, sticky route cache, sidecar or global broker fallback are added.
 
-The existing AnythingLLM 1.15.0 image remains pinned. Three read-only files
-from `/opt/edsys-rag-assist/releases/v1.0.0` are mounted into its native
+AnythingLLM `1.19.0` is pinned. Three read-only files
+from `/opt/edsys-rag-assist/releases/v1.1.0` are mounted into its native
 `/app/server/utils/AiProviders/liteLLM` directory:
 
 | Release file | Native target |
@@ -33,10 +37,15 @@ from `/opt/edsys-rag-assist/releases/v1.0.0` are mounted into its native
 | `upstream.cjs` | `edsys-upstream-litellm.cjs` |
 
 The wrapper verifies upstream SHA-256
-`3208973be792e4b616c2048945fa6541c836c7acd97025081c34f43858b86305`
+`f45c64b9a2334523aca1fb637825eee4b6a8ed7bcbb91bf2ba5c970da76ae30f`
 before loading it. An upstream change fails closed and needs a separate
 qualification; do not remove the guard to accommodate an image upgrade.
 The deployment source is [the AnythingLLM Compose definition](../../docker/anythingllm/compose.yaml).
+The upstream change replaces the old fixed temperature helper with the native
+model-aware temperature selection. The assistance policy file is unchanged.
+The original `v1.0.0` files remain immutable for recovery. `deploy.py` is the
+historical, guarded one-time `v1.0.0` assistance activator; it is not the image
+upgrade or recovery procedure and should not be run against this deployment.
 
 ## Answer and privacy policy
 
@@ -96,7 +105,15 @@ gates, native/default/embedding preservation, local and cloud outcomes,
 cancellation, connector-visible privacy restrictions, no-evidence refusal and durable
 daily limits.
 
-Deployment readback confirmed exact bytes for the three mounts and the pinned
+For the 2026-11-12 compatibility gate, the 31 isolated Node checks passed.
+An isolated migration, native/assistance constructor and configured embedder
+checks, restart persistence, and production retrieval all passed. All original
+workspace, chat, document and vector records were preserved. The full retrieval
+gate passed 14 positive and 10 negative cases. This upgrade did not initiate
+cloud generation or change the saved workspace model.
+
+The following describes the historical 2026-10-17 `v1.0.0` qualification:
+deployment readback confirmed exact bytes for the three mounts and the pinned
 upstream hash, preserving the image, environment, ports, networks and configured
 `LiteLLMEmbedder`. The full retrieval gate passed 14 positive and 10 negative
 controls. A real native workspace `/chat` request returned a useful correct
@@ -124,7 +141,15 @@ application-state backups. Release files, exact prior workspace settings,
 Compose metadata, the matching strict verifier and broker/key allowlist metadata need private recovery
 checkpoints. Never publish keys, prompts, ledger contents or database backups.
 
-For narrow rollback, restore the workspace's prior explicit
+For an image rollback, restore the matching image, immutable adapter release
+and compatible application-state checkpoint together. Retain any new state
+before restoring a checkpoint, and reconcile new chats/documents instead of
+discarding them. Do not run an older image directly against a migrated database
+without first qualifying database compatibility. The 2026-11-12 upgrade has
+private stopped storage/SQLite checkpoints and retained old images.
+
+The following narrow connector rollback describes the historical activation,
+not the current image upgrade: restore the workspace's prior explicit
 `litellm` / `edsys-chat-local` Query selection, restore the prior Compose
 definition without the three mounts, then recreate only AnythingLLM with its
 unchanged pinned image. Also atomically restore the matching prior verifier

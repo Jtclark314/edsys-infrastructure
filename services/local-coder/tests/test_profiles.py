@@ -50,7 +50,7 @@ class LocalProfileTests(unittest.TestCase):
         for tool in ['browser_browser_navigate', 'desktop_desktop_screenshot',
                      'code_intelligence_code_intelligence_search_code', 'github_get_me',
                      'context7_resolve_library_id', 'microsoft_learn_microsoft_docs_search',
-                     'edsys_edsys_search_records', 'edsys_edsys_search_history']:
+                     'edsys_search_records', 'edsys_search_history']:
             self.assertFalse(permitted('local-general', tool), tool)
 
     def test_code_keeps_browser_and_local_index_but_not_other_mcp_groups(self):
@@ -59,16 +59,16 @@ class LocalProfileTests(unittest.TestCase):
             self.assertTrue(permitted('local-code', tool), tool)
         for tool in ['desktop_desktop_screenshot', 'github_get_me',
                      'context7_resolve_library_id', 'microsoft_learn_microsoft_docs_search',
-                     'edsys_edsys_search_records', 'edsys_edsys_search_history']:
+                     'edsys_search_records', 'edsys_search_history']:
             self.assertFalse(permitted('local-code', tool), tool)
 
     def test_primary_checkpoint_access_and_actual_child_denials(self):
         for agent in ['build', 'local-general', 'local-code']:
-            self.assertTrue(permitted(agent, 'edsys_edsys_save_checkpoint'), agent)
+            self.assertTrue(permitted(agent, 'edsys_save_checkpoint'), agent)
         for agent in ['local-general', 'local-code']:
-            self.assertTrue(permitted(agent, 'edsys_edsys_session_context'), agent)
+            self.assertTrue(permitted(agent, 'edsys_session_context'), agent)
         for agent in ['general', 'explore']:
-            self.assertFalse(permitted(agent, 'edsys_edsys_save_checkpoint'), agent)
+            self.assertFalse(permitted(agent, 'edsys_save_checkpoint'), agent)
             self.assertFalse(permitted(agent, 'edsys_save_checkpoint'), agent)
             self.assertEqual(CONFIG['agent'][agent]['model'], MODEL)
 
@@ -77,7 +77,7 @@ class LocalProfileTests(unittest.TestCase):
         self.assertEqual(model['variants'], {'normal': {}, 'fast': {'reasoningEffort': 'none'}})
         self.assertNotIn('reasoningEffort', model['options'])
         self.assertEqual(model['options'], {'temperature': 0.6, 'topP': 0.95})
-        self.assertEqual(CONFIG['compaction'], {'auto': True, 'prune': False})
+        self.assertEqual(CONFIG['compaction'], {'auto': True})
         self.assertEqual(CONFIG['share'], 'disabled')
 
 

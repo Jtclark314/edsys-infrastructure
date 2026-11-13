@@ -1,4 +1,5 @@
 """Private append-only conversation/checkpoint archive and project-scoped search."""
+import base64
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -90,6 +91,42 @@ def sync(source=SOURCE, archive=DATABASE, memory=STATE / 'project-memory'):
                         add(table, record['id'], session, roots[session], record, searchable(record))
                         for reference in output_pattern.findall(json.dumps(record)):
                             output_references[reference] = (session, roots[session])
+            # V2 retains legacy rows and adds separate tables in the same DB.
+            # Archive both generations so new conversations remain searchable and
+            # preserved without replacing their previously captured V1 versions.
+            tables = {row[0] for row in src.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if 'session_v2' in tables:
+                for row in src.execute('SELECT * FROM session_v2'):
+                    record = dict(row)
+                    directory = Path(record['directory'])
+                    root = str(project_root(directory)) if directory.is_dir() else str(directory)
+                    roots[record['id']] = root
+                    add('session-v2', record['id'], record['id'], root, record, record.get('title') or '')
+                for table in ('session_message', 'session_part'):
+                    for row in src.execute('SELECT * FROM ' + table):
+                        record = dict(row)
+                        session = record['session_id']
+                        if session not in roots:
+                            continue
+                        key = record.get('id') or (record['message_id'] + ':' + str(record['ordinal']))
+                        text = json.dumps(record, ensure_ascii=False)
+                        add(table.replace('_', '-'), key, session, roots[session], record, text)
+                        for reference in output_pattern.findall(text):
+                            output_references[reference] = (session, roots[session])
+                # V2 moves image/audio payloads out of message JSON into a
+                # content-addressed blob table. Retain observed bytes with each
+                # project-scoped reference before native deletion can remove them.
+                if {'blob', 'blob_ref'} <= tables:
+                    for row in src.execute('''SELECT r.session_id, r.message_id,
+                            r.seq, b.* FROM blob_ref r JOIN blob b ON b.hash=r.hash'''):
+                        record = dict(row)
+                        session = record['session_id']
+                        if session not in roots:
+                            continue
+                        record['data_base64'] = base64.b64encode(record.pop('data')).decode('ascii')
+                        key = session + ':' + record['message_id'] + ':' + record['hash']
+                        add('media-blob', key, session, roots[session], record,
+                            record['mime'] + ' ' + record['hash'])
             # OpenCode expires overflow files after seven days independently of
             # conversation pruning. Retain their full observed contents here.
             for path in sorted(output_directory.glob('tool_*')):

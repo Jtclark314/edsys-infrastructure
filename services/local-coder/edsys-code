@@ -20,8 +20,8 @@ for filename in config.get("instructions", []):
     instruction_size += len(path.read_text())
 if instruction_size > 36000:
     raise SystemExit("Local-coder startup briefing exceeds its 36000-character budget; review before launch")
-for name, server in config.get("mcp", {}).items():
-    server["enabled"] = name in ("edsys", "code_intelligence", "context7", "microsoft_learn") or options.tools in ("all", name) or (name == "github" and options.tools == "code")
+for name, server in config.get("mcp", {}).get("servers", {}).items():
+    server["disabled"] = not (name in ("edsys", "code_intelligence", "context7", "microsoft_learn") or options.tools in ("all", name) or (name == "github" and options.tools == "code"))
 state = Path("/mnt/ai-store/local-coder")
 if not Path("/mnt/ai-store").is_mount():
     raise SystemExit("AI Store is not mounted; local coder launch stopped")
@@ -30,17 +30,18 @@ for name in ("data", "cache", "config", "state", "browser-output", "desktop-note
     (state / name).mkdir(mode=0o700, parents=True, exist_ok=True)
 # Permit only the reviewed absolute local hook. Project configs remain disabled;
 # reject the other auto-discovery surfaces instead of enabling arbitrary plugins.
-expected_plugin = (source / "context-plugin.mjs").as_uri()
-if config.get("plugin") != [expected_plugin] or not (source / "context-plugin.mjs").is_file():
+expected_plugin = (source / "context-plugin-v2").as_uri()
+if config.get("plugins") != [expected_plugin] or not (source / "context-plugin-v2/index.js").is_file():
     raise SystemExit("The reviewed EdSys context hook is missing or plugin configuration changed")
 allowed = {"package.json", "package-lock.json", "bun.lock", "bun.lockb", "node_modules", ".gitignore"}
-for directory in (state / "config" / "opencode", Path.home() / ".opencode"):
+for directory in (state / "config" / "opencode", Path.home() / ".opencode", Path("/etc/opencode")):
     if directory.exists() and any(p.name not in allowed for p in directory.iterdir()):
         raise SystemExit("Unexpected OpenCode config/plugin surface; review before launch: " + str(directory))
 env = os.environ.copy()
 for name in ("OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "EXA_API_KEY"):
     env.pop(name, None)
 env.update({
+    "PWD": os.getcwd(),
     "XDG_DATA_HOME": str(state / "data"),
     "XDG_CACHE_HOME": str(state / "cache"),
     "XDG_CONFIG_HOME": str(state / "config"),
@@ -57,5 +58,5 @@ env.update({
 for name in tuple(env):
     if name.startswith("OTEL_"):
         env.pop(name)
-binary = "/mnt/ai-store/apps/local-coder/opencode-1.18.31/node_modules/.bin/opencode"
+binary = "/mnt/ai-store/apps/local-coder/opencode-2.2.7/opencode"
 os.execve(binary, [binary, *arguments], env)

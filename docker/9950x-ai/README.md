@@ -10,8 +10,12 @@ Deployable source for the shared Ollama, Qdrant, Infinity, and Wyoming voice fou
 - The external `ai-net` network must already exist.
 
 Runtime data remains under `/mnt/ai-store`; it does not belong in Git. All six
-images are pinned to reviewed digests. The Ollama `0.33.2` digest was verified
-live on 2026-08-30; the other five image digests were verified on 2026-07-13.
+images are pinned to reviewed digests. Shared Ollama `0.40.16`, Qdrant
+`1.20.0`, and native Infinity `3.0.0` were qualified and deployed on 2026-11-12.
+The upgrade retained all nine Ollama models/aliases and the existing embedding
+checkpoint. It did not download replacement model weights.
+Wyoming Whisper `3.8.1` and Piper `2.5.3` were also qualified and deployed;
+OpenWakeWord was already current at `2.1.0` and retained its existing image.
 
 Ollama and Infinity both reserve the NVIDIA GPU. Ollama automatically chooses
 full or partial offload based on model and context size; verify the actual
@@ -20,6 +24,35 @@ environment variables alone. Ask Foothills uses model-specific Ollama aliases
 with a 32K context so its retrieval prompts do not inherit Ollama's smaller
 GPU-derived default context. Do not raise the global context for voice and
 other lightweight clients.
+
+Infinity uses the retained `michaelfeil/bge-small-en-v1.5` revision
+`ab7b31bd10f9bfbb915a28662ec4726b06c6552a` directly from the existing local
+snapshot, mounted read-only. Keep that snapshot when restoring the service.
+Its served model name and 384 dimensions are unchanged. Native v3 uses new
+CLI flags and supports both `/embeddings` and `/v1/embeddings`; the broker's
+existing root API base remains valid. `--max-client-batch-size 512` preserves
+AnythingLLM's 500-chunk ingestion requests. CUDA requires float16/bfloat16;
+float32 is rejected by the native CUDA attention backend. The qualified
+float16 output had cosine similarity at least `0.999923` to the old backend
+over 24 golden/negative queries. A real 500-input batch and all 14 positive
+and 10 negative retained-index retrieval cases passed before and after
+promotion. Existing stored vectors were retained without re-embedding.
+
+Speech retains Whisper's `base` model and English language, Piper's
+`en_US-lessac-medium` default voice, and the original model/voice data files.
+Whisper uses `HF_HUB_OFFLINE=1` against its retained `/data` cache; restore that
+cache before starting it on a recovered host. Original file hashes passed in
+the isolated rehearsal and production. Direct Wyoming synthesis/transcription
+round trips passed after each service update. OpenWakeWord's protocol inventory
+still contains `okay_nabu`, `hey_jarvis`, `hey_mycroft`, `alexa`, and
+`hey_rhasspy`, with `hey_jarvis` preloaded. Home Assistant routing is unchanged.
+
+Qdrant's currently empty data store migrated through `1.18.3`, `1.19.2`, and
+`1.20.0` in order, following an isolated rehearsal and stopped-state checkpoint.
+Do not skip required minor-version migrations or downgrade a migrated store
+in place. Restore the matching stopped-state checkpoint with its old image
+when a database downgrade is needed. The isolated final-version probe passed
+384-dimensional collection creation, upsert, query and deletion.
 
 ## Validate and deploy
 

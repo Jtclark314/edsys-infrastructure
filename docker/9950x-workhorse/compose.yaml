@@ -33,7 +33,8 @@ services:
       - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/ntfy/etc:/etc/ntfy
 
   searxng-redis:
-    image: valkey/valkey:8-alpine
+    # Valkey 8.1.11, latest maintained patch of the installed branch.
+    image: valkey/valkey@sha256:2602ace2be6569bc2bbb06f873776516ab9089821525be34f4305c67eb9db02a
     container_name: workhorse-searxng-redis
     restart: unless-stopped
     command: valkey-server --save 30 1 --loglevel warning
@@ -41,7 +42,8 @@ services:
       - searxng-redis:/data
 
   searxng:
-    image: searxng/searxng:latest
+    # Stable rolling build 2026.11.12+de722ab1b.
+    image: searxng/searxng@sha256:0b104e2e1117b0ca83a36f3ac6ecda7d9ee948ccea6ead74750a03e1b856229a
     container_name: workhorse-searxng
     restart: unless-stopped
     depends_on:
@@ -219,7 +221,8 @@ services:
       - ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/alloy:/var/lib/alloy
 
   litellm-db:
-    image: postgres:16-alpine
+    # PostgreSQL 16.16, maintained patch within the original database major.
+    image: postgres@sha256:0adbf25a9e96d38823bb813f3ac0ed41fadb665c88f1df7fe6dbfb060cbdc106
     container_name: workhorse-litellm-db
     restart: unless-stopped
     environment:
@@ -235,7 +238,8 @@ services:
       retries: 10
 
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    # LiteLLM 1.109.1 stable; verified with the pinned official signing key.
+    image: ghcr.io/berriai/litellm@sha256:11175975a3093e05e92faee2fe2fe3412a3ae2fcaa849eb0fe25d5f0d8bcb2e9
     container_name: workhorse-litellm
     restart: unless-stopped
     depends_on:
@@ -262,7 +266,8 @@ services:
       - ./config/litellm/config.yaml:/app/config.yaml:ro
 
   langfuse-postgres:
-    image: postgres:17-alpine
+    # PostgreSQL 17.12, retained supported major.
+    image: postgres@sha256:34261f594522cf41dfcb76aefd42b9d201098b0e6b23c9c68733f169e4218b6f
     container_name: workhorse-langfuse-postgres
     restart: unless-stopped
     environment:
@@ -280,7 +285,8 @@ services:
       retries: 10
 
   langfuse-clickhouse:
-    image: clickhouse/clickhouse-server:latest
+    # ClickHouse 26.10.3.7, vendor-confirmed security-patched stable build.
+    image: clickhouse/clickhouse-server@sha256:739e099abd1157390960a59e4532d21781d8fde57e6e4151cb920ea02c30b1ce
     container_name: workhorse-langfuse-clickhouse
     restart: unless-stopped
     user: "101:101"
@@ -291,16 +297,68 @@ services:
     volumes:
       - langfuse-clickhouse-data:/var/lib/clickhouse
       - langfuse-clickhouse-logs:/var/log/clickhouse-server
+      - type: bind
+        source: ./config/clickhouse/backup_disk.xml
+        target: /etc/clickhouse-server/config.d/edsys-backup.xml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/ai-store/langfuse/clickhouse-backups
+        target: /backups
+        bind:
+          create_host_path: false
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
       interval: 10s
       timeout: 5s
       retries: 20
 
-  langfuse-minio:
-    image: minio/minio:latest
-    container_name: workhorse-langfuse-minio
+  langfuse-seaweedfs:
+    # SeaweedFS 4.53; credentials and object data remain outside Git.
+    image: chrislusf/seaweedfs@sha256:ccad23e18639c8b98cee17e7100b95830a06077b56d8e5b006d6dcf8ec5e94a0
+    container_name: workhorse-langfuse-seaweedfs
     restart: unless-stopped
+    command:
+      - server
+      - -s3
+      - -s3.config=/etc/seaweedfs/s3.json
+      - -dir=/data
+      - -ip=langfuse-seaweedfs
+      - -ip.bind=0.0.0.0
+      - -master.volumeSizeLimitMB=1024
+      - -volume.max=64
+    cpus: 2
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - type: bind
+        source: /mnt/ai-store/langfuse/seaweedfs
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${EDSYS_WORKHORSE_STATE_DIR:-/opt/edsys-workhorse}/langfuse/seaweedfs-s3.json
+        target: /etc/seaweedfs/s3.json
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:9333/cluster/status >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  langfuse-minio:
+    # Frozen pre-cutover recovery only; never started by the default profile.
+    profiles: ["retired-minio"]
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    container_name: workhorse-langfuse-minio
+    restart: "no"
     command: server --address ":9000" --console-address ":9001" /data
     environment:
       MINIO_ROOT_USER: minio
@@ -314,7 +372,9 @@ services:
       retries: 10
 
   langfuse-minio-init:
-    image: minio/mc:latest
+    # Frozen pre-cutover recovery only; never started by the default profile.
+    profiles: ["retired-minio"]
+    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
     container_name: workhorse-langfuse-minio-init
     restart: "no"
     depends_on:
@@ -330,7 +390,7 @@ services:
       '
 
   langfuse-redis:
-    image: redis:7-alpine
+    image: redis@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     container_name: workhorse-langfuse-redis
     restart: unless-stopped
     command: redis-server --requirepass ${LANGFUSE_REDIS_AUTH:?set in .env} --maxmemory-policy noeviction
@@ -345,7 +405,7 @@ services:
       LANGFUSE_REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:?set in .env}
 
   langfuse-worker:
-    image: langfuse/langfuse-worker:3
+    image: langfuse/langfuse-worker@sha256:35e1ff6578a7d43458bf45c92eb46fcefa753967008d58bd98c961a09b1b3f03
     container_name: workhorse-langfuse-worker
     restart: unless-stopped
     depends_on:
@@ -353,13 +413,17 @@ services:
         condition: service_healthy
       langfuse-clickhouse:
         condition: service_healthy
-      langfuse-minio:
+      langfuse-seaweedfs:
         condition: service_healthy
-      langfuse-minio-init:
-        condition: service_completed_successfully
       langfuse-redis:
         condition: service_healthy
     environment: &langfuse-env
+      # Preserve existing SDK/API integrations while upgrading the server.
+      LANGFUSE_MIGRATION_V4_WRITE_MODE: legacy
+      LANGFUSE_MIGRATION_V4_NATIVE_OTEL_BEHAVIOUR: dual_write
+      LANGFUSE_MIGRATION_V4_ALLOW_PREVIEW_OPT_IN: false
+      LANGFUSE_BACKGROUND_MIGRATION_V4_ENABLE_HISTORIC_BACKFILL: false
+      LANGFUSE_BACKGROUND_MIGRATION_V4_DROP_PID_TID_SORTING_TABLES: false
       NEXTAUTH_URL: ${LANGFUSE_NEXTAUTH_URL:-http://192.168.50.50:3012}
       DATABASE_URL: postgresql://postgres:${LANGFUSE_POSTGRES_PASSWORD:?set in .env}@langfuse-postgres:5432/postgres
       DIRECT_URL: postgresql://postgres:${LANGFUSE_POSTGRES_PASSWORD:?set in .env}@langfuse-postgres:5432/postgres
@@ -373,17 +437,17 @@ services:
       CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:?set in .env}
       CLICKHOUSE_CLUSTER_ENABLED: false
       LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
-      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
       LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
       LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD:?set in .env}
-      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-seaweedfs:8333
       LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: true
       LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
       LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
-      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
       LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
       LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD:?set in .env}
-      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-seaweedfs:8333
       LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: true
       LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
       LANGFUSE_S3_BATCH_EXPORT_ENABLED: false
@@ -395,7 +459,7 @@ services:
       SMTP_CONNECTION_URL: ""
 
   langfuse:
-    image: langfuse/langfuse:3
+    image: langfuse/langfuse@sha256:ab20d54ee3304ffc9f73965d9dde665eed64111ae32fca96b7449fc90d246bbe
     container_name: workhorse-langfuse
     restart: unless-stopped
     depends_on:
@@ -403,10 +467,8 @@ services:
         condition: service_healthy
       langfuse-clickhouse:
         condition: service_healthy
-      langfuse-minio:
+      langfuse-seaweedfs:
         condition: service_healthy
-      langfuse-minio-init:
-        condition: service_completed_successfully
       langfuse-redis:
         condition: service_healthy
     ports:

@@ -1,0 +1,27 @@
+name: Docling CPU document extraction
+description: On-demand offline PDF layout, table and English OCR extraction into source-linked JSON and Markdown.
+host: 9950x
+runtime: Isolated Python 3.12 environment, Docling 2.150.0, CPU-only PyTorch 2.15.0
+ports: []
+volumes:
+  - /home/jeremy/.local/share/edsys-docling
+  - /mnt/ai-store/models/docling
+environment:
+  inference_device: cpu
+  network_during_conversion: disabled
+  concurrent_jobs: 1
+  cpu_quota: 400%
+  memory_max: 6 GiB
+  memory_swap_max: 0
+secrets_required: []
+backup:
+  method: Existing encrypted EdSys backup, with Docling ExecStartPre staging.
+  stage: /srv/edsys-backup/staging/docling
+  includes: Exact model weights, toolkit reconstruction metadata and managed outputs.
+  exceptions: Explicit output directories outside the managed outputs folder require their owning backup.
+monitoring:
+  command: edsys-docling doctor
+  persistent_service: false
+restore_notes: Restore into an isolated directory, verify hashes, reconstruct the pinned environment, then validate a disposable offline conversion before switching.
+owner: Jeremy
+last_verified: 2026-11-12

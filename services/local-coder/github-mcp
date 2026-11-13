@@ -17,4 +17,7 @@ result = subprocess.run(['gh', 'auth', 'token', '--hostname', 'github.com'], env
 if result.returncode or not result.stdout.strip():
     raise SystemExit('GitHub authentication unavailable; restore existing gh login')
 env['GITHUB_PERSONAL_ACCESS_TOKEN'] = result.stdout.strip()
-os.execve(binary, [str(binary), 'stdio', '--toolsets', 'repos,issues,pull_requests,actions,users'], env)
+# V2 moved get_me out of the users group. Retain that existing read capability
+# without enabling the rest of the broader context toolset.
+os.execve(binary, [str(binary), 'stdio', '--toolsets', 'repos,issues,pull_requests,actions,users',
+                   '--tools', 'get_me'], env)

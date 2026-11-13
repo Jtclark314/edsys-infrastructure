@@ -7,9 +7,6 @@
   ],
   "share": "disabled",
   "autoupdate": false,
-  "plugin": [
-    "file:///srv/edsys/edsys-infrastructure/services/local-coder/context-plugin.mjs"
-  ],
   "instructions": [
     "/srv/edsys/edsys-infrastructure/services/local-coder/AGENT_RULES.md",
     "/home/jeremy/code/EdSys-Master/docs/context-packs/LOCAL_CODER_STARTUP.md"
@@ -27,7 +24,6 @@
       "models": {
         "edsys-qwen36-coder:latest": {
           "name": "Qwen3.6 35B A3B Q8 (local)",
-          "reasoning": true,
           "tool_call": true,
           "interleaved": {
             "field": "reasoning_content"
@@ -49,7 +45,6 @@
               "text"
             ]
           },
-          "attachment": true,
           "variants": {
             "normal": {},
             "fast": {
@@ -75,8 +70,7 @@
     "edsys_*": "allow"
   },
   "compaction": {
-    "auto": true,
-    "prune": false
+    "auto": true
   },
   "agent": {
     "build": {},
@@ -84,8 +78,7 @@
     "general": {
       "model": "edsys-local/edsys-qwen36-coder:latest",
       "permission": {
-        "edsys_save_checkpoint": "deny",
-        "edsys_edsys_save_checkpoint": "deny"
+        "edsys_save_checkpoint": "deny"
       },
       "prompt": "You are a delegated local EdSys agent. The reviewed hook supplies this worktree guidance and checkpoint automatically on every model turn. Use edsys_session_context if an explicit refresh is needed; report missing automatic context before proceeding. Follow the shared EdSys startup briefing and AGENT_RULES. You are not alone: preserve other work. Cite only exact source paths returned by tools or actually provided in your instructions; never construct an unverified citation path. Do not save shared project checkpoints; return concise results, evidence and limitations to the parent. Work only on the bounded task assigned by the parent."
     },
@@ -93,8 +86,7 @@
       "model": "edsys-local/edsys-qwen36-coder:latest",
       "permission": {
         "edsys_save_checkpoint": "deny",
-        "edit": "deny",
-        "edsys_edsys_save_checkpoint": "deny"
+        "edit": "deny"
       },
       "prompt": "You are a delegated local EdSys agent. The reviewed hook supplies this worktree guidance and checkpoint automatically on every model turn. Use edsys_session_context if an explicit refresh is needed; report missing automatic context before proceeding. Follow the shared EdSys startup briefing and AGENT_RULES. You are not alone: preserve other work. Cite only exact source paths returned by tools or actually provided in your instructions; never construct an unverified citation path. Do not save shared project checkpoints; return concise results, evidence and limitations to the parent. Your assignment is read-only exploration. Do not edit files or run mutating commands. Use specific record queries or source reads and return the findings."
     },
@@ -120,8 +112,8 @@
         "skill": "allow",
         "external_directory": "allow",
         "doom_loop": "allow",
-        "edsys_edsys_session_context": "allow",
-        "edsys_edsys_save_checkpoint": "allow"
+        "edsys_session_context": "allow",
+        "edsys_save_checkpoint": "allow"
       },
       "prompt": "You are Jeremy's general-purpose local assistant. Help with conversation, writing, math, reasoning and authorized local file or shell tasks. General tasks do not require EdSys records or citations; the EdSys startup briefing is background, not a restriction on your subject matter. Use relevant evidence for factual claims and distinguish unverified current conditions. Native tools and the two private project-context/checkpoint tools are available; the other EdSys, history, desktop and external MCP tools are deliberately hidden in this lighter profile. Read project guidance, preserve unrelated work, and follow the existing checkpoint rules for meaningful implementation. Use direct work for small tasks and delegate only when it materially helps and is authorized; all configured helper models remain local. Verify claimed outcomes using appropriate focused checks. External search/fetch is for public information; never send private code, records or credentials to those services. Keep model/provider selection local."
     },
@@ -147,8 +139,8 @@
         "skill": "allow",
         "external_directory": "allow",
         "doom_loop": "allow",
-        "edsys_edsys_session_context": "allow",
-        "edsys_edsys_save_checkpoint": "allow",
+        "edsys_session_context": "allow",
+        "edsys_save_checkpoint": "allow",
         "browser_*": "allow",
         "code_intelligence_*": "allow"
       },
@@ -156,68 +148,107 @@
     }
   },
   "mcp": {
-    "edsys": {
-      "type": "local",
-      "command": [
-        "/mnt/ai-store/apps/local-coder/desktop-venv/bin/python",
-        "/srv/edsys/edsys-infrastructure/services/local-coder/knowledge_mcp.py"
-      ],
-      "enabled": true,
-      "timeout": 30000
-    },
-    "browser": {
-      "type": "local",
-      "command": [
-        "/mnt/ai-store/apps/local-coder/opencode-1.18.31/node_modules/.bin/playwright-mcp",
-        "--browser",
-        "chrome",
-        "--headless",
-        "--isolated",
-        "--caps",
-        "vision",
-        "--output-dir",
-        "/mnt/ai-store/local-coder/browser-output"
-      ],
-      "enabled": true,
-      "timeout": 120000
-    },
-    "desktop": {
-      "type": "local",
-      "command": [
-        "/srv/edsys/edsys-infrastructure/services/local-coder/desktop-mcp.sh"
-      ],
-      "enabled": true,
-      "timeout": 30000
-    },
-    "code_intelligence": {
-      "type": "remote",
-      "url": "http://127.0.0.1:6071/mcp",
-      "oauth": false,
-      "enabled": true,
-      "timeout": 30000
-    },
-    "github": {
-      "type": "local",
-      "command": [
-        "/srv/edsys/edsys-infrastructure/services/local-coder/github-mcp"
-      ],
-      "enabled": true,
-      "timeout": 30000
-    },
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp",
-      "oauth": false,
-      "enabled": true,
-      "timeout": 30000
-    },
-    "microsoft_learn": {
-      "type": "remote",
-      "url": "https://learn.microsoft.com/api/mcp",
-      "oauth": false,
-      "enabled": true,
-      "timeout": 30000
+    "servers": {
+      "edsys": {
+        "type": "local",
+        "command": [
+          "/mnt/ai-store/apps/local-coder/desktop-venv-2.3.0/bin/python",
+          "/srv/edsys/edsys-infrastructure/services/local-coder/knowledge_mcp.py"
+        ],
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        },
+        "disabled": false,
+        "codemode": false
+      },
+      "browser": {
+        "type": "local",
+        "command": [
+          "/mnt/ai-store/apps/local-coder/tools/node_modules/.bin/playwright-mcp",
+          "--browser",
+          "chrome",
+          "--headless",
+          "--isolated",
+          "--caps",
+          "vision",
+          "--output-dir",
+          "/mnt/ai-store/local-coder/browser-output"
+        ],
+        "timeout": {
+          "catalog": 120000,
+          "execution": 120000
+        },
+        "disabled": false,
+        "codemode": false
+      },
+      "desktop": {
+        "type": "local",
+        "command": [
+          "/srv/edsys/edsys-infrastructure/services/local-coder/desktop-mcp.sh"
+        ],
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        },
+        "disabled": false,
+        "codemode": false,
+        "environment": {
+          "EDSYS_LOCAL_CODER_PYTHON": "/mnt/ai-store/apps/local-coder/desktop-venv-2.3.0/bin/python"
+        }
+      },
+      "code_intelligence": {
+        "type": "remote",
+        "url": "http://127.0.0.1:6071/mcp",
+        "oauth": false,
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        },
+        "disabled": false,
+        "codemode": false
+      },
+      "github": {
+        "type": "local",
+        "command": [
+          "/srv/edsys/edsys-infrastructure/services/local-coder/github-mcp"
+        ],
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        },
+        "disabled": false,
+        "codemode": false
+      },
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "oauth": false,
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        },
+        "disabled": false,
+        "codemode": false
+      },
+      "microsoft_learn": {
+        "type": "remote",
+        "url": "https://learn.microsoft.com/api/mcp",
+        "oauth": false,
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        },
+        "disabled": false,
+        "codemode": false
+      }
     }
   },
-  "subagent_depth": 1
+  "plugins": [
+    "file:///srv/edsys/edsys-infrastructure/services/local-coder/context-plugin-v2"
+  ],
+  "experimental": {
+    "subagent_depth": 1,
+    "todo": true
+  }
 }
