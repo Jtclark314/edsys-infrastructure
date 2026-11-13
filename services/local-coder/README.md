@@ -69,6 +69,64 @@ permissions. Existing client allowlists and model aliases are preserved. The
 direct local launcher requires no broker credential. Broker credentials can be
 reissued through the existing service-key workflow if restoring from source.
 
+## Focused primary profiles
+
+Deployed and verified on 2026-11-12 Eastern after an all-session-idle reload.
+The native agent selector offers Build, Local-Code, Local-General and Plan;
+the added CLI names are `local-general` and `local-code`. CLI examples:
+
+```bash
+edsys-code run --agent local-general 'Explain this calculation'
+edsys-code run --agent local-code 'Build and test this feature'
+```
+
+Local General keeps native file, shell and public-web tools. Local Code adds
+the isolated browser and local Code Intelligence. Both retain the exact
+`edsys_edsys_session_context` and `edsys_edsys_save_checkpoint` tools for the
+existing continuity workflow, while hiding records/history, desktop and other
+external MCP schemas. General math, writing and software work does not require
+EdSys retrieval. The existing Build/Plan agents, default `all` launcher,
+instructions, model route and server registrations remain unchanged; configured
+MCP connections can still initialize, and the fixed EdSys briefing still enters
+these profiles. This reduces tool-schema context, not every source of overhead.
+Delegated helpers still use their existing local profiles. Their checkpoint
+denial covers both the legacy name and the actual server-qualified tool name.
+
+The separate native effort selector offers Default, Normal and Fast on the
+same Qwen model (`normal` and `fast` in the CLI). The agent selector changes
+available tools; the variant selector changes thinking. `normal` leaves thinking
+at the existing model default. `fast` sends
+`reasoning_effort: none` to the same local Ollama model; it does not select
+another provider or weights. The existing default and helper behavior stay
+unchanged: Fast is opt-in only. Choose it explicitly for shorter, simpler tasks.
+This model supports thinking on/off, rather than graded low/medium/high effort.
+Disabling thinking can affect answer/tool quality and does not promise a speed
+gain for every task. Default and Normal preserve the existing thinking behavior.
+Do not use `/nothink`: the official Qwen 3.6 model card does not support that
+soft switch.
+
+Validate a candidate with `python3 -m unittest discover -s tests -p test_profiles.py`
+and `python3 tests/qualify_profiles.py`. The latter uses only a local synthetic
+provider/MCP fixture and the installed client; no Qwen/cloud inference or
+production session database is used. Validate against the running pinned v1
+schema with `python3 tests/validate_profiles.py`. Current upstream v2
+configuration examples are not interchangeable with this pinned v1 client.
+Apply only after active sessions finish, using the existing guarded reload.
+
+The deployed API confirmed OpenCode 1.18.31, only `edsys-local`, both optional
+variants and all seven connected MCP servers. Authenticated 9950x Chrome verified
+both new selectors and Normal selection for the calculator. Actual Nimo Chrome
+separately verified File tree, Show agent, Command palette and Server status
+enabled before profile promotion. Seven profile unit tests, four context/proxy tests,
+pinned-v1 schema validation and 23 synthetic client requests passed. The synthetic
+fixture completed five continuity-tool roundtrips and proved Fast sends
+`reasoning_effort: none`, Default/Normal omit it, Build retains its catalog,
+and the actual qualified checkpoint tool is hidden from both child roles.
+This proves client wiring. A separate actual local-Qwen Fast check completed one
+Bash `printf` tool roundtrip and returned the exact expected marker; both assistant
+turns retained the same local provider/model and explicit Fast variant. This is a
+bounded tool check, not broad quality/speed acceptance.
+
 ## EdSys context and project continuity
 
 The launcher requires two absolute instruction files: local `AGENT_RULES.md`

@@ -49,7 +49,13 @@
               "text"
             ]
           },
-          "attachment": true
+          "attachment": true,
+          "variants": {
+            "normal": {},
+            "fast": {
+              "reasoningEffort": "none"
+            }
+          }
         }
       }
     }
@@ -78,7 +84,8 @@
     "general": {
       "model": "edsys-local/edsys-qwen36-coder:latest",
       "permission": {
-        "edsys_save_checkpoint": "deny"
+        "edsys_save_checkpoint": "deny",
+        "edsys_edsys_save_checkpoint": "deny"
       },
       "prompt": "You are a delegated local EdSys agent. The reviewed hook supplies this worktree guidance and checkpoint automatically on every model turn. Use edsys_session_context if an explicit refresh is needed; report missing automatic context before proceeding. Follow the shared EdSys startup briefing and AGENT_RULES. You are not alone: preserve other work. Cite only exact source paths returned by tools or actually provided in your instructions; never construct an unverified citation path. Do not save shared project checkpoints; return concise results, evidence and limitations to the parent. Work only on the bounded task assigned by the parent."
     },
@@ -86,9 +93,66 @@
       "model": "edsys-local/edsys-qwen36-coder:latest",
       "permission": {
         "edsys_save_checkpoint": "deny",
-        "edit": "deny"
+        "edit": "deny",
+        "edsys_edsys_save_checkpoint": "deny"
       },
       "prompt": "You are a delegated local EdSys agent. The reviewed hook supplies this worktree guidance and checkpoint automatically on every model turn. Use edsys_session_context if an explicit refresh is needed; report missing automatic context before proceeding. Follow the shared EdSys startup briefing and AGENT_RULES. You are not alone: preserve other work. Cite only exact source paths returned by tools or actually provided in your instructions; never construct an unverified citation path. Do not save shared project checkpoints; return concise results, evidence and limitations to the parent. Your assignment is read-only exploration. Do not edit files or run mutating commands. Use specific record queries or source reads and return the findings."
+    },
+    "local-general": {
+      "description": "Local General: chat, math, writing, and local file or shell tasks",
+      "mode": "primary",
+      "model": "edsys-local/edsys-qwen36-coder:latest",
+      "permission": {
+        "*": "deny",
+        "invalid": "allow",
+        "question": "allow",
+        "bash": "allow",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "edit": "allow",
+        "write": "allow",
+        "apply_patch": "allow",
+        "task": "allow",
+        "webfetch": "allow",
+        "todowrite": "allow",
+        "websearch": "allow",
+        "skill": "allow",
+        "external_directory": "allow",
+        "doom_loop": "allow",
+        "edsys_edsys_session_context": "allow",
+        "edsys_edsys_save_checkpoint": "allow"
+      },
+      "prompt": "You are Jeremy's general-purpose local assistant. Help with conversation, writing, math, reasoning and authorized local file or shell tasks. General tasks do not require EdSys records or citations; the EdSys startup briefing is background, not a restriction on your subject matter. Use relevant evidence for factual claims and distinguish unverified current conditions. Native tools and the two private project-context/checkpoint tools are available; the other EdSys, history, desktop and external MCP tools are deliberately hidden in this lighter profile. Read project guidance, preserve unrelated work, and follow the existing checkpoint rules for meaningful implementation. Use direct work for small tasks and delegate only when it materially helps and is authorized; all configured helper models remain local. Verify claimed outcomes using appropriate focused checks. External search/fetch is for public information; never send private code, records or credentials to those services. Keep model/provider selection local."
+    },
+    "local-code": {
+      "description": "Local Code: files, terminal, browser tests, and local code search",
+      "mode": "primary",
+      "model": "edsys-local/edsys-qwen36-coder:latest",
+      "permission": {
+        "*": "deny",
+        "invalid": "allow",
+        "question": "allow",
+        "bash": "allow",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "edit": "allow",
+        "write": "allow",
+        "apply_patch": "allow",
+        "task": "allow",
+        "webfetch": "allow",
+        "todowrite": "allow",
+        "websearch": "allow",
+        "skill": "allow",
+        "external_directory": "allow",
+        "doom_loop": "allow",
+        "edsys_edsys_session_context": "allow",
+        "edsys_edsys_save_checkpoint": "allow",
+        "browser_*": "allow",
+        "code_intelligence_*": "allow"
+      },
+      "prompt": "You are Jeremy's general-purpose local coding assistant. Build and repair software using local files, terminal commands, the isolated browser and the read-only local code index when useful. General coding and math tasks do not require EdSys records or citations; the EdSys startup briefing is background, not a restriction on your subject matter. EdSys records/history, desktop, GitHub, Context7 and Microsoft Learn MCP schemas are hidden in this focused profile. Native web search/fetch remains available for public documentation; never send private code, records or credentials to those services. Read project guidance and preserve unrelated work. Make focused changes, run meaningful tests, and inspect actual browser behavior for UI work before claiming it works. Do not replace UI verification with a file or JavaScript-only claim. Follow the existing private project-context/checkpoint rules after meaningful implementation. Delegate only when authorized and useful; configured helper models remain local. Keep the selected local model/provider."
     }
   },
   "mcp": {
