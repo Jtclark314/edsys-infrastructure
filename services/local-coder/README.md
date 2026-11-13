@@ -134,6 +134,11 @@ Bash `printf` tool roundtrip and returned the exact expected marker; both assist
 turns retained the same local provider/model and explicit Fast variant. This is a
 bounded tool check, not broad quality/speed acceptance.
 
+On 2026-11-13, Nimo's existing Chrome profile separately verified **Normal**
+selected and retained after reload, with **Show agent** enabled. V2 Preferences
+exposes Show agent; the other three V1 display switches listed above are not
+exposed in that panel. The earlier four-switch acceptance applies to V1.
+
 ## EdSys context and project continuity
 
 The launcher requires two absolute instruction files: local `AGENT_RULES.md`
@@ -240,9 +245,10 @@ does not create an arbitrary shell or administrator account on every device.
 ## Private web interface
 
 The persistent OpenCode UI is `https://9950x.taile832fe.ts.net:8444/`, available
-through Tailscale, including Nimo. Nimo has a **Local AI - OpenCode** desktop
-shortcut to the prepared **Local AI Lab** session; the private session link is
-stored outside Git. If starting from the home page, use **Add project** to select
+through Tailscale, including Nimo. The optional **Local AI - OpenCode App**
+desktop shortcut opens the root UI in Chrome app mode using the existing browser
+profile. Private session links remain outside Git. From the home page, use
+**Add project** to select
 `/home/jeremy/projects/local-ai-lab`, then **New session**. Qwen is preselected;
 browser and desktop MCPs use the same qualified local profile. Computation and
 files stay on 9950x. The backend starts in this fresh project directory.
@@ -274,9 +280,22 @@ retains existing private credentials and requires the same owner identity.
 User lingering is already enabled on 9950x. To roll back only web access, run
 `tailscale serve --https=8444 off`, then disable/stop the two user services.
 Do not reset all Serve configuration. CLI/model use remains independent.
-`install-nimo-web.ps1 -Url <private-session-url>` restores the shortcut without
-overwriting an unrelated file. If the initial session is deleted, use the base
-UI URL to start another; session links are not credentials or durable source.
+On Nimo, run
+`install-nimo-web.ps1 -Url https://9950x.taile832fe.ts.net:8444/ -AppMode`
+to create the separately named managed Chrome app shortcut. Its target uses only
+`--app` with the root UI address, preserving the existing Chrome profile and
+its selected effort. The installer refuses unrelated or modified shortcuts.
+Without `-AppMode`, the existing
+`install-nimo-web.ps1 -Url <private-session-url>` Internet shortcut behavior is
+unchanged. If the initial session is deleted, use the base UI URL to start
+another; session links are not credentials or durable source.
+
+On 2026-11-13, Chrome app mode rendered the UI in both Nimo's existing profile
+and a fresh test profile. The managed app shortcut was then created and its
+target, arguments, description, working directory and normal window style were
+read back successfully. Nimo disconnected before launch testing of the saved
+shortcut; that final launch check remains pending reconnection. An ordinary
+browser window had previously rendered blank; its cause remains unverified.
 
 ## Install and reproduce
 
