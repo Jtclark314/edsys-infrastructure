@@ -1,0 +1,6 @@
+{
+  "version": "v3.4.1",
+  "backend": "cuda",
+  "model_revision": "v2",
+  "postgres_major": 14
+}

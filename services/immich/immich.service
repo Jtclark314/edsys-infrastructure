@@ -13,8 +13,9 @@ StartLimitBurst=3
 [Service]
 Type=simple
 UMask=0077
+Environment=IMMICH_POSTGRES_MAJOR=18
 EnvironmentFile=/mnt/ai-store/immich/config/storage.env
-ExecStartPre=/usr/bin/python3 /opt/edsys-immich/guard.py --media-uuid ${IMMICH_MEDIA_UUID} --nvme-uuid ${IMMICH_NVME_UUID}
+ExecStartPre=/usr/bin/python3 /opt/edsys-immich/guard.py --media-uuid ${IMMICH_MEDIA_UUID} --nvme-uuid ${IMMICH_NVME_UUID} --postgres-major ${IMMICH_POSTGRES_MAJOR}
 ExecStart=/usr/bin/docker compose --project-name edsys-immich --project-directory /mnt/ai-store/immich/config -f /mnt/ai-store/immich/config/compose.yaml up --no-build --pull never --abort-on-container-failure
 ExecStop=/usr/bin/docker compose --project-name edsys-immich --project-directory /mnt/ai-store/immich/config -f /mnt/ai-store/immich/config/compose.yaml stop --timeout 60
 Restart=on-failure

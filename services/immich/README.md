@@ -1,7 +1,8 @@
 # Immich on 9950x
 
 Production version/backend acceptance: **3.4.1 / CUDA ML / optimized models v2;
-PostgreSQL 14.25 / Redis 8.10.3; maintenance acceptance November 13, 2026 Eastern**.
+PostgreSQL 18.7 / pgvector 0.8.7 / VectorChord 1.1.1 / Redis 8.10.3;
+maintenance acceptance November 13, 2026 Eastern**.
 The existing 2.5.6 instance moved to 9950x on October 24, 2026 Eastern;
 the subsequent authorized iCloud copy and pre-upgrade indexing were verified.
 Current acceptance belongs in `EdSys-Master/docs/IMMICH.md`. The retained
@@ -55,9 +56,11 @@ byte checks passed. Do not print rendered configuration.
 
 Current reviewed profiles are `profiles/v3.4.1-cpu.json` and
 `profiles/v3.4.1-cuda.json`. They pin server, matching ML and Redis manifests,
-plus the immutable PostgreSQL 14.25 maintenance image described in
-`postgres14-patch/README.md`. The older 3.3.5 profiles remain available for
-matched-data recovery. Supply the selected file through
+plus the immutable PostgreSQL 18.7 image described in `postgres18/README.md`.
+Both normal CPU/CUDA profiles select major18, including an omitted major in a
+3.4.1 profile. The explicitly named `v3.4.1-pg14-*` profiles retain the patched
+14.25 image/layout for the matched pre-major checkpoint. Older 3.3.5 profiles
+remain available for their own matched-data recovery. Supply the selected file through
 `render_compose.py --profile`. A source using a reviewed
 application tag or digest refuses an omitted profile, preventing accidental rendering
 of legacy 2.5.6 images. This automatic detection does not cover unreviewed
@@ -72,6 +75,11 @@ directory or start both clusters on the same data. Runtime acceptance:
 - An isolated actual-database restore and production CPU 3.4.1 both passed
   owner/asset API reads, retained-thumbnail byte comparison, semantic search,
   and executed queries through the real CLIP and face vector indexes.
+- The later PG14.25→18.7 logical restore preserved all 85 application tables /
+  377,090 rows before app startup, rebuilt indexes using native PG18 pgvector
+  0.8.7 / VectorChord1.1.1, and passed actual CPU-clone and production CUDA API,
+  thumbnail and semantic/index checks. All user data and persisted configuration
+  matched afterward; only the normal version-check timestamp advanced.
 - CUDA 3.4.1 selected its NVIDIA `nv_tensorrt_rtx` execution provider. Text
   search and a retained-thumbnail visual inference passed; the latter returned
   a finite normalized 512-dimension embedding. The configured 60-second idle
@@ -87,11 +95,12 @@ directory or start both clusters on the same data. Runtime acceptance:
 The vendor 3.4.1 template's Valkey 9.1.3 could not read the existing Redis 7.4
 RDB format 12 in rehearsal. Production therefore retains the Redis product
 family at 8.10.3, using its own fresh cold queue state. No queues were discarded
-or replaced from the older candidate. PostgreSQL remains major 14 with the
-qualified vector 0.8.1 / VectorChord 0.4.3 extensions unchanged; the offline
-derivative changes only PostgreSQL server/client packages and required libpq.
-The final 14.25 patch does not extend PostgreSQL 14's upstream support lifetime;
-a vendor-compatible major migration remains a separate lifecycle follow-up.
+or replaced from the older candidate. PostgreSQL is now18.7 with pgvector0.8.7
+and VectorChord1.1.1. PostgreSQL19 is still a release candidate at qualification.
+The audited legacy `vectors` extension/schema/types/columns were absent, so the
+new image preloads only `vchord.so`. No PG14 extension binary or physical index
+was reused. The initial14.25 package derivative and fresh cold pre-major data
+remain recovery inputs; PG14 is no longer the production lifecycle exception.
 
 The profiles use model revision `v2` while retaining `ViT-B-32__openai`,
 `buffalo_l` and `PP-OCRv5_mobile`. ML has one worker, one request thread,
@@ -132,7 +141,11 @@ under `/etc/systemd/system/`. Populate root-owned mode-0600
 `/mnt/ai-store/immich/config/storage.env` from `storage.env.example` with
 independently verified identities. The unit requires and binds to both mount
 units, verifies exact writable filesystems/canonical directories/media marker,
-and refuses an empty PostgreSQL 14 directory. Foreground Compose uses
+and refuses an empty or wrong-major database. Current `storage.env` explicitly
+sets `IMMICH_POSTGRES_MAJOR=18`; the actual initialized cluster/control file is
+`postgres/18/docker` beneath the NVMe state root, with the parent bound to
+`/var/lib/postgresql`. The unit defaults to18; matched PG14 recovery must restore
+its old unit/guard or explicitly set major14. CPU/CUDA profiles both keep18. Foreground Compose uses
 `restart: no` for every container and disables automatic host-path creation.
 Docker stop/restart propagates through the systemd guard.
 
@@ -186,7 +199,17 @@ Exact snapshot identities and raw receipts remain private. Existing backup
 schedules/retention and all earlier recovery stages remain protected; this
 scoped acceptance does not establish health of the unrelated broad collector.
 
-Rollback from 3.4.1 must stop the guarded stack and use the matching retained
+PG18→PG14 recovery must stop the guarded stack and restore the fresh matched
+pre-major14.25 database/cache/configuration, old image and expected-major14
+guard settings together. Use explicit `v3.4.1-pg14-*` recovery profiles. Protect
+subsequent uploads/account changes first; changing the database tag alone is
+unsafe. The final PG18 collector dump was independently restored with all 85
+table hashes and actual CLIP/face index queries matching. Its exact image is
+exported with all 23 OCI blobs/hash/references verified. The deployed daily
+collector now validates either reviewed14/18 layout; source/installed hashes
+and actual staging passed without schedule/policy changes.
+
+Application rollback from 3.4.1 must use the matching retained
 pre-upgrade 3.3.5 cold PostgreSQL/cache/configuration checkpoint and old images.
 Never start an older app against a newly migrated database. The exact patched
 PG 14.25 image is also exported to private NVMe backup staging, with its archive

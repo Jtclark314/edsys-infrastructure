@@ -45,6 +45,21 @@ class GuardTests(unittest.TestCase):
             with self.assertRaises(guard.Refused):
                 guard.validate_postgres_cluster(root)
 
+    def test_explicit_major_and_pg18_nested_layout(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            cluster = root / "18" / "docker"
+            (cluster / "global").mkdir(parents=True)
+            (cluster / "global/pg_control").write_bytes(bytes(8192))
+            (cluster / "PG_VERSION").write_text("18\n")
+            guard.validate_postgres_cluster(cluster, "18")
+            for path, major in ((root, "18"), (cluster, "14"), (cluster, "19")):
+                with self.subTest(path=path, major=major), self.assertRaises(guard.Refused):
+                    guard.validate_postgres_cluster(path, major)
+            (cluster / "global/pg_control").write_bytes(bytes(8191))
+            with self.assertRaises(guard.Refused):
+                guard.validate_postgres_cluster(cluster, "18")
+
 
 if __name__ == "__main__":
     unittest.main()

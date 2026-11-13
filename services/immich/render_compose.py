@@ -28,9 +28,11 @@ UPGRADE_IMAGES = {
     "cuda": "ghcr.io/immich-app/immich-machine-learning:v3.3.5-cuda@sha256:24ed8ee229b5ed2c9dbfd923a1e17276f97beeefc58992953b2afe2dc860a723",
 }
 
-# Reviewed linux/amd64 app/cache manifests resolved on 2026-11-12 Eastern.
-# The 3.4.1 database is the bounded offline postgres14-patch derivative;
-# previous profiles remain available for matched-data recovery and rehearsals.
+POSTGRES14_PATCH_IMAGE = "sha256:69028c6878742baf8d93a798523b4edc8341721dc6bc76df087abab18f294631"
+POSTGRES18_IMAGE = "sha256:51c86899fb517315e40e3c33fc9196c752ac82e11cf8f242511a5ed2cec27f2c"
+
+# Reviewed app/cache manifests and separately qualified PG18 logical restore.
+# Explicit PG14 profiles retain the old image/layout for matched-data recovery.
 REVIEWED_IMAGES = {
     "v3.3.5": UPGRADE_IMAGES,
     "v3.4.1": {
@@ -38,16 +40,25 @@ REVIEWED_IMAGES = {
         "cpu": "ghcr.io/immich-app/immich-machine-learning:v3.4.1@sha256:0fd58356ac250e2fc306f89a56a431181d708677d63ba2867c8b205484856652",
         "cuda": "ghcr.io/immich-app/immich-machine-learning:v3.4.1-cuda@sha256:a45780b161de250f49784d58c01f7c91c5a82542f50f1dd1956b5c11ebe5c7c6",
         "redis": "docker.io/library/redis:8.10.3@sha256:e2728231060693472a8efb488dd139a8142a01bd0612ae70429bf5b5be924be1",
-        "database": "sha256:69028c6878742baf8d93a798523b4edc8341721dc6bc76df087abab18f294631",
+        "database": POSTGRES18_IMAGE,
     },
 }
+
+def postgres_major(profile: dict | None) -> int:
+    major = 14 if profile is None else profile.get("postgres_major", 18 if profile.get("version") == "v3.4.1" else 14)
+    if type(major) is not int or major not in (14, 18):
+        raise ValueError("unapproved_postgres_profile")
+    if major == 18 and profile.get("version") != "v3.4.1":
+        raise ValueError("unapproved_postgres_profile")
+    return major
 
 
 def images_for(profile: dict | None) -> dict:
     images = dict(IMAGES)
     if profile is None:
         return images
-    if (set(profile) != {"version", "backend", "model_revision"}
+    if (set(profile) not in ({"version", "backend", "model_revision"},
+                            {"version", "backend", "model_revision", "postgres_major"})
             or profile["version"] not in REVIEWED_IMAGES
             or profile["backend"] not in ("cpu", "cuda")
             or profile["model_revision"] != "v2"):
@@ -58,6 +69,10 @@ def images_for(profile: dict | None) -> dict:
     for role in ("database", "redis"):
         if role in reviewed:
             images[role] = reviewed[role]
+    if postgres_major(profile) == 18:
+        images["database"] = POSTGRES18_IMAGE
+    elif profile["version"] == "v3.4.1":
+        images["database"] = POSTGRES14_PATCH_IMAGE
     return images
 
 
@@ -97,7 +112,23 @@ def render(source: dict, state: Path, media: Path, candidate: bool, profile: dic
         for field in ("deploy", "devices", "device_cgroup_rules", "runtime", "gpus", "ports"):
             row.pop(field, None)
         if service == "database":
-            row["volumes"] = [bind(state / "postgres", "/var/lib/postgresql/data")]
+            if postgres_major(profile) == 18:
+                row["volumes"] = [bind(state / "postgres", "/var/lib/postgresql")]
+                row.setdefault("environment", {})["PGDATA"] = "/var/lib/postgresql/18/docker"
+                row["command"] = ["postgres", "-c", "shared_preload_libraries=vchord.so"]
+                row["healthcheck"] = {
+                    "test": ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'],
+                    "interval": "10s", "timeout": "5s", "retries": 12,
+                }
+            else:
+                row["volumes"] = [bind(state / "postgres", "/var/lib/postgresql/data")]
+                # Rendering matched PG14 recovery from a newer resolved source
+                # must also remove the PG18 layout and its generated startup flag.
+                if row.get("environment", {}).get("PGDATA") == "/var/lib/postgresql/18/docker":
+                    del row["environment"]["PGDATA"]
+                    if row.get("command") == ["postgres", "-c", "shared_preload_libraries=vchord.so"]:
+                        row.pop("command")
+                    row.pop("healthcheck", None)
             row["shm_size"] = "256m"
         elif service == "redis":
             row["volumes"] = [bind(state / "redis", "/data")]

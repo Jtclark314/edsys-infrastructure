@@ -85,6 +85,42 @@ class RuntimeProfileTests(unittest.TestCase):
             out=self.render(json.loads((ROOT/"profiles"/f"v3.3.5-{backend}.json").read_text()))
             self.assertEqual(out["services"]["immich-machine-learning"]["image"],m.UPGRADE_IMAGES[backend])
 
+    def test_pg18_profile_keeps_app_cache_credentials_and_uses_target_layout(self):
+        for backend in ("cpu", "cuda"):
+            profile=json.loads((ROOT/"profiles"/f"v3.4.1-{backend}.json").read_text())
+            rows=self.render(profile)["services"]
+            self.assertEqual(rows["database"]["image"],m.POSTGRES18_IMAGE)
+            self.assertEqual(rows["database"]["volumes"][0]["target"],"/var/lib/postgresql")
+            self.assertEqual(rows["database"]["volumes"][0]["source"],"/mnt/ai-store/immich/postgres")
+            self.assertFalse(rows["database"]["volumes"][0]["bind"]["create_host_path"])
+            self.assertEqual(rows["database"]["environment"],dict(self.source["services"]["database"]["environment"],PGDATA="/var/lib/postgresql/18/docker"))
+            self.assertEqual(rows["database"]["command"],["postgres","-c","shared_preload_libraries=vchord.so"])
+            self.assertEqual(rows["immich-server"]["image"],m.REVIEWED_IMAGES["v3.4.1"]["server"])
+            self.assertEqual(rows["redis"]["image"],m.REVIEWED_IMAGES["v3.4.1"]["redis"])
+            with self.assertRaisesRegex(ValueError,"explicit_upgrade_profile_required"):
+                m.render({"services":rows},Path("/state"),Path("/photos"),False)
+
+    def test_unreviewed_database_majors_and_app_combinations_refused(self):
+        for major in (15,16,17,19,"18",True,None):
+            with self.subTest(major=major),self.assertRaisesRegex(ValueError,"unapproved_postgres_profile"):
+                self.render(dict(self.cpu,version="v3.4.1",postgres_major=major))
+        with self.assertRaisesRegex(ValueError,"unapproved_postgres_profile"):
+            self.render(dict(self.cpu,postgres_major=18))
+
+    def test_cpu_fallback_retains_pg18_and_pg14_recovery_is_explicit(self):
+        cuda=dict(self.cuda,version="v3.4.1")
+        current=self.render(cuda)
+        cpu=m.render(current,Path("/state"),Path("/photos"),False,dict(cuda,backend="cpu"))
+        self.assertEqual(cpu["services"]["database"]["image"],m.POSTGRES18_IMAGE)
+        self.assertEqual(cpu["services"]["database"]["environment"]["PGDATA"],"/var/lib/postgresql/18/docker")
+        for backend in ("cpu","cuda"):
+            profile=json.loads((ROOT/"profiles"/f"v3.4.1-pg14-{backend}.json").read_text())
+            old=m.render(current,Path("/state"),Path("/photos"),False,profile)
+            self.assertEqual(old["services"]["database"]["image"],m.POSTGRES14_PATCH_IMAGE)
+            self.assertEqual(old["services"]["database"]["volumes"][0]["target"],"/var/lib/postgresql/data")
+            self.assertNotIn("PGDATA",old["services"]["database"]["environment"])
+            self.assertNotIn("command",old["services"]["database"])
+
     def test_reviewed_versions_preserve_rollback_and_refuse_implicit_downgrade(self):
         for version, images in m.REVIEWED_IMAGES.items():
             for backend in ("cpu", "cuda"):

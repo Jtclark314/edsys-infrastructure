@@ -22,5 +22,7 @@ asset/reference and sign-in state, then starting the matching application.
 Retain the previous image and a matched cold PostgreSQL/configuration
 checkpoint before promotion. Never run two servers against the same PG data.
 
-The final 14.25 patch does not extend PostgreSQL 14's upstream support
-lifetime. A later major-version migration remains a separate lifecycle task.
+This image is now retained for matched pre-major recovery through the explicitly
+named `v3.4.1-pg14-*` profiles. Normal production and CPU fallback use the
+qualified PostgreSQL18.7 image in `../postgres18/README.md`. PostgreSQL14's
+support ended November 12, 2026; the final14.25 patch does not extend it.

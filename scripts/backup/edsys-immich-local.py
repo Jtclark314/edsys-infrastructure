@@ -181,14 +181,36 @@ def original_roots():
     return roots
 
 
+def validate_database_mount(postgres: dict):
+    """Require the reviewed major's actual PGDATA on the exact NVMe bind."""
+    layouts = {
+        "/var/lib/postgresql/data": ("/var/lib/postgresql/data", Path(), "14"),
+        "/var/lib/postgresql/18/docker": ("/var/lib/postgresql", Path("18/docker"), "18"),
+    }
+    values = [value.removeprefix("PGDATA=") for value in postgres.get("Config", {}).get("Env", [])
+              if value.startswith("PGDATA=")]
+    if len(values) != 1 or values[0] not in layouts:
+        raise Refused("unreviewed_database_layout")
+    pgdata = values[0]
+    destination, relative, major = layouts[pgdata]
+    covers = [m for m in postgres["Mounts"] if pgdata == m["Destination"]
+              or pgdata.startswith(m["Destination"].rstrip("/") + "/")]
+    actual = max(covers, key=lambda m: len(m["Destination"]), default={})
+    if (actual.get("Type") != "bind" or actual.get("Destination") != destination
+            or actual.get("Source") != str(INTERNAL_ROOT / "immich/postgres")
+            or any(m["Destination"].startswith(pgdata + "/") for m in postgres["Mounts"])):
+        raise Refused("database_is_not_on_expected_local_storage")
+    version = safe(INTERNAL_ROOT / "immich/postgres" / relative / "PG_VERSION")
+    if not version.is_file() or version.read_text().strip() != major:
+        raise Refused("database_cluster_major_mismatch")
+
+
 def stage(root: Path, config: dict):
     storage_guard(config)
     legacy = legacy_module()
     rows, db = legacy.docker_inspect()
     postgres = next(r for r in rows if r["Name"].lstrip("/") == "immich-postgres")
-    if not any(m["Type"] == "bind" and m["Destination"] == "/var/lib/postgresql/data" and
-               m["Source"] == str(INTERNAL_ROOT / "immich/postgres") for m in postgres["Mounts"]):
-        raise Refused("database_is_not_on_expected_local_storage")
+    validate_database_mount(postgres)
     checkpoint = legacy.DatabaseSnapshot(db)
     incoming = private(private(root / ".incoming") / ("local-" + uuid.uuid4().hex))
     try:

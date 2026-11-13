@@ -45,14 +45,15 @@ def main():
                  ("postgres", "redis", "config", "server-data", "model-cache", "logs")]]:
         path.mkdir(mode=0o700, parents=True, exist_ok=True)
     (media / ".edsys-immich-volume").write_text("expected-media")
-    postgres = nvme / "immich" / "postgres"
-    (postgres / "PG_VERSION").write_text("14\n")
+    postgres = nvme / "immich" / "postgres" / "18" / "docker"
+    postgres.mkdir(parents=True)
+    (postgres / "PG_VERSION").write_text("18\n")
     (postgres / "global").mkdir()
     (postgres / "global" / "pg_control").write_bytes(bytes(8192))
     media_identity = base / "media-identity"
     media_identity.write_text("expected-media")
     storage_environment = base / "storage.env"
-    expected_environment = "IMMICH_MEDIA_UUID=expected-media\nIMMICH_NVME_UUID=expected-nvme\n"
+    expected_environment = "IMMICH_MEDIA_UUID=expected-media\nIMMICH_NVME_UUID=expected-nvme\nIMMICH_POSTGRES_MAJOR=18\n"
     storage_environment.write_text(expected_environment)
     storage_environment.chmod(0o600)
     counter = base / "starts"
@@ -72,7 +73,7 @@ def fixture_identity(target):
     return {{"target":target,"uuid":value,"fstype":"ext4","options":"rw,relatime"}}
 module.mount_identity=fixture_identity
 try:
-    module.check(media,sys.argv[1],nvme,sys.argv[2])
+    module.check(media,sys.argv[1],nvme,sys.argv[2],sys.argv[3])
 except (module.Refused,OSError):
     raise SystemExit(1)
 ''')
@@ -98,8 +99,9 @@ StartLimitIntervalSec=5
 StartLimitBurst=3
 [Service]
 Type=simple
+Environment=IMMICH_POSTGRES_MAJOR=18
 EnvironmentFile={storage_environment}
-ExecStartPre=/usr/bin/python3 {guard} ${{IMMICH_MEDIA_UUID}} ${{IMMICH_NVME_UUID}}
+ExecStartPre=/usr/bin/python3 {guard} ${{IMMICH_MEDIA_UUID}} ${{IMMICH_NVME_UUID}} ${{IMMICH_POSTGRES_MAJOR}}
 ExecStart=/usr/bin/python3 {worker}
 Restart=on-failure
 RestartSec=0.2

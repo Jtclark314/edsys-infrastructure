@@ -40,6 +40,47 @@ class LocalImmichTests(unittest.TestCase):
         with mock.patch.object(m, "command", return_value=json.dumps(value).encode()):
             m.mounted_uuid(self.media, MEDIA_UUID)
 
+    def database(self, major):
+        relative = Path("18/docker") if major == "18" else Path()
+        cluster = self.internal / "immich/postgres" / relative
+        cluster.mkdir(parents=True, exist_ok=True)
+        (cluster / "PG_VERSION").write_text(major + "\n")
+        return {"Config": {"Env": ["PGDATA=/var/lib/postgresql/18/docker" if major == "18"
+                                  else "PGDATA=/var/lib/postgresql/data"]},
+                "Mounts": [{"Type": "bind", "Source": str(self.internal / "immich/postgres"),
+                            "Destination": "/var/lib/postgresql" if major == "18"
+                            else "/var/lib/postgresql/data"}]}
+
+    def test_reviewed_database_layouts_accept_exact_local_cluster(self):
+        for major in ("14", "18"):
+            with self.subTest(major=major):
+                m.validate_database_mount(self.database(major))
+
+    def test_database_nested_or_wrong_bind_cannot_hide_actual_data(self):
+        for target in ("/var/lib/postgresql/18/docker", "/var/lib/postgresql/18/docker/pg_wal"):
+            row = self.database("18")
+            row["Mounts"].append({"Type": "volume", "Source": "/unapproved", "Destination": target})
+            with self.subTest(target=target), self.assertRaisesRegex(m.Refused,"database_is_not_on_expected_local_storage"):
+                m.validate_database_mount(row)
+        row = self.database("18")
+        row["Mounts"][0]["Source"] = "/unapproved"
+        with self.assertRaises(m.Refused):
+            m.validate_database_mount(row)
+
+    def test_database_major_and_unreviewed_or_symlinked_layout_refuse(self):
+        row = self.database("18")
+        version = self.internal / "immich/postgres/18/docker/PG_VERSION"
+        version.write_text("14\n")
+        with self.assertRaisesRegex(m.Refused,"database_cluster_major_mismatch"):
+            m.validate_database_mount(row)
+        version.unlink()
+        version.symlink_to(self.file)
+        with self.assertRaisesRegex(m.Refused,"symlink_path"):
+            m.validate_database_mount(row)
+        row["Config"]["Env"] = ["PGDATA=/var/lib/postgresql/19/docker"]
+        with self.assertRaisesRegex(m.Refused,"unreviewed_database_layout"):
+            m.validate_database_mount(row)
+
     def test_wrong_mount_uuid_refuses(self):
         value = {"filesystems": [{"target": str(self.media), "uuid": "wrong", "fstype": "ext4"}]}
         with mock.patch.object(m, "command", return_value=json.dumps(value).encode()):
