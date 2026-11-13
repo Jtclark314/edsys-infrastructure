@@ -11,32 +11,31 @@
     "/srv/edsys/edsys-infrastructure/services/local-coder/AGENT_RULES.md",
     "/home/jeremy/code/EdSys-Master/docs/context-packs/LOCAL_CODER_STARTUP.md"
   ],
-  "provider": {
+  "providers": {
     "edsys-local": {
-      "npm": "@ai-sdk/openai-compatible",
       "name": "EdSys local Qwen3.6 coder",
-      "options": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
         "baseURL": "http://127.0.0.1:11435/v1",
         "timeout": 7200000,
         "headerTimeout": 7200000,
         "chunkTimeout": 7200000
       },
+      "compatibility": {
+        "maxTokensField": "max_tokens"
+      },
       "models": {
         "edsys-qwen36-coder:latest": {
           "name": "Qwen3.6 35B A3B Q8 (local)",
-          "tool_call": true,
-          "interleaved": {
-            "field": "reasoning_content"
-          },
           "limit": {
             "context": 262144,
-            "output": 16384
+            "output": 32768
           },
-          "options": {
-            "temperature": 0.6,
-            "topP": 0.95
+          "compatibility": {
+            "reasoningField": "reasoning_content"
           },
-          "modalities": {
+          "capabilities": {
+            "tools": true,
             "input": [
               "text",
               "image"
@@ -45,12 +44,22 @@
               "text"
             ]
           },
-          "variants": {
-            "normal": {},
-            "fast": {
-              "reasoningEffort": "none"
+          "body": {
+            "temperature": 0.6,
+            "topP": 0.95
+          },
+          "variants": [
+            {
+              "id": "normal",
+              "settings": {}
+            },
+            {
+              "id": "fast",
+              "settings": {
+                "reasoningEffort": "none"
+              }
             }
-          }
+          ]
         }
       }
     }

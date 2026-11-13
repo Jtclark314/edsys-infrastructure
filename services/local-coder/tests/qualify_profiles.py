@@ -4,6 +4,7 @@ The real model, active OpenCode database, credentials, and archive are untouched
 Only request metadata/tool names are retained; no reasoning text is inspected.
 """
 from copy import deepcopy
+import argparse
 import json
 import os
 from pathlib import Path
@@ -91,6 +92,10 @@ class Fixture(BaseHTTPRequestHandler):
         CAPTURE.append({'label': label, 'model': body['model'], 'tool_names': names,
                         'reasoning_effort': body.get('reasoning_effort'),
                         'has_reasoning_effort': 'reasoning_effort' in body,
+                        'max_tokens': body.get('max_tokens'),
+                        'has_max_tokens': 'max_tokens' in body,
+                        'has_max_completion_tokens': 'max_completion_tokens' in body,
+                        'interleaved_replayed': any(m['role'] == 'assistant' and m.get('reasoning_content') == 'PROFILE_SYNTHETIC_REASONING_8132' for m in messages),
                         'fixture_tool_result': any(m['role'] == 'tool' and 'LOCAL_FIXTURE_TOOL_OK' in str(m.get('content')) for m in messages),
                         'project_guidance': 'PROFILE_PROJECT_GUIDANCE_4829' in json.dumps(body),
                         'private_checkpoint': 'PROFILE_PRIVATE_MEMORY_7391' in json.dumps(body)})
@@ -107,12 +112,12 @@ class Fixture(BaseHTTPRequestHandler):
             else:
                 name, arguments = 'edsys_session_context', {}
             if name in names:
-                delta = {'role': 'assistant', 'tool_calls': [{'index': 0, 'id': 'call_profile_fixture',
+                delta = {'role': 'assistant', 'reasoning_content': 'PROFILE_SYNTHETIC_REASONING_8132', 'tool_calls': [{'index': 0, 'id': 'call_profile_fixture',
                          'type': 'function', 'function': {'name': name, 'arguments': json.dumps(arguments)}}]}
                 finish = 'tool_calls'
             else:
                 CAPTURE[-1]['missing_expected_tool'] = name
-        evidence = RUNTIME / 'evidence/v2-profile-qualification'
+        evidence = self.server.evidence
         evidence.mkdir(parents=True, exist_ok=True)
         (evidence / 'request-metadata.json').write_text(json.dumps(CAPTURE, indent=2) + '\n')
         self.send_response(200)
@@ -126,8 +131,38 @@ class Fixture(BaseHTTPRequestHandler):
         self.wfile.write(b'data: [DONE]\n\n')
 
 
+
+def context_fixture(root, state):
+    """Use the reviewed hook/readers with private checkpoint state and no archive."""
+    plugin = root / 'context-plugin'
+    plugin.mkdir()
+    (plugin / 'package.json').write_text('{"type":"module","private":true}\n')
+    helper = ('import json,sys\nfrom pathlib import Path\n' +
+              f'sys.path.insert(0, {str(SOURCE)!r})\n' +
+              'from knowledge import ProjectMemory,Records\n' +
+              f'memory=ProjectMemory(Path(sys.argv[2]), state=Path({str(state)!r}))\n' +
+              'print(json.dumps({"project_memory":memory.read(),"project_instructions":memory.guidance(),"edsys_records":Records().status()}))\n')
+    (plugin / 'knowledge.py').write_text(helper)
+    reviewed = (SOURCE / 'context-plugin-v2/index.js').read_text()
+    original = "const source = '/srv/edsys/edsys-infrastructure/services/local-coder';"
+    assert reviewed.count(original) == 1, 'Review fixture routing when the context hook changes'
+    (plugin / 'reviewed.js').write_text(reviewed.replace(original, 'const source = ' + json.dumps(str(plugin)) + ';'))
+    (plugin / 'index.js').write_text("""import reviewed from './reviewed.js';
+export default {id:'edsys.profile-fixture',setup(ctx){
+ return reviewed.setup({location:ctx.location,session:{hook(name,handler){
+  if(name==='experimental.idle')return Promise.resolve();
+  return ctx.session.hook(name,handler);
+ }}});
+}};
+""")
+    return plugin.as_uri()
+
+
 def main():
     os.umask(0o077)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--evidence', type=Path, default=RUNTIME / 'evidence/v2-profile-qualification')
+    args = parser.parse_args()
     real_catalog = subprocess.check_output([
         '/mnt/ai-store/apps/local-coder/desktop-venv-2.3.0/bin/python',
         str(SOURCE / 'tests/context_mcp_catalog.py'),
@@ -135,9 +170,12 @@ def main():
     assert set(json.loads(real_catalog)) == set(TOOLS['edsys']), 'Synthetic MCP names differ from the real catalog'
     config = json.loads((SOURCE / 'opencode.json').read_text())
     assert config['enabled_providers'] == ['edsys-local']
-    assert set(config['provider']) == {'edsys-local'}
-    assert config['provider']['edsys-local']['options']['baseURL'] == 'http://127.0.0.1:11435/v1'
+    assert set(config['providers']) == {'edsys-local'}
+    assert config['providers']['edsys-local']['settings']['baseURL'] == 'http://127.0.0.1:11435/v1'
+    assert config['providers']['edsys-local']['compatibility'] == {'maxTokensField': 'max_tokens'}
+    assert config['providers']['edsys-local']['models']['edsys-qwen36-coder:latest']['limit']['output'] == 32768
     server = ThreadingHTTPServer(('127.0.0.1', 0), Fixture)
+    server.evidence = args.evidence
     threading.Thread(target=server.serve_forever, daemon=True).start()
     memory = None
     try:
@@ -147,7 +185,9 @@ def main():
             project.mkdir()
             subprocess.run(['git', 'init', '-q', str(project)], check=True)
             (project / 'AGENTS.md').write_text('PROFILE_PROJECT_GUIDANCE_4829. Synthetic read-only fixture; one local child is authorized.\n')
-            memory = ProjectMemory(project)
+            memory_state = root / 'project-memory'
+            plugin = context_fixture(root, memory_state)
+            memory = ProjectMemory(project, state=memory_state)
             memory.save(0, 'V2 synthetic continuity acceptance', [],
                         ['PROFILE_PRIVATE_MEMORY_7391'], [], [], [])
             for index, (label, agent, variant) in enumerate([
@@ -158,27 +198,27 @@ def main():
             ]):
                 server.label = label
                 candidate = deepcopy(config)
-                candidate['provider']['edsys-local']['options']['baseURL'] = f'http://127.0.0.1:{server.server_port}/v1'
+                candidate['providers']['edsys-local']['settings']['baseURL'] = f'http://127.0.0.1:{server.server_port}/v1'
                 for name in candidate['mcp']['servers']:
                     candidate['mcp']['servers'][name] = {'type': 'local', 'command': [sys.executable, str(Path(__file__).resolve()), '--mcp-fixture', name],
                                             'disabled': False, 'codemode': False, 'timeout': 15000}
-                candidate['plugins'] = [(SOURCE / 'context-plugin-v2').as_uri()]
+                candidate['plugins'] = [plugin]
                 home = root / str(index)
                 home.mkdir()
-                shutil.copytree(RUNTIME / 'cache', home / 'cache')
-                shutil.copytree(RUNTIME / 'config', home / 'config')
-                env = {k: v for k, v in os.environ.items() if not k.startswith(('OPENCODE_', 'OTEL_'))}
+                env = {k: v for k, v in os.environ.items() if k in
+                       {'PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'TERM', 'SHELL', 'TMPDIR', 'TZ'}
+                       or k.startswith('LC_')}
                 env.update({'PWD':str(project), 'XDG_DATA_HOME': str(home / 'data'), 'XDG_STATE_HOME': str(home / 'state'),
                             'XDG_CACHE_HOME': str(home / 'cache'), 'XDG_CONFIG_HOME': str(home / 'config'),
                             'OPENCODE_CONFIG_CONTENT': json.dumps(candidate), 'OPENCODE_DISABLE_PROJECT_CONFIG': '1',
-                            'OPENCODE_DISABLE_MODELS_FETCH': '1', 'OPENCODE_DISABLE_AUTOUPDATE': '1', 'OPENCODE_PURE': '0'})
+                            'OPENCODE_DISABLE_MODELS_FETCH': '1', 'OPENCODE_DISABLE_AUTOUPDATE': '1', 'OPENCODE_ENABLE_EXA': '0', 'OPENCODE_PURE': '0'})
                 command = [BINARY, 'run', '--standalone', '--agent', agent, '--format', 'json']
                 if variant:
                     command += ['--model', 'edsys-local/edsys-qwen36-coder:latest#' + variant]
                 result = subprocess.run(command + ['PROFILE_MAIN: ' + label], env=env, cwd=project, capture_output=True,
                                         text=True, timeout=90)
-                assert result.returncode == 0, (label, result.stderr[-1000:])
-                assert '"type":"error"' not in result.stdout, (label, result.stdout[-1000:])
+                assert result.returncode == 0, (label, 'installed fixture client failed')
+                assert '"type":"error"' not in result.stdout, (label, 'installed fixture emitted an error')
                 print('Completed synthetic client fixture:', label, flush=True)
             substantive = [row for row in CAPTURE if row['label'] != 'utility']
             assert {row['label'] for row in substantive} == {
@@ -190,7 +230,10 @@ def main():
             assert all(row['private_checkpoint'] for row in CAPTURE)
             for label in ['general-default', 'general-fast', 'general-normal', 'code-default', 'build-default']:
                 assert any(row['label'] == label and row['fixture_tool_result'] for row in substantive), label
+                assert any(row['label'] == label and row['interleaved_replayed'] for row in substantive), label
             for row in substantive:
+                assert row['has_max_tokens'] and row['max_tokens'] == 32768, row
+                assert not row['has_max_completion_tokens'], row
                 names = set(row['tool_names'])
                 assert 'missing_expected_tool' not in row, row
                 if row['label'] in ['build-default', 'delegate-general', 'delegate-explore']:
@@ -212,13 +255,17 @@ def main():
                     assert not row['has_reasoning_effort'], row
             assert any(row['label'] == 'child-general' for row in substantive)
             assert any(row['label'] == 'child-explore' for row in substantive)
-            evidence = RUNTIME / 'evidence/v2-profile-qualification'
+            for row in CAPTURE:
+                if row['label'] == 'utility':
+                    assert not row['has_max_tokens'] and not row['has_max_completion_tokens'], row
+            evidence = args.evidence
             evidence.mkdir(parents=True, exist_ok=True)
             (evidence / 'request-metadata.json').write_text(json.dumps(CAPTURE, indent=2) + '\n')
             print(json.dumps({'synthetic_requests': len(CAPTURE), 'local_context_tool_roundtrips': sum(row['fixture_tool_result'] for row in CAPTURE),
                               'profiles_filtered': True, 'qualified_child_checkpoint_denied': True,
                               'fast_none_transmitted': True, 'default_effort_unset': True,
-                              'guidance_retained': True, 'real_model_calls': 0}))
+                              'guidance_retained': True, 'max_tokens_32768_transmitted': True,
+                              'utility_budget_unset': True, 'interleaved_replayed': True, 'private_fixture_state': True, 'real_model_calls': 0}))
     finally:
         if memory is not None:
             shutil.rmtree(memory.folder, ignore_errors=True)

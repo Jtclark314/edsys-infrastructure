@@ -21,7 +21,7 @@ Owner: Jeremy. Host: 9950x. Runtime state and qualification evidence are under
   protects the cache mountpoints and prevents model pruning. Health requires
   the exact `edsys-qwen36-coder:latest` alias, not merely an empty successful list.
 - `edsys-qwen36-coder:latest` is the local configured alias: 262,144 context,
-  16,384 maximum generated tokens, Qwen's precise-coding sampling settings,
+  a default limit of 16,384 generated tokens, Qwen's precise-coding sampling settings,
   and preserved upstream vision/tool/thinking behavior. OpenCode permits two-hour
   inference waits and the identity bridge allows a 125-minute idle upstream wait
   for large CPU-only prompts. Here `latest` names
@@ -110,15 +110,40 @@ gain for every task. Default and Normal preserve the existing thinking behavior.
 Do not use `/nothink`: the official Qwen 3.6 model card does not support that
 soft switch.
 
+OpenCode allows up to 32,768 generated tokens per primary/compaction request,
+for Default/Normal and Fast alike; available context can lower that ceiling.
+This is an output allowance, not graded reasoning effort or a required answer
+length. The native provider sets `compatibility.maxTokensField: "max_tokens"`
+because Ollama 0.40.16 maps that field to request `num_predict`; its chat adapter
+does not map `max_completion_tokens`. The shared Ollama alias retains its
+16,384 default for RAG/other callers. Title/generate calls omit the request budget
+and retain that default. Weights, 262,144 context, sampler, CPU/memory limits,
+local model selections and the Normal/Fast thinking controls remain unchanged.
+
 Validate a candidate with `python3 -m unittest discover -s tests -p test_profiles.py`
 and `python3 tests/qualify_profiles.py`. The latter checks the real local MCP
 catalog, then uses a synthetic provider/MCP fixture and the installed client;
-no Qwen/cloud inference or production session database is used. Validate the
+no Qwen/cloud inference or production session database is used. Its checkpoint
+state is temporary and archive callbacks are disabled; `--evidence <directory>`
+selects where sanitized request metadata is written. Validate the
 running V2 catalogs with `python3 tests/validate_profiles.py`. The V2 config
-preserves supported legacy provider/agent syntax and uses native
-MCP server groups and the ported V2 context plugin. V1 hook implementations and
+uses native provider/MCP declarations, supported legacy agent settings,
+and the ported V2 context plugin. V1 hook implementations and
 server API paths are not compatible with V2.
 Apply only after active sessions finish, using the existing guarded reload.
+
+The 2026-11-13 requalification passed ten profile/launcher contracts, two V2
+context tests and 23 synthetic client requests with five continuity roundtrips.
+A bounded actual request received 32,768 tokens while the shared alias kept its
+16,384 default and all alias parameters. That diagnostic explicitly selected
+Fast; it did not change the UI preference. After the idle backend-only reload,
+live validation confirmed one local model and seven connected MCPs. The native
+UI retained Default/Normal/Fast, and Normal selection survived reload.
+
+The separate local-Qwen Normal graphing-calculator pilot passed 40 unchanged
+math cases, 67 offline browser checks and 17 additional AST/domain checks, with
+desktop/mobile visual review. Its standalone HTML and readable source are in
+`/home/jeremy/projects/local-ai-lab/graphing-calculator`; no hosted service was added.
 
 The earlier V1 deployment API confirmed OpenCode 1.18.31, only `edsys-local`, both optional
 variants and all seven connected MCP servers. Authenticated 9950x Chrome verified
@@ -524,7 +549,8 @@ it was corrected before qualification. This is bounded long-context recall and
 allocation evidence, not a full-window coding reliability benchmark.
 
 The accepted default is now 262,144 tokens for OpenCode, the model alias and
-the dedicated engine. Generated output remains bounded at 16,384 tokens;
+the dedicated engine. The alias generation default remained 16,384 tokens at
+this acceptance; the current OpenCode request allowance is described above.
 CPU quota, RAM cap and one-request concurrency remain unchanged. OpenCode and
 the optional LiteLLM coder route allow two-hour inference waits; the private
 identity bridge allows a 125-minute idle upstream wait.
